@@ -562,12 +562,25 @@ function runCmd(file, args, timeout = 4000) {
     execFile(file, args, { timeout, windowsHide: true }, (err, stdout) => resolve(err ? '' : String(stdout || '')));
   });
 }
+// Two machine facts make the fingerprint. Windows: the registry's MachineGuid
+// and the firmware UUID. macOS: the platform UUID and the serial from ioreg.
+// Either pair is stable across reboots and different on every other machine.
 async function machineGuid() {
+  if (process.platform === 'darwin') {
+    const out = await runCmd('ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'], 6000);
+    const m = out.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/);
+    return m ? m[1].trim() : '';
+  }
   const out = await runCmd('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid']);
   const m = out.match(/MachineGuid\s+REG_SZ\s+([0-9a-fA-F-]+)/);
   return m ? m[1].trim() : '';
 }
 async function hardwareUuid() {
+  if (process.platform === 'darwin') {
+    const out = await runCmd('ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'], 6000);
+    const m = out.match(/"IOPlatformSerialNumber"\s*=\s*"([^"]+)"/);
+    return m ? m[1].trim() : '';
+  }
   const out = await runCmd('powershell', ['-NoProfile', '-Command', '(Get-CimInstance Win32_ComputerSystemProduct).UUID'], 6000);
   const m = out.match(/[0-9A-Fa-f-]{8,}/);
   return m ? m[0].trim() : '';

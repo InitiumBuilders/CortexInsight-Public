@@ -111,10 +111,11 @@ jobs:
         run: |
           set -uo pipefail
           T="${TMPDIR:-/tmp}"
+          echo "TMPDIR=$T"
           rm -f "$T/ci-fresh-report.txt"
           npx electron . --freshtest || echo "electron exit: $?"
-          R=$(find "$T" /tmp -maxdepth 1 -name ci-fresh-report.txt 2>/dev/null | head -1)
-          if [ -z "$R" ]; then echo "the fresh harness wrote no report"; exit 1; fi
+          R=$(find "$T" /tmp "$HOME/Library/Application Support" -maxdepth 2 -name ci-fresh-report.txt 2>/dev/null | head -1)
+          if [ -z "$R" ]; then echo "the fresh harness wrote no report"; ls -la "$T" | head -30; exit 1; fi
           cat "$R"
           if grep -q PROBLEM "$R"; then echo "the fresh harness found problems"; exit 1; fi
           if ! grep -q CLEAN "$R"; then echo "the fresh harness did not reach its verdict"; exit 1; fi
