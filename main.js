@@ -14394,7 +14394,7 @@ async function runFleetTest() {
     // the live day must never freeze, whatever the hour is in Greenwich
     ok('today stays live', ![..._ixFrozen.keys()].some((f) => ixFileDay(f) === localDay()), 'local day ' + localDay());
     const ov0 = buildOverview();
-    ok('today counted', ov0.stats && ov0.stats.todayTurns >= 9, (ov0.stats ? ov0.stats.todayTurns : 'no stats') + ' today');
+    ok('today counted', ov0.stats && ov0.stats.todayTurns === FLEET_EXPECT_TODAY, (ov0.stats ? ov0.stats.todayTurns : 'no stats') + ' today, ' + FLEET_EXPECT_TODAY + ' stamped on today');
     const cp = readCheckpoint('davara');
     ok('checkpoint read', !!cp && cp.sid === FLEET_SID, cp ? cp.sid : 'none');
     const tx = findTranscript(FLEET_SID);
@@ -14516,6 +14516,7 @@ if (_FRESH) safe(() => {
 // fleet path on a machine that has no fleet.
 const _FLEET = process.argv.includes('--fleettest');
 const FLEET_SID = '00000000-0000-4000-8000-00000000f1ee';
+let FLEET_EXPECT_TODAY = 0;   // how many synthetic turns the generator stamped on the local day
 if (_FLEET) safe(() => {
   const dir = path.join(app.getPath('temp'), 'cortexinsight-fleet');
   const home = path.join(app.getPath('temp'), 'cortexinsight-fleet-home');
@@ -14528,7 +14529,9 @@ if (_FLEET) safe(() => {
   const stamp = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
   const day = (d) => stamp(d).slice(0, 10);
   const t0 = new Date(); const yday = new Date(t0.getTime() - 864e5);
-  const rec = (agent, when, latency, chars, msg) => JSON.stringify({ ts: stamp(when), agent, status: 'OK', via: 'mouth-proxy', attempts: 1, latency_s: latency, out_chars: chars, msg }) + '\n';
+  // turns spread over the last hours can straddle local midnight (a runner on
+  // UTC at 02:30 proved it), so the generator counts what it stamped on today
+  const rec = (agent, when, latency, chars, msg) => { if (day(when) === day(t0)) FLEET_EXPECT_TODAY++; return JSON.stringify({ ts: stamp(when), agent, status: 'OK', via: 'mouth-proxy', attempts: 1, latency_s: latency, out_chars: chars, msg }) + '\n'; };
   const ix = mk('logs', 'interactions');
   let today = '', yest = '', dv = '';
   for (let i = 6; i >= 1; i--) today += rec('davara', new Date(t0.getTime() - i * 37 * 60e3), 40 + i * 9, 900 + i * 210, 'Turn ' + i + ': read the board, refine the gate copy, report in the contract.');
