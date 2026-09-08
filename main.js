@@ -571,7 +571,9 @@ async function machineGuid() {
     const m = out.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/);
     return m ? m[1].trim() : '';
   }
-  const out = await runCmd('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid']);
+  // 15 s, not 4: a cold runner answers the registry slowly, and an empty answer
+  // here once left a fresh vault unable to pair
+  const out = await runCmd('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'], 15000);
   const m = out.match(/MachineGuid\s+REG_SZ\s+([0-9a-fA-F-]+)/);
   return m ? m[1].trim() : '';
 }
@@ -581,7 +583,9 @@ async function hardwareUuid() {
     const m = out.match(/"IOPlatformSerialNumber"\s*=\s*"([^"]+)"/);
     return m ? m[1].trim() : '';
   }
-  const out = await runCmd('powershell', ['-NoProfile', '-Command', '(Get-CimInstance Win32_ComputerSystemProduct).UUID'], 6000);
+  // 20 s: the first PowerShell start on a machine that has never run one can
+  // take longer than the old 6 s, and the CI runner proved it
+  const out = await runCmd('powershell', ['-NoProfile', '-Command', '(Get-CimInstance Win32_ComputerSystemProduct).UUID'], 20000);
   const m = out.match(/[0-9A-Fa-f-]{8,}/);
   return m ? m[0].trim() : '';
 }
@@ -627,16 +631,30 @@ async function evaluateGuard() {
   const [guid, uuid, pub, health] = await Promise.all([
     machineGuid(), hardwareUuid(), publicIp(), relayHealth(),
   ]);
-  const fp = sha256(`${guid}:${uuid}`.toLowerCase());
+  // Every fingerprint this machine can compute from the facts it gave: both
+  // facts, or either one alone. A slow query on one boot must not turn the
+  // operator's own machine into a stranger on the next, so pairing stores all
+  // of them and trust matches any of them.
+  const cands = [];
+  if (guid && uuid) cands.push(sha256(`${guid}:${uuid}`.toLowerCase()));
+  if (guid) cands.push(sha256(`${guid}:`.toLowerCase()));
+  if (uuid) cands.push(sha256(`:${uuid}`.toLowerCase()));
+  const fp = cands[0] || sha256(':');
   // FIRST-RUN PAIRING: a fresh vault pairs to the machine that opened it, so a
   // public build needs no baked fingerprint. A copied vault already carries
   // its pairing and does not re-pair here.
-  if (STATE && !STATE.paired && guid && uuid) {
-    STATE.trustedFingerprints = [...new Set([fp, ...(STATE.trustedFingerprints || [])])];
+  if (STATE && !STATE.paired && cands.length) {
+    STATE.trustedFingerprints = [...new Set([...cands, ...(STATE.trustedFingerprints || [])])];
     STATE.paired = fp;
     safe(() => saveState());
   }
-  const hashMatch = STATE.trustedFingerprints.includes(fp);
+  const hashMatch = cands.some((c) => STATE.trustedFingerprints.includes(c));
+  // a boot that matched by hardware teaches the vault the partial forms too,
+  // so a later boot with one fact missing still matches
+  if (hashMatch && cands.some((c) => !STATE.trustedFingerprints.includes(c))) {
+    STATE.trustedFingerprints = [...new Set([...STATE.trustedFingerprints, ...cands])];
+    safe(() => saveState());
+  }
   const wslReadable = exists(P('logs')) && exists(P('agents'));
   const relayReachable = !!health && health.status === 'ok';
   // Trust = paired hardware OR (can read THIS machine's WSL tree AND reach its loopback relay).

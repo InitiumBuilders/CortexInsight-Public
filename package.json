@@ -1,6 +1,6 @@
 {
   "name": "cortexinsight",
-  "version": "3.64.1",
+  "version": "3.64.2",
   "private": true,
   "description": "CortexInsight: a desktop operator console over a local agent fleet. Reads the fleet's own logs, drives agents through a loopback relay, and keeps every key sealed on the machine.",
   "author": "Outlier.Systems",
