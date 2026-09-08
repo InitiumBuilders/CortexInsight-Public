@@ -1,0 +1,118 @@
+/* ════════════════════════════════════════════════════════════════════════
+   VIEW CONTROL — zoom + density.
+
+   THE ASK: "make it clean and easy to use and I can zoom out to make it
+   smaller and better spacing and experience overall."
+
+   THE ALTITUDE CALL: "make it smaller" is a PARAMETER problem, not a
+   structure problem. Rewriting 57KB of stylesheet into a density token
+   system would be a redesign where one dial fully solves it — so the
+   primary control is a true frame zoom (webFrame.setZoomFactor), which
+   scales every pixel proportionally and cannot break a layout.
+
+   Density is the complement, deliberately narrow: it touches only the four
+   values that actually govern breathing room — the rail, the titlebar, the
+   content gutter, and panel padding. Everything else inherits.
+
+   Design law: squircles (never plain boxes) · bright ink, never grey ·
+   glow, never highlight · motion under the threshold.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── the titlebar cluster ─────────────────────────────────────────────── */
+.tb-view {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  margin-right: 6px;
+  border-radius: 16px;                 /* squircle — the forever rule */
+  background: var(--surf, rgba(18,22,40,.42));
+  border: 1px solid var(--brd, rgba(150,168,255,.10));
+  box-shadow: var(--neu-in-sm, inset 3px 3px 8px rgba(0,0,0,.5));
+  -webkit-app-region: no-drag;
+}
+
+.tb-view button {
+  border: 0;
+  background: transparent;
+  color: var(--ink);                   /* bright — never the grey ban */
+  font-family: 'Sora', system-ui, sans-serif;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;                 /* squircle */
+  transition: box-shadow .22s var(--ease, ease), color .22s var(--ease, ease);
+}
+.tb-view button:hover  { box-shadow: 0 0 16px rgba(124,77,255,.34); }  /* glow, not highlight */
+.tb-view button:active { box-shadow: var(--neu-in-sm, inset 2px 2px 6px rgba(0,0,0,.5)); }
+.tb-view button:focus-visible { outline: none; box-shadow: 0 0 0 1.5px rgba(84,230,255,.55), 0 0 18px rgba(84,230,255,.3); }
+
+.tb-view .vc-step {
+  width: 26px; height: 24px;
+  font-size: 15px; font-weight: 600; line-height: 1;
+}
+
+/* the readout doubles as reset-to-100% — the value IS the button */
+.tb-view .vc-now {
+  min-width: 50px; height: 24px;
+  padding: 0 7px;
+  font-size: 11.5px; font-weight: 700;
+  letter-spacing: .04em;
+  font-variant-numeric: tabular-nums;  /* the number must not dance while stepping */
+}
+.tb-view .vc-now.vc-off { color: var(--cyan); }   /* off 100% — lit, so the state is visible at a glance */
+
+/* density: one glyph, three states. ▪ compact · ▫ normal · ◻ roomy */
+.tb-view .vc-dens {
+  width: 26px; height: 24px;
+  font-size: 13px; line-height: 1;
+  color: var(--muted);
+  border-left: 1px solid var(--brd, rgba(150,168,255,.10));
+  border-radius: 0 12px 12px 0;
+  margin-left: 2px;
+}
+.tb-view .vc-dens:hover { color: var(--ink); }
+
+/* a brief, quiet confirmation of what changed — poetic, under the threshold */
+.vc-toast {
+  position: fixed;
+  top: calc(var(--tb) + 12px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  z-index: 70;
+  padding: 8px 16px;
+  border-radius: 18px;                 /* squircle */
+  font-family: 'Sora', system-ui, sans-serif;
+  font-size: 12px; font-weight: 600; letter-spacing: .03em;
+  color: var(--ink);
+  background: var(--surf-2, rgba(22,27,48,.85));
+  border: 1px solid var(--brd-2, rgba(150,168,255,.18));
+  box-shadow: 0 0 26px rgba(124,77,255,.26), var(--neu-out-sm, 0 8px 20px rgba(0,0,0,.5));
+  backdrop-filter: blur(14px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .26s var(--ease, ease), transform .26s var(--ease, ease);
+}
+.vc-toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── DENSITY ──────────────────────────────────────────────────────────────
+   Three steps, four values. Normal is exactly today's app, so the default
+   render is byte-for-byte what it has always been.                        */
+
+body[data-density="compact"] { --rail: 68px;  --tb: 38px; }
+body[data-density="roomy"]   { --rail: 96px;  --tb: 46px; }
+
+body[data-density="compact"] .content { padding: 12px 15px 30px; }
+body[data-density="roomy"]   .content { padding: 26px 34px 56px; }
+
+body[data-density="compact"] .panel { padding: 13px 15px; margin-bottom: 11px; }
+body[data-density="roomy"]   .panel { padding: 24px 28px; margin-bottom: 22px; }
+
+/* At roomy, the rail earns a little more air from the window edge too. */
+body[data-density="roomy"] .rail { margin: 16px 0 16px 16px; }
+body[data-density="compact"] .rail { margin: 8px 0 8px 8px; }
+
+/* ── ACCESSIBILITY ────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .tb-view button, .vc-toast { transition: none; }
+}

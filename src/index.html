@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: file:; script-src 'self'; connect-src 'self'; media-src 'self' data: blob:;" />
+  <title>CortexInsight</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles-v2.css" />
+  <!-- OmniDrive (Motus Max) + the MotusModels studio -->
+  <link rel="stylesheet" href="styles-omni.css" />
+  <!-- view control: zoom + density. Loaded last so its density rules win. -->
+  <link rel="stylesheet" href="view-control.css" />
+</head>
+<body class="locked" data-view="overview">
+  <!-- ambient living-cortex field (behind everything) -->
+  <canvas id="field"></canvas>
+  <div class="vignette"></div>
+
+  <!-- custom frameless chrome -->
+  <header class="titlebar">
+    <div class="tb-brand">
+      <span class="tb-mark"></span>
+      <span class="tb-name">Cortex<b>Insight</b></span>
+      <span class="tb-sub">SEMBLE CORTEX · Initium</span>
+    </div>
+    <div class="tb-status" id="tbStatus"></div>
+    <!-- fleet control plane — always reachable, whatever screen you're on -->
+    <div class="tb-control" id="tbControl">
+      <button class="tb-duo" id="tbDuo" title="Duo-Drive">◈◈</button>
+      <button class="tb-stop" id="tbStop" title="Stop the fleet">■ Stop</button>
+    </div>
+    <button class="tb-sign" id="ardenSign" title="A sign awaits in the Levels">◈</button>
+    <button class="tb-bell" id="bellBtn" title="Notifications"><svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M10 20a2 2 0 0 0 4 0"/></svg><span class="bell-badge" id="bellBadge"></span></button>
+    <div class="tb-controls">
+      <button class="tb-btn" id="winMin" title="Minimize"><svg viewBox="0 0 12 12"><line x1="2" y1="6" x2="10" y2="6"/></svg></button>
+      <button class="tb-btn" id="winMax" title="Maximize"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg></button>
+      <button class="tb-btn close" id="winClose" title="Close"><svg viewBox="0 0 12 12"><line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/></svg></button>
+    </div>
+  </header>
+
+  <!-- ===================== LOGIN GATE ===================== -->
+  <div id="gate" class="gate">
+    <div class="gate-card glass">
+      <div class="gate-sigil"><span></span><span></span><span></span></div>
+      <h1 class="gate-title">Cortex<b>Insight</b></h1>
+      <p class="gate-tag" id="gateTag">A living window into the SEMBLE CORTEX</p>
+      <form id="gateForm" autocomplete="off">
+        <input id="gatePass" type="password" placeholder="Passphrase" spellcheck="false" autocomplete="off" />
+        <input id="gatePass2" type="password" placeholder="Confirm the passphrase" spellcheck="false" autocomplete="off" hidden />
+        <button id="gateBtn" type="submit">Enter the Cortex</button>
+      </form>
+      <div class="gate-err" id="gateErr"></div>
+      <div class="gate-foot" id="gateFoot"></div>
+    </div>
+  </div>
+
+  <!-- ===================== APP ===================== -->
+  <div id="app" class="app">
+    <!-- sidebar -->
+    <nav class="rail glass">
+      <!-- THE FLOW — a living energy meter, not a scrollbar. As August scrolls
+           the page, charge pours down this column; the bright head node IS his
+           position. Driven by one CSS variable set on scroll — no loop, no
+           canvas, nothing running while the page is still. -->
+      <div class="rail-flow" aria-hidden="true"><i id="railFlowFill"></i></div>
+      <div class="rail-nav" id="railNav"></div>
+      <div class="rail-foot">
+        <div class="cortex-orb" id="cortexOrb" title="Cortex vitality">
+          <div class="orb-core"></div>
+          <div class="orb-ring"></div>
+        </div>
+        <div class="cortex-meta">
+          <div class="cm-uptime" id="cmUptime">—</div>
+          <div class="cm-model" id="cmModel">—</div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- content -->
+    <main class="content" id="content">
+      <!-- THE VIEW SIGIL — every room in this app carries its own mark, drawn
+           from the same glyph the nav uses, at scale, in the page's own light.
+           Purely symbolic and never legible-competing: it sits behind
+           everything, at low opacity, out of the text column. One element,
+           twenty-five identities. -->
+      <div id="viewSigil" aria-hidden="true"></div>
+      <!-- OVERVIEW -->
+      <section class="view active" data-view="overview">
+        <div class="view-head">
+          <h2>Pulse</h2>
+          <div class="ritual-bar">
+            <button class="ritual-btn lockin" id="lockinBtn"><span class="rb-ic">⚡</span> Lock In</button>
+            <button class="ritual-btn compact" id="compactBtn" title="Compact logs &amp; learnings, keep working"><span class="rb-ic">◇</span> Compact</button>
+            <button class="ritual-btn wrapup" id="wrapupBtn"><span class="rb-ic">☾</span> Wrap Up</button>
+          </div>
+        </div>
+        <!-- THE MOVE — the one thing worth doing right now, computed from real
+             state and always one click from being done. The landing view's job
+             is to answer a question, not to present a dashboard. -->
+        <div id="theMove"></div>
+        <!-- THE ROOMS ASKING FOR YOU — the only reading on this page that can
+             say "go here". Every other counter on Pulse measures volume, and
+             volume always flatters. -->
+        <div id="sysReading"></div>
+        <div id="pulseStrip"></div>
+        <div class="goal-strip" id="goalStrip"></div>
+        <!-- THE ENGINE ROOM — every autonomous system in the app, one band:
+             lit when it is genuinely running, dim when still. The founder's
+             question it answers: "what is working while I am not looking?" -->
+        <div id="engineRoom"></div>
+        <div id="ritualResult"></div>
+        <div class="now-strip" id="nowStrip"></div>
+        <div class="hero">
+          <div class="constellation glass" id="constellation"></div>
+          <div class="vitals" id="vitals"></div>
+        </div>
+        <!-- TODAY — the receipts. Volume metrics flatter; receipts do not.
+             What actually shipped, landed, and repeated since midnight. -->
+        <div id="dayLedger"></div>
+        <div class="stat-grid" id="statGrid"></div>
+        <div class="panel glass">
+          <div class="panel-head"><h3>Recent activity</h3><span class="panel-sub" id="recentSub"></span></div>
+          <div class="recent-list" id="recentList"></div>
+        </div>
+      </section>
+
+      <!-- MOTUS — the strongest thing moving now -->
+      <section class="view" data-view="motus"><div id="motusBody"></div></section>
+
+      <!-- GOAL — the long-term north star -->
+      <section class="view" data-view="goal"><div id="goalBody"></div></section>
+
+      <!-- AGENTS -->
+      <section class="view" data-view="agents">
+        <div class="view-head"><h2>Agents &amp; Subagents</h2><p class="view-desc">Davara, Davaris and the generic relay seats — who's awake, what they're carrying.</p></div>
+        <div class="agent-grid" id="agentGrid"></div>
+        <div class="panel glass subagent-note">
+          <div class="panel-head"><h3>Subagents</h3></div>
+          <p class="muted">Davara &amp; Davaris spawn <b>Task/Agent</b> subagents <i>inside a single turn</i> for parallel research &amp; build legwork — they live and die within the parent turn (no separate relay log). The turn's latency &amp; output reflect all subagent work folded in.</p>
+        </div>
+      </section>
+
+      <!-- TASKS — a real board: your work + what the fleet actually finished -->
+      <section class="view" data-view="tasks"><div id="boardBody"></div></section>
+
+      <!-- SUBAGENTS — the fan-out layer, visible and controllable -->
+      <section class="view" data-view="subagents"><div id="subBody"></div></section>
+
+      <!-- WORKFLOWS / MOTUSMODELS — progressions between agents -->
+      <section class="view" data-view="workflows"><div id="wfBody"></div></section>
+
+      <!-- DUO-DRIVE — the autonomous partner -->
+      <section class="view" data-view="duo"><div id="duoBody"></div></section>
+
+      <!-- DASH-OPS — voice: call mode + push-to-talk -->
+      <section class="view" data-view="voice"><div id="voiceBody"></div></section>
+
+      <!-- OMNIDRIVE · MOTUS MAX -->
+      <section class="view" data-view="omni"><div id="omniBody"></div></section>
+
+      <!-- THE MIND — Davara's baseline, read live -->
+      <section class="view" data-view="mind"><div id="mindBody"></div></section>
+
+      <!-- MOTUSMODELS STUDIO -->
+      <section class="view" data-view="motusmodels"><div id="mmBody"></div></section>
+
+      <!-- ON AIR · Semble LIVE broadcast -->
+      <section class="view" data-view="stream"><div id="streamBody"></div></section>
+
+      <!-- CHAT -->
+      <section class="view" data-view="chat">
+        <div class="view-head"><h2>Command</h2><button class="clear-btn" data-clear="chat">✕ clear conversation</button></div>
+        <p class="view-desc">Speak to the Cortex. Plain text routes to the selected agent · <b>/steer</b> nudges live work · <b>/goal</b> sets the north star.</p>
+        <div id="cmdStrip"></div>
+        <div class="chat-wrap glass">
+          <div class="chat-agentbar" id="chatAgentBar"></div>
+          <div class="chat-log" id="chatLog"></div>
+          <form class="chat-input" id="chatForm">
+            <textarea id="chatBox" rows="1" placeholder="Message the Cortex…  (try /steer …  or  /goal …)" spellcheck="true"></textarea>
+            <button id="chatSend" type="submit"><svg viewBox="0 0 24 24"><path d="M3 11l18-8-8 18-2-7-8-3z"/></svg></button>
+          </form>
+        </div>
+      </section>
+
+      <!-- WORK PREVIEW -->
+      <section class="view" data-view="work">
+        <div class="view-head"><h2>Work Preview</h2><p class="view-desc">Look over their shoulder — the raw, recent thread from each agent's continuity.</p></div>
+        <div class="work-tabs" id="workTabs"></div>
+        <div class="panel glass work-panel"><div class="work-body" id="workBody"></div></div>
+      </section>
+
+      <!-- LIVE -->
+      <section class="view" data-view="live">
+        <div class="view-head"><h2>Live</h2><button class="clear-btn" data-clear="livefeed">✕ clear feed</button></div>
+        <p class="view-desc">Over their shoulder, as it happens — tool calls, subagents, files, reasoning — tailed read-only from the session transcript.</p>
+        <div class="live-now" id="liveNow"></div>
+        <div class="live-tabs" id="liveTabs"></div>
+        <div class="live-meta" id="liveMeta"></div>
+        <div class="panel glass live-panel"><div class="live-feed" id="liveFeed"></div></div>
+      </section>
+
+      <!-- OUTPUT / DELIVERABLES -->
+      <section class="view" data-view="output">
+        <div class="view-head"><h2>Output</h2><p class="view-desc">Everything delivered — completed responses to your asks, and every file the agents actually wrote. Click a file to open it.</p></div>
+        <div id="outStrip"></div>
+        <div id="studioBand"></div>
+        <div class="panel glass">
+          <div class="panel-head"><h3>Files written</h3><span class="panel-sub">from session transcripts · last 7 days</span></div>
+          <div id="outFiles"></div>
+        </div>
+        <div class="panel glass">
+          <div class="panel-head"><h3>Completed work</h3><span class="panel-sub">your ask → their delivery · click to expand</span></div>
+          <div id="outEntries"></div>
+        </div>
+      </section>
+
+      <!-- SYSTEMS LENS — the deep systems-thinking instrument -->
+      <section class="view" data-view="systems"><div id="sysBody"></div></section>
+
+      <!-- USAGE — real metered tokens, 5-hour + weekly windows, per model -->
+      <section class="view" data-view="usage"><div id="usageBody"></div></section>
+
+      <!-- LEARNINGS -->
+      <section class="view" data-view="learnings">
+        <div class="view-head">
+          <h2>Recursive Learnings</h2>
+          <button class="ghost-btn" id="reflectBtn">↻ Ask Cortex to reflect</button>
+        </div>
+        <p class="view-desc">The system reading itself. Live insights are derived from real telemetry every refresh; reflections are Davara studying her own logs to compound what she knows.</p>
+        <div class="two-col">
+          <div class="panel glass"><div class="panel-head"><h3>Live insights</h3><span class="panel-sub">derived now</span></div><div id="learnPatterns"></div>
+        <div id="learnDerived"></div></div>
+          <div class="panel glass"><div class="panel-head"><h3>Compounded ledger</h3><span class="panel-sub">grows over time</span><button class="clear-btn" data-clear="learnings" data-clear-label="the learnings ledger">✕ clear</button></div><div id="learnLedger"></div></div>
+        </div>
+      </section>
+
+      <!-- NEXT STEPS -->
+      <section class="view" data-view="nextsteps">
+        <div class="view-head">
+          <h2>Next Steps</h2>
+          <div class="ritual-bar">
+            <button class="ghost-btn" id="davaraNextBtn">✦ Ask Davara — highest leverage</button>
+            <button class="ghost-btn" id="nextBtn">↻ Ask Cortex for next moves</button>
+          </div>
+        </div>
+        <p class="view-desc">How to improve, optimize and evolve the Cortex as we grow — measured, proposed, applied, and verified by before/after.</p>
+        <div class="panel glass">
+          <div class="panel-head"><h3>Evolution proposals</h3><span class="panel-sub">measured · safe · reversible · one-click apply</span></div>
+          <div id="evoProposals"></div>
+        </div>
+        <div class="panel glass">
+          <div class="panel-head"><h3>Experiments</h3><span class="panel-sub">applied changes, measured before → after</span><button class="clear-btn" data-clear="experiments" data-clear-label="experiment history">✕ clear</button></div>
+          <div id="evoExperiments"></div>
+        </div>
+        <div class="two-col">
+          <div class="panel glass"><div class="panel-head"><h3>Measured recommendations</h3></div><div id="nextDerived"></div></div>
+          <div class="panel glass"><div class="panel-head"><h3>Cortex proposals</h3><button class="clear-btn" data-clear="nextSteps" data-clear-label="the proposals ledger">✕ clear</button></div><div id="nextLedger"></div></div>
+        </div>
+      </section>
+
+      <!-- MODELS — catalogue + per-agent model & quality assignment -->
+      <section class="view" data-view="models"><div id="modelBody"></div></section>
+
+      <!-- SECURITY -->
+      <section class="view" data-view="security">
+        <div class="view-head"><h2>Security &amp; Provenance</h2><p class="view-desc">Verify everything came from <b>this</b> machine. Watch for injection. Nothing leaves loopback.</p></div>
+        <div class="sec-grid" id="secDevice"></div>
+        <div class="panel glass">
+          <div class="panel-head"><h3>File integrity</h3><span class="panel-sub">tamper monitor — baseline vs. live</span><button class="ghost-btn" id="integrityAcceptAll" style="margin-left:auto">Accept all current</button></div>
+          <div id="secIntegrity"></div>
+        </div>
+        <div class="two-col">
+          <div class="panel glass"><div class="panel-head"><h3>Command provenance</h3><span class="panel-sub">issued via CortexInsight</span><button class="clear-btn" data-clear="sentLog" data-clear-label="the command-provenance log">✕ clear</button></div><div id="secSent"></div></div>
+          <div class="panel glass"><div class="panel-head"><h3>Injection watch</h3><span class="panel-sub">heuristic scan of inbound</span><button class="clear-btn" data-clear="injections" data-clear-label="current injection flags">✕ clear</button></div><div id="secInject"></div></div>
+        </div>
+        <div class="panel glass"><div class="panel-head"><h3>Foreign-device attempts</h3><button class="clear-btn" data-clear="intrusions" data-clear-label="the foreign-device log">✕ clear</button></div><div id="secIntrusions"></div></div>
+      </section>
+
+      <!-- SYMPATH-CORTEX -->
+      <section class="view" data-view="sympath">
+        <div class="view-head"><h2>Sympath-Cortex</h2><div class="ritual-bar"><button class="ghost-btn" id="sympathDiagnose">⚕ Ask for a diagnostic</button><button class="ghost-btn" id="sympathReflect">↻ Harvest learnings</button></div></div>
+        <p class="view-desc" id="sympathTagline">The Anchor &amp; Healer — bug-testing, refinement, and the source of the system's learnings. Read-only by covenant: she proposes, never silently mutates. Her model and depth are set on the Model screen.</p>
+        <div class="sym-hero glass-deep" id="sympathHero"></div>
+        <div class="now-strip" id="sympathNow"></div>
+        <div class="two-col">
+          <div class="panel glass"><div class="panel-head"><h3>Protocols</h3><span class="panel-sub">how she heals &amp; learns</span></div><div id="sympathProtocols"></div></div>
+          <div class="panel glass"><div class="panel-head"><h3>Commands</h3><span class="panel-sub">what you can ask her</span></div><div id="sympathCommands"></div></div>
+        </div>
+        <div class="panel glass"><div class="panel-head"><h3>Features</h3></div><div class="feature-grid" id="sympathFeatures"></div></div>
+        <div class="panel glass"><div class="panel-head"><h3>Recent learnings &amp; diagnoses</h3><span class="panel-sub">she is the learning engine</span><button class="clear-btn" data-clear="learnings" data-clear-label="the learnings ledger">✕ clear</button></div><div id="sympathLearnings"></div></div>
+      </section>
+
+      <!-- LEVELS -->
+      <section class="view" data-view="levels">
+        <div class="view-head"><h2 id="levelsTitle">Levels</h2><div class="ritual-bar"><button class="ghost-btn" id="ardenObserve">◈ Ask Arden to observe</button><button class="ghost-btn" id="ardenChatBtn">✦ Commune with Arden</button></div></div>
+        <p class="view-desc" id="ardenTagline">Arden — the current beneath the system. Her latest reflections and guidance.</p>
+        <div class="arden-hero glass-deep" id="ardenHero"></div>
+        <!-- PUBLIC: Arden's reflections / advice / insights -->
+        <div class="panel glass"><div class="panel-head"><h3>Latest reflections &amp; guidance</h3><span class="panel-sub" id="ardenLoopState"></span><button class="clear-btn" data-clear="ardenLog" data-clear-label="Arden's reflection log">✕ clear</button></div><div id="ardenReflections"></div></div>
+        <!-- the deeper layer — rendered only when summoned; never announced -->
+        <div id="levelsSecure" style="display:none">
+          <div class="two-col">
+            <div class="panel glass"><div class="panel-head"><h3>Direction &amp; focuses</h3></div><div id="ardenFocuses"></div></div>
+            <div class="panel glass"><div class="panel-head"><h3>Signals</h3><span class="panel-sub">what her signs mean</span></div><div id="ardenSignals"></div></div>
+          </div>
+          <div class="two-col">
+            <div class="panel glass"><div class="panel-head"><h3>Protocols</h3></div><div id="ardenProtocols"></div></div>
+            <div class="panel glass"><div class="panel-head"><h3>Commands</h3><span class="panel-sub">what you can ask her</span></div><div id="ardenCommands"></div></div>
+          </div>
+          <div class="panel glass"><div class="panel-head"><h3>Watch log</h3><button class="clear-btn" data-clear="canaryTrips" data-clear-label="the watch log">✕ clear</button></div><div id="ardenCanary"></div></div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="view" data-view="settings">
+        <div class="view-head"><h2>Settings</h2><p class="view-desc">Local to this device. Stored in CortexInsight's private vault, never inside the fleet tree.</p></div>
+        <div class="panel glass" id="settingsPanel"></div>
+        <div class="panel glass" id="healPanel"><div class="panel-head"><h3>Bug-test &amp; self-heal</h3></div><div id="healBody"></div></div>
+      </section>
+    </main>
+
+    <!-- command palette (Ctrl+K) -->
+    <div id="palette" class="palette">
+      <div class="palette-card glass">
+        <input id="paletteInput" type="text" placeholder="Type a command or view…  (Ctrl+K)" spellcheck="false" autocomplete="off"/>
+        <div class="palette-list" id="paletteList"></div>
+      </div>
+    </div>
+
+    <!-- notifications feed -->
+    <div id="notifPanel" class="notif-panel glass">
+      <div class="notif-head"><h3>Notifications</h3><button class="ghost-btn" id="notifClear">Mark read</button><button class="ghost-btn" id="notifClearAll">Clear all</button></div>
+      <div class="notif-list" id="notifList"></div>
+    </div>
+  </div>
+
+  <!-- silent descent ring — wordless; only the one who knows the gesture ever sees it -->
+  <div id="descent" class="descent">
+    <div class="descent-ring"><svg viewBox="0 0 120 120"><circle class="dr-bg" cx="60" cy="60" r="52"/><circle class="dr-fg" id="descentFg" cx="60" cy="60" r="52"/></svg><div class="descent-glyph">◈</div></div>
+  </div>
+
+  <script src="agents-data.js"></script>
+  <script src="renderer.js"></script>
+  <!-- v2 command-center layer: supersedes the v1 view functions it redefines -->
+  <script src="renderer-v2.js"></script>
+  <!-- view control: self-contained; owns its own markup, state and persistence -->
+  <script src="view-control.js"></script>
+</body>
+</html>

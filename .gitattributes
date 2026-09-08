@@ -1,0 +1,9 @@
+# store text as LF; check out as the platform prefers
+* text=auto
+
+# binaries
+*.ico binary
+*.png binary
+*.jpg binary
+*.woff binary
+*.woff2 binary

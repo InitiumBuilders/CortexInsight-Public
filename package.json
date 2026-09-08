@@ -1,0 +1,55 @@
+{
+  "name": "cortexinsight",
+  "version": "3.62.0",
+  "private": true,
+  "description": "CortexInsight: a desktop operator console over a local agent fleet. Reads the fleet's own logs, drives agents through a loopback relay, and keeps every key sealed on the machine.",
+  "author": "Outlier.Systems",
+  "homepage": "https://semble.cc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/InitiumBuilders/Semble-CC.git"
+  },
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "smoke": "electron . --smoke",
+    "clicktest": "electron . --clicktest",
+    "fresh": "electron . --freshtest",
+    "gate": "node scripts/oss-check.js",
+    "package": "electron-packager . CortexInsight --platform=win32 --arch=x64 --out=release-next --overwrite --asar --icon=assets/icon.ico --ignore=\"^/release\" --ignore=\"^/release-next\" --ignore=\"\\.bak\" --ignore=\"^/\\.git\"",
+    "build": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "nodemailer": "^6.10.1"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.0.1",
+    "electron": "^33.3.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.outlier.cortexinsight",
+    "productName": "CortexInsight",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "preload-overlay.js",
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": "portable",
+      "icon": "assets/icon.ico",
+      "artifactName": "CortexInsight.exe"
+    },
+    "portable": {
+      "artifactName": "CortexInsight.exe"
+    }
+  }
+}

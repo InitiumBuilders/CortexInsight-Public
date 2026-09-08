@@ -1,0 +1,23 @@
+# build outputs and staged installs
+node_modules/
+release/
+release-next/
+*.asar
+*.asar.bak*
+
+# backups and dead copies must never ship
+*.bak
+*.bak-*
+.cortexinsight-bak-*
+/renderer.js
+/index.html
+/styles.css
+
+# local state, secrets, scratch
+.env
+.env.*
+*.env
+*.log
+.DS_Store
+Thumbs.db
+ci-*.txt
