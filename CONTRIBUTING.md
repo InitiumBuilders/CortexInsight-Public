@@ -16,7 +16,9 @@ npm run package     # a portable build in release-next\
 
 `node --check main.js` before running anything. Parsing is not loading, so run the smoke too.
 
-Every push to `main` and every pull request runs the gate on Linux and then, on a Windows runner nobody here has touched, the fresh-vault harness and the packager (`.github/workflows/build.yml`). The fresh run's report and screenshots are uploaded as artifacts; read them when a run goes red. A `v*` tag turns the zip into a Release.
+Every push to `main` and every pull request runs the gate on Linux and then, on a Windows runner and a macOS runner nobody here has touched, the fresh-vault harness and the packager (`.github/workflows/build.yml`). The fresh run's report and screenshots are uploaded as artifacts per platform; read them when a run goes red. A `v*` tag turns the zips into a Release.
+
+**Platform seam.** Everything that touches the machine goes through the platform layer in `main.js` (`IS_WIN`, `IS_MAC`, `rootParts`, `wslHome`, `linuxRoot`, `discoverRoot`, `toWindowsPath`, `runWslFull`, `runOmniPs`). A feature that only works on one platform says so in its result rather than failing quietly, and the table in `docs/INSTALL.md` is the promise to keep current.
 
 ## The laws
 

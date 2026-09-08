@@ -89,6 +89,64 @@ jobs:
           files: ${{ env.ZIP }}
           generate_release_notes: true
           body: |
-            Unzip anywhere, run `CortexInsight.exe`. The gate asks you to set a passphrase on first run.
-            Your vault lives in `%APPDATA%\cortexinsight\`, never inside the app folder.
-            Read `docs/INSTALL.md` in the repository for the fleet tree, the relay, and what the console needs from WSL.
+            **Windows:** unzip anywhere, run `CortexInsight.exe`. SmartScreen may warn once (the build is not code-signed): More info → Run anyway.
+            **macOS:** unzip, move `CortexInsight.app` where you like, then right-click → Open the first time (unsigned), or `xattr -dr com.apple.quarantine CortexInsight.app`. Apple silicon takes the arm64 zip, Intel the x64 zip.
+            The gate asks you to set a passphrase on first run. Your vault lives in your user data folder, never inside the app.
+            `docs/INSTALL.md` covers the fleet tree, the relay, and what works on each platform.
+
+  macos:
+    name: fresh run and package (macos)
+    needs: gate
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: dependencies
+        run: npm ci --no-audit --no-fund
+      - name: the stranger's first hour
+        run: |
+          set -uo pipefail
+          T="${TMPDIR:-/tmp}"
+          rm -f "$T/ci-fresh-report.txt"
+          npx electron . --freshtest || echo "electron exit: $?"
+          R=$(find "$T" /tmp -maxdepth 1 -name ci-fresh-report.txt 2>/dev/null | head -1)
+          if [ -z "$R" ]; then echo "the fresh harness wrote no report"; exit 1; fi
+          cat "$R"
+          if grep -q PROBLEM "$R"; then echo "the fresh harness found problems"; exit 1; fi
+          if ! grep -q CLEAN "$R"; then echo "the fresh harness did not reach its verdict"; exit 1; fi
+          mkdir -p fresh-artifacts
+          cp "$R" fresh-artifacts/
+          cp "$(dirname "$R")"/fresh-*.png fresh-artifacts/ 2>/dev/null || true
+      - name: keep the first hour's evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-run-macos
+          path: fresh-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: package (apple silicon and intel)
+        run: |
+          npm run package:mac
+          npm run package:mac-x64
+      - name: zip
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          ditto -c -k --sequesterRsrc --keepParent release-next/CortexInsight-darwin-arm64/CortexInsight.app "CortexInsight-$VER-mac-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent release-next/CortexInsight-darwin-x64/CortexInsight.app "CortexInsight-$VER-mac-x64.zip"
+          ls -la CortexInsight-*.zip
+      - name: keep the builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: CortexInsight-mac
+          path: CortexInsight-*-mac-*.zip
+          retention-days: 14
+      - name: release on a version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: CortexInsight-*-mac-*.zip

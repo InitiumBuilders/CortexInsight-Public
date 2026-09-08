@@ -39,6 +39,8 @@ for (const [name, [bright, dark]] of Object.entries(COLORS)) {
     } else if (d < 15.5) { const k = 1 - (d - 13) / 2.5; r = bright[0]; g = bright[1]; b = bright[2]; a = Math.round(180 * k); }
     buf[i] = r; buf[i + 1] = g; buf[i + 2] = b; buf[i + 3] = a;
   }
-  fs.writeFileSync(path.join(__dirname, 'assets', `tray-${name}.ico`), icoWrap(encodePng(buf)));
+  const png = encodePng(buf);
+  fs.writeFileSync(path.join(__dirname, 'assets', `tray-${name}.ico`), icoWrap(png));   // Windows tray
+  fs.writeFileSync(path.join(__dirname, 'assets', `tray-${name}.png`), png);            // macOS menu bar
 }
-console.log('tray icons written: good/warn/bad');
+console.log('tray icons written: good/warn/bad (ico + png)');

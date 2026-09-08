@@ -28,7 +28,7 @@ CortexInsight turns the box into a room with instruments. The fleet's own files 
 
 ## Get the app
 
-**Download.** Every version tag is built on a Windows runner none of the authors have touched, and the zip lands on the [Releases page](https://github.com/InitiumBuilders/Semble-CC/releases). Unzip, run `CortexInsight.exe`.
+**Download.** Every version tag is built on runners none of the authors have touched, one Windows and one Mac, and the zips land on the [Releases page](https://github.com/InitiumBuilders/Semble-CC/releases). Windows: unzip, run `CortexInsight.exe`. Mac: unzip the arm64 zip on Apple silicon or the x64 zip on Intel, right-click the app, Open. Neither build is code-signed yet, so each platform asks once.
 
 **Or build it yourself, one command.** Windows 10 or 11, Node 20 or newer, Git.
 
@@ -38,7 +38,7 @@ cd Semble-CC
 powershell -ExecutionPolicy Bypass -File .\Build-And-Install.ps1
 ```
 
-The script checks the toolchain, installs from the lockfile, packages, swaps the build in, proves the version by re-reading the binary, keeps the previous build for rollback, puts a shortcut on the desktop, and launches. `npm run deploy` does the same. `npm start` runs from source without packaging. Details, switches and the uninstall are in [`docs/INSTALL.md`](docs/INSTALL.md).
+The script checks the toolchain, installs from the lockfile, packages, swaps the build in, proves the version by re-reading the binary, keeps the previous build for rollback, puts a shortcut on the desktop, and launches. `npm run deploy` does the same. On a Mac, `bash build-and-install.sh` does the equivalent into `~/Applications`. `npm start` runs from source without packaging on either. Details, switches, what works where, and the uninstall are in [`docs/INSTALL.md`](docs/INSTALL.md).
 
 On first run the gate asks you to set a passphrase (12 characters or more, typed twice). The vault pairs itself to this machine, then looks for a fleet tree under every WSL home it can see: a folder holding `logs/interactions` and `agents`, with the loopback relay on `127.0.0.1:8788`. The relay is a small proxy that turns each message into a Claude Code turn on your own subscription; the console never calls a model provider directly for the fleet. If no tree is found, Pulse says so and points at Config → Preferences. The console opens and runs without one.
 

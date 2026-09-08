@@ -1,12 +1,26 @@
 # Install
 
-Three ways to put the console on your machine, from the quickest to the most hands-on. All three end in the same place: a folder with `CortexInsight.exe` in it, a vault in your user data, and the gate asking you to set a passphrase.
+Three ways to put the console on your machine, from the quickest to the most hands-on, on Windows or on a Mac. All of them end in the same place: an app you can open, a vault in your user data, and the gate asking you to set a passphrase.
 
 ## What you need
 
-- Windows 10 or 11, 64-bit.
+- Windows 10 or 11 (64-bit), or macOS 12 or newer on Apple silicon or Intel.
 - For building from source: Node 20 or newer with npm, and Git.
-- For the fleet features: WSL2 with a fleet tree in a home folder (`logs/interactions` and `agents` inside it) and the loopback relay on `127.0.0.1:8788`. The console opens and runs without these; Pulse tells you what is missing and where to set the path.
+- For the fleet features: a fleet tree in a home folder (`logs/interactions` and `agents` inside it) and the loopback relay on `127.0.0.1:8788`. On Windows the tree lives in WSL2; on a Mac it is a folder in your home. The console opens and runs without these; Pulse tells you what is missing and where to set the path.
+
+## What works where
+
+| | Windows | macOS |
+|---|---|---|
+| The console, every view, the harnesses | yes | yes |
+| Fleet tree discovery and the bridge | yes, in WSL | yes, in your home |
+| The relay, Command, loops, workflows, the board, the reading | yes | yes |
+| Motus Max in work mode (files, commands, APIs) | yes | yes |
+| Motus Max on the screen (pointer, keyboard, window probe) | yes | not yet; the console says so when asked |
+| Self-update from a staged build | yes | not yet; run the install script again |
+| Relay restart from the heal panel | yes, through WSL services | no; start the relay by hand |
+| Sealed keys | DPAPI | Keychain |
+| Voice, the studio, the second stack, the broadcast | yes | yes |
 
 ## 1. Download a release
 
@@ -49,6 +63,30 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1   # swap, prove, la
 ```
 
 Or skip the install step and run `release-next\CortexInsight-win32-x64\CortexInsight.exe` where it is. To run from source without packaging: `npm start`.
+
+## On a Mac
+
+**Download.** Take `CortexInsight-<version>-mac-arm64.zip` on Apple silicon or `-mac-x64.zip` on Intel from the Releases page, unzip, and move `CortexInsight.app` where you like. The build is not signed or notarised, so the first open needs one of two things: right-click the app, Open, Open; or, in a terminal:
+
+```bash
+xattr -dr com.apple.quarantine /path/to/CortexInsight.app
+```
+
+**One command from a clone.**
+
+```bash
+git clone https://github.com/InitiumBuilders/Semble-CC.git
+cd Semble-CC
+bash build-and-install.sh
+```
+
+It checks the toolchain, installs from the lockfile, packages for this Mac's architecture, quits a running console, keeps the previous app as `CortexInsight.app.prev`, copies the new one into `~/Applications`, clears the quarantine flag, proves the version by reading the installed bundle, rolls back on a mismatch, and launches. Options: `--no-launch`, `--skip-deps`, `--dest <folder>`. `npm run deploy:mac` does the same.
+
+**By hand.** `npm ci`, then `npm run package:mac` (Apple silicon) or `npm run package:mac-x64` (Intel); the app is in `release-next/`. `npm start` runs from source.
+
+**Where things live on a Mac.** The app wherever you put it. The vault in `~/Library/Application Support/cortexinsight/`. The agent tool, the brief and the queue in `~/.cortexinsight/`. Uninstall by quitting, deleting the app, and deleting the vault folder if you want it gone.
+
+**The fleet on a Mac.** Claude Code runs natively, so the fleet tree is a folder in your home and the relay listens on localhost. Set the fleet path on Config if discovery did not find it. The bridge installs into the runner the same way.
 
 ## Where things live
 

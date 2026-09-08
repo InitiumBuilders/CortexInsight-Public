@@ -1,6 +1,6 @@
 {
   "name": "cortexinsight",
-  "version": "3.63.0",
+  "version": "3.64.0",
   "private": true,
   "description": "CortexInsight: a desktop operator console over a local agent fleet. Reads the fleet's own logs, drives agents through a loopback relay, and keeps every key sealed on the machine.",
   "author": "Outlier.Systems",
@@ -20,8 +20,13 @@
     "clicktest": "electron . --clicktest",
     "fresh": "electron . --freshtest",
     "gate": "node scripts/oss-check.js",
-    "package": "electron-packager . CortexInsight --platform=win32 --arch=x64 --out=release-next --overwrite --asar --icon=assets/icon.ico --ignore=\"^/release\" --ignore=\"^/release-next\" --ignore=\"\\.bak\" --ignore=\"^/\\.git\" --ignore=\"^/\\.github\"",
-    "deploy": "powershell -ExecutionPolicy Bypass -File Build-And-Install.ps1"
+    "package": "npm run package:win",
+    "package:win": "electron-packager . CortexInsight --platform=win32 --arch=x64 --out=release-next --overwrite --asar --icon=assets/icon.ico --ignore=\"^/release\" --ignore=\"^/release-next\" --ignore=\"\\.bak\" --ignore=\"^/\\.git\" --ignore=\"^/\\.github\"",
+    "package:mac": "electron-packager . CortexInsight --platform=darwin --arch=arm64 --out=release-next --overwrite --asar --icon=assets/icon.icns --app-bundle-id=com.outlier.cortexinsight --ignore=\"^/release\" --ignore=\"^/release-next\" --ignore=\"\\.bak\" --ignore=\"^/\\.git\" --ignore=\"^/\\.github\"",
+    "package:mac-x64": "electron-packager . CortexInsight --platform=darwin --arch=x64 --out=release-next --overwrite --asar --icon=assets/icon.icns --app-bundle-id=com.outlier.cortexinsight --ignore=\"^/release\" --ignore=\"^/release-next\" --ignore=\"\\.bak\" --ignore=\"^/\\.git\" --ignore=\"^/\\.github\"",
+    "deploy": "powershell -ExecutionPolicy Bypass -File Build-And-Install.ps1",
+    "deploy:mac": "bash build-and-install.sh",
+    "icons": "node make-icon.js && node make-tray-icons.js && node make-icns.js"
   },
   "dependencies": {
     "nodemailer": "^6.10.1"

@@ -1783,7 +1783,8 @@ async function loadSettings() {
     </div>
     ${integrationsPanel(oa)}
     <div class="panel-head"><h3>Preferences</h3></div>
-    ${setText('cortexRoot', 'Fleet path', 'Where CortexInsight reads state (read-only). The UNC path to the fleet tree in WSL; discovered on first run, editable here.', SETTINGS.cortexRoot)}
+    ${setText('operatorName', 'Your name', 'How the fleet addresses you. It rides at the top of the brief every agent reads, so every turn knows who it is working with.', SETTINGS.operatorName || '')}
+    ${setText('cortexRoot', 'Fleet path', 'Where CortexInsight reads state (read-only). The path to the fleet tree: a UNC path into WSL on Windows, a folder in your home on macOS. Discovered on first run, editable here.', SETTINGS.cortexRoot)}
     ${setText('beaconUrl', 'Foreign-device beacon URL', 'Optional. If a copy ever opens on another machine, an alert POSTs here (e.g. a here.now webhook). Leave empty to rely on local notification only.', SETTINGS.beaconUrl)}
     ${setSelectAgent(SETTINGS.defaultAgent)}
     ${setToggle('reduceMotion', 'Reduce motion', 'Calms the neural field and animations (lighter on the GPU).', SETTINGS.reduceMotion)}

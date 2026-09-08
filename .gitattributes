@@ -3,6 +3,9 @@
 
 # binaries
 *.ico binary
+*.icns binary
+# the macOS install script keeps LF whatever the checkout platform
+*.sh text eol=lf
 *.png binary
 *.jpg binary
 *.woff binary

@@ -36,7 +36,11 @@ const { execFile } = require('child_process');
 // ---------------------------------------------------------------------------
 // a placeholder that names nobody; the real root is set by the operator or
 // discovered on first run (discoverRoot) and lives in the vault
-const DEFAULT_ROOT = '\\\\wsl.localhost\\ubuntu\\home\\operator\\cortex';   // a placeholder; discoverRoot() finds the real tree
+// a placeholder naming nobody; discoverRoot() finds the real tree. On Windows
+// the tree lives in WSL behind a UNC path; on macOS it is a folder in the home.
+const DEFAULT_ROOT = process.platform === 'win32'
+  ? '\\\\wsl.localhost\\ubuntu\\home\\operator\\cortex'
+  : path.join(os.homedir(), 'cortex');
 const RELAY = { host: '127.0.0.1', port: 8788 };
 
 // ---------------------------------------------------------------------------
@@ -325,6 +329,7 @@ function defaultState() {
     settings: {
       cortexRoot: DEFAULT_ROOT,
       defaultAgent: 'davara',
+      operatorName: '',           // how the fleet addresses you; the brief carries it every turn
       pollMs: 7000,               // 4s was gratuitous over the WSL 9p bridge; 7s reads identically to the eye
       autoEvolve: false,         // periodic Cortex self-reflection
       beaconUrl: '',             // optional remote endpoint for foreign-device alerts
@@ -594,7 +599,7 @@ function relayHealth(timeout = 3500) {
     // Direct socket dead? Ask from inside WSL before declaring the relay down —
     // otherwise a broken Windows↔WSL bridge reads as "the fleet is offline"
     // when the fleet is perfectly fine and simply unreachable from this side.
-    const viaWsl = () => execFile('wsl.exe', ['-d', wslDistro(), '-e', 'curl', '-s', '-m', '5', 'http://127.0.0.1:8788/health'],
+    const viaWsl = () => !IS_WIN ? resolve(null) : execFile('wsl.exe', ['-d', wslDistro(), '-e', 'curl', '-s', '-m', '5', 'http://127.0.0.1:8788/health'],
       { timeout: 12000 }, (err, stdout) => {
         const j = safe(() => JSON.parse(stdout), null);
         if (j) { _wslFallback = { on: true, since: now() }; resolve({ ...j, via: 'wsl', bridgeDown: true }); }
@@ -729,6 +734,7 @@ function dispatchBlocked(agent) {
 let _wslFallback = { on: false, since: 0 };
 function relayViaWsl(payload, timeoutMs = 1850000) {
   return new Promise((resolve) => {
+    if (!IS_WIN) return resolve({ ok: false, text: '', latency: 0, error: 'the relay did not answer on 127.0.0.1:8788' });
     const dir = ciDir();
     const reqFile = path.join(dir, 'relay-req.json');
     if (!safe(() => { if (!exists(dir)) fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(reqFile, payload); return true; }, false)) {
@@ -1219,14 +1225,14 @@ function writeAgentBrief() {
     const learn = (STATE.learnings || []).slice(0, 40).sort((a, b) => rank(b) - rank(a)).slice(0, 6)
       .map((l) => `- ${String(l.title).slice(0, 110)}`).join('\n');
     const md = [
-      '# August · current orientation',
-      '_Written by CortexInsight. Read-only context — act on the message below it, not on this._',
+      '# ' + operatorName() + ' · current orientation',
+      '_Written by CortexInsight. Read-only context — act on the message below it, not on this. The operator is ' + operatorName() + '; address them by that name._',
       '',
       // ★ THE READING RIDES FIRST. The bridge hands agents the first ~2,000 chars
       // of this file, so the shape of the system goes before the lists: the
       // window, the attractor, the lever, what waits on August. The app's systems
       // sight becomes the fleet's sight, every turn, at no token cost.
-      safe(() => { const rd = systemReading(); const cl = closeCandidates(3); return '## THE READING — the shape of the system right now\n' + rd.line + (rd.more ? ' ' + rd.more : '') + (cl.length ? '\n' + cl.length + ' decision(s) wait for August on his board; do not re-propose those tasks.' : ''); }, ''),
+      safe(() => { const rd = systemReading(); const cl = closeCandidates(3); return '## THE READING — the shape of the system right now\n' + rd.line + (rd.more ? ' ' + rd.more : '') + (cl.length ? '\n' + cl.length + ' decision(s) wait for ' + operatorName() + ' on the board; do not re-propose those tasks.' : ''); }, ''),
       '',
       STATE.motus ? `## MOTUS — the strongest thing moving now\n${String(STATE.motus.text).slice(0, 400)}` : '## MOTUS\n(not set)',
       '',
@@ -1350,7 +1356,7 @@ function toLinuxPath(winPath) {
 }
 function bashSyntaxOk(linuxPath) {
   return new Promise((resolve) => {
-    execFile('wsl.exe', ['-d', wslDistro(), '-e', 'bash', '-n', linuxPath], { timeout: 12000 }, (err, _o, stderr) => {
+    execFile(IS_WIN ? 'wsl.exe' : 'bash', IS_WIN ? ['-d', wslDistro(), '-e', 'bash', '-n', linuxPath] : ['-n', linuxPath], { timeout: 12000 }, (err, _o, stderr) => {
       resolve({ ok: !err, detail: String(stderr || (err && err.message) || '').slice(0, 400) });
     });
   });
@@ -2116,32 +2122,53 @@ function authSetup(password) {
 //  fleet root), discovers that root on first run by looking where WSL
 //  keeps homes, and falls back to neutral placeholders that name nobody.
 // ===========================================================================
+// ===========================================================================
+//  PLATFORM — one seam between the console and the machine it runs on.
+//  Windows: the fleet tree lives in WSL, reached as a UNC path, and shell work
+//  crosses the bridge through wsl.exe. macOS: the tree is a folder in the
+//  home, the shell is the shell, and the screen hands stay off until they are
+//  built for it (work mode, files, commands and APIs, drives there today).
+// ===========================================================================
+const IS_WIN = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
+function localUser() { return safe(() => os.userInfo().username, 'operator'); }
+// the operator's name, for prompts and the brief; empty until they tell us
+function operatorName() { return String((STATE && STATE.settings && STATE.settings.operatorName) || '').trim() || 'the operator'; }
 function rootParts() {
-  const m = /^\\\\wsl\.localhost\\([^\\]+)\\home\\([^\\]+)\\/i.exec(String(root() || ''));
-  return { distro: m ? m[1] : 'ubuntu', user: m ? m[2] : 'operator' };
+  const r = String(root() || '');
+  const m = /^\\\\wsl\.localhost\\([^\\]+)\\home\\([^\\]+)\\/i.exec(r);
+  if (m) return { distro: m[1], user: m[2] };
+  const u = /^\/(?:Users|home)\/([^/]+)\//.exec(r);
+  return { distro: IS_WIN ? 'ubuntu' : 'local', user: u ? u[1] : (IS_WIN ? 'operator' : localUser()) };
 }
 function wslDistro() { return rootParts().distro; }
 function wslUser() { return rootParts().user; }
-function wslHome() { return '/home/' + wslUser(); }
-function linuxRoot() { return wslHome() + '/' + path.basename(String(root() || 'cortex')); }
-// first run: find a fleet tree wherever WSL keeps homes, without knowing any
-// name. A tree is any home folder that holds logs/interactions and agents/;
-// when several qualify (an old backup beside the live one), the one whose
-// interactions moved most recently wins.
+// the fleet's home as the fleet's own shell sees it: a Linux home under WSL, the
+// real home elsewhere
+function wslHome() { return IS_WIN ? '/home/' + wslUser() : os.homedir(); }
+// the fleet tree as the fleet's own shell sees it
+function linuxRoot() { return IS_WIN ? wslHome() + '/' + path.basename(String(root() || 'cortex')) : String(root() || ''); }
+// first run: find a fleet tree wherever this machine keeps homes, without
+// knowing any name. A tree is any home folder that holds logs/interactions and
+// agents/; when several qualify (an old backup beside the live one), the one
+// whose interactions moved most recently wins.
 function discoverRoot() {
-  const base = '\\\\wsl.localhost';
-  const distros = safe(() => fs.readdirSync(base), []).filter((d) => d && !d.startsWith('.'));
+  const homes = [];
+  if (IS_WIN) {
+    const base = '\\\\wsl.localhost';
+    const distros = safe(() => fs.readdirSync(base), []).filter((d) => d && !d.startsWith('.'));
+    for (const d of distros.length ? distros : ['ubuntu', 'Ubuntu']) {
+      const hs = path.join(base, d, 'home');
+      for (const u of safe(() => fs.readdirSync(hs), [])) homes.push(path.join(hs, u));
+    }
+  } else homes.push(os.homedir());
   const found = [];
-  for (const d of distros.length ? distros : ['ubuntu', 'Ubuntu']) {
-    const homes = path.join(base, d, 'home');
-    for (const u of safe(() => fs.readdirSync(homes), [])) {
-      const home = path.join(homes, u);
-      for (const s of safe(() => fs.readdirSync(home), []).filter((x) => x && !x.startsWith('.'))) {
-        const cand = path.join(home, s);
-        const ix = path.join(cand, 'logs', 'interactions');
-        const m = safe(() => fs.existsSync(path.join(cand, 'agents')) ? fs.statSync(ix).mtimeMs : 0, 0);
-        if (m) found.push({ cand, m });
-      }
+  for (const home of homes) {
+    for (const s of safe(() => fs.readdirSync(home), []).filter((x) => x && !x.startsWith('.'))) {
+      const cand = path.join(home, s);
+      const ix = path.join(cand, 'logs', 'interactions');
+      const m = safe(() => fs.existsSync(path.join(cand, 'agents')) ? fs.statSync(ix).mtimeMs : 0, 0);
+      if (m) found.push({ cand, m });
     }
   }
   found.sort((a, b) => b.m - a.m);
@@ -2848,6 +2875,7 @@ function projectRoot() {
 }
 function stagedBuild() {
   return safe(() => {
+    if (!IS_WIN) return null;                                        // self-update is Windows-only for now
     const here = path.dirname(path.dirname(app.getAppPath()));      // …\CortexInsight-win32-x64
     const proj = projectRoot();
     if (!proj) return null;
@@ -4271,6 +4299,7 @@ ipcMain.handle('cortex:outputs', requireGate(() => {
   return data;
 }));
 function toWindowsPath(p) {
+  if (!IS_WIN) return p;
   if (/^\/home\/[^/]+\//.test(p)) return '\\\\wsl.localhost\\' + wslDistro() + p.replace(/\//g, '\\');
   return p;
 }
@@ -4280,7 +4309,7 @@ ipcMain.handle('cortex:openPath', requireGate(async (_e, { p, reveal }) => {
   const win = path.normalize(toWindowsPath(String(p || '')));
   if (win.includes('..')) return { ok: false, error: 'path outside allowed roots' };
   const lower = win.toLowerCase();
-  const okPrefix = lower.startsWith(String(path.dirname(root())).toLowerCase() + '\\') || lower.startsWith(String(os.homedir()).toLowerCase() + '\\');
+  const okPrefix = lower.startsWith(String(path.dirname(root())).toLowerCase() + path.sep) || lower.startsWith(String(os.homedir()).toLowerCase() + path.sep);
   if (!okPrefix) return { ok: false, error: 'path outside allowed roots' };
   if (!exists(win)) return { ok: false, error: 'file not found (may have been moved)' };
   if (reveal) { shell.showItemInFolder(win); return { ok: true }; }
@@ -7573,6 +7602,7 @@ function ensureOmniScript() {
 }
 function runOmniPs(args, timeout = 60000) {
   return new Promise((resolve) => {
+    if (!IS_WIN) return resolve({ ok: false, error: 'the screen instruments are Windows-only for now; on macOS Motus Max drives in work mode (files, commands, APIs)' });
     const script = ensureOmniScript();
     execFile('powershell.exe',
       ['-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', script, ...args],
@@ -8429,7 +8459,7 @@ async function omniReadTarget(target) {
   const win = path.normalize(toWindowsPath(t));
   if (win.includes('..')) return { ok: false, error: 'that path escapes its root' };
   const low = win.toLowerCase();
-  if (!(low.startsWith(String(path.dirname(root())).toLowerCase() + '\\') || low.startsWith(String(os.homedir()).toLowerCase() + '\\'))) {
+  if (!(low.startsWith(String(path.dirname(root())).toLowerCase() + path.sep) || low.startsWith(String(os.homedir()).toLowerCase() + path.sep))) {
     return { ok: false, error: 'that path is outside his roots — I read under his home directories only' };
   }
   if (!exists(win)) return { ok: false, error: `there is nothing at ${t.slice(0, 100)}` };
@@ -11682,7 +11712,7 @@ function stopPulse() { if (pulseTimer) clearInterval(pulseTimer); pulseTimer = n
 //  SENTINEL — tray presence · background watchdog · integrity monitor · heal
 // ===========================================================================
 function runWslFull(args, timeout = 30000) {
-  return new Promise((res) => execFile('wsl', ['-e', ...args], { timeout, windowsHide: true, maxBuffer: 6e6 },
+  return new Promise((res) => execFile(IS_WIN ? 'wsl' : args[0], IS_WIN ? ['-e', ...args] : args.slice(1), { timeout, windowsHide: true, maxBuffer: 6e6 },
     (err, so, se) => res({ rc: err ? (err.code || 1) : 0, out: ((so || '') + (se ? '\n' + se : '')).trim() })));
 }
 
@@ -11705,7 +11735,7 @@ function notifyKey(level, title, body, view, dedupeKey) {
 
 // ---- tray ----
 let tray = null, _trayLevel = null;
-const trayIcon = (level) => path.join(__dirname, 'assets', `tray-${level}.ico`);
+const trayIcon = (level) => path.join(__dirname, 'assets', `tray-${level}.${IS_WIN ? 'ico' : 'png'}`);
 function showWindow() {
   if (mainWin && !mainWin.isDestroyed()) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.show(); mainWin.focus(); }
   else createWindow();
