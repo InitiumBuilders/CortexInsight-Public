@@ -118,7 +118,7 @@ You should see: an audit line per cycle on the view, a work-ledger entry per mov
 
 Open DASH-OPS. If the machine already holds an ElevenLabs key in a conventional spot (`~/.config/elevenlabs.env` or a path you list under `elevenKeySources` in Settings), the console adopts it and proves it against the API. Otherwise paste one. A key that does not answer is refused.
 
-Pick a voice from your own library. Call mode listens and speaks in turns; push-to-talk holds a key. Your speech is recognised locally; only the reply text goes out.
+Pick a voice from your own library, and a model: Flash for the fastest first word. Call mode listens and speaks in turns; push-to-talk holds a key. Your speech is recognised locally; only the reply text goes out. Say "the reading", "what's on the board", "is she armed", "how long have we been at it", or "go to" any room by name, and the app answers by itself with no turn spent. The strip meters every turn; if three answers in a row are slow, quick mode turns itself on and tells you.
 
 You should see: the orb changing state, and "voice ready" in the strip.
 
@@ -140,9 +140,13 @@ Turn it off and the page shows off air, because the payload carries nothing else
 
 You should see: the verify line green, and an empty payload when off.
 
-## 12. Read the Davara view
+## 11a. Name the Motus and watch the well
 
-Open Davara. The strip shows the baseline version. The stack ladder shows every layer with its trust and whether it is mutable at runtime. The organs panel shows what each loop kind invokes. The stream shows recent evolutions. The covenant card runs one ceremony on click.
+Open Motus. Write the single strongest thing you are moving on and press Set. The well draws the board around it: work that shares its words orbits close, work that shares none drifts on the outer ring. The evidence strip counts what the Motus earns from now on: turns, closes, passes shipped by the loops, learnings. Press "Sharpen with Davara" for one line and one falsifier; use the line or keep yours. From now on a task that drifts for a week is proposed on THE CLOSE, and every agent's brief says how many open tasks share no words with the Motus. Open Goal for the ladder: star, push, today's turns, learning.
+
+## 12. Read the Davara view, then press it
+
+Open Davara. The strip shows the baseline version. The stack ladder shows every layer with its trust and whether it is mutable at runtime. The organs panel shows what each loop kind invokes. The stream shows recent evolutions. The covenant card runs one ceremony on click. Press a command and it is typed for you on Command; press a protocol and its invocation is typed. Her console asks her through one chosen protocol: write the subject, choose the protocol, press Ask, and the reply lands under the reader. Nothing spends a turn until you press the button that says so.
 
 If no baseline clone exists on the machine, the view says so. The loops run without the organs, which is allowed and weaker.
 

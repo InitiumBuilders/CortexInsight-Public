@@ -65,9 +65,9 @@ The console was designed from meaning outward. Before a room got its panels it g
 
 **Why.** A fleet with no stated focus optimises whatever it last saw. Two horizons keep the day's push and the season's direction from blurring into each other.
 
-**How.** Both are stored in the vault and sent to the agent as a framed message. Motus renders as a gravity well with days held and an alignment current: a deterministic word-overlap between the Motus and the real board that splits tasks into moving and drifting, with no model call. Goal shows a bearing against Motus and an evidence row. Both ride in the brief.
+**How.** Both are stored in the vault and sent to the agent as a framed message, and both ride at the top of the brief. Alignment is a deterministic word overlap between the Motus and the real board, computed once in the main process and fed to three actors: a task that drifts from the Motus for a week becomes a decision on THE CLOSE, the brief tells every agent how many open tasks share no words with the Motus, and the Motus room draws it as a gravity well (aligned work on the inner orbit, near work on the middle, drifting work on the outer; the orbits turn on transform only and pause with the idle brake). Under the hero an evidence strip counts what the focus earned since it was named: turns, closes, passes shipped by the loops, learnings banked. Every focus that was held is remembered with what it earned. Sharpen asks Davara, in one relay turn, for one line of at most 140 characters and one falsifier with a clock; nothing changes until the operator presses "use this line". The Goal room shows the ladder from the star to the Motus to today's turns and closes and back up as learning, beside the bearing.
 
-**Module.** `cortex:send` kinds `goal` and `motus`, `cortex:focus` in `main.js`; `loadFocusV2` in `src/renderer-v2.js`.
+**Module.** `cortex:send` kinds `goal` and `motus`, `cortex:focus`, `cortex:focusSharpen`, `motusAlignment`, `focusEvidence`, `focusRecord`, the drifting class in `closeCandidates` in `main.js`; `loadFocusV3`, `gravityWell` in `src/renderer-v3.js`.
 
 ## Live
 
@@ -146,9 +146,9 @@ The console was designed from meaning outward. Before a room got its panels it g
 
 **Why.** Some operators think out loud. A drive you can steer by voice is a drive you can watch with your hands off the keyboard.
 
-**How.** Speech recognition runs locally in the renderer; your voice never leaves the machine through this app. Only the agent's reply text goes to ElevenLabs, from the main process, with a sealed key. Replies for the ear are short and free of markup; `speakable()` strips code, links and markup and caps the length. Permissions are granted only for media capture; everything else is denied.
+**How.** Speech recognition runs locally in the renderer; your voice never leaves the machine through this app. Only the agent's reply text goes to ElevenLabs, from the main process, with a sealed key. Replies for the ear are short and free of markup; `speakable()` strips code, links and markup and caps the length. Permissions are granted only for media capture; everything else is denied. The app answers what it already knows without a turn: the reading, what is on the board, whether Motus Max is armed, how long the console has been up, and any room by name ("go to the board"). The strip meters each turn in three phases (heard, thought, first word), and when three answers in a row thought for more than fifteen seconds, quick mode turns itself on and says so in the log; unticking it is the operator's veto. The voice model is a choice (Flash for the fastest first word, Turbo, Multilingual for the richest), and a conversation can be copied as text.
 
-**Module.** `cortex:voiceTurn`, `cortex:speak`, `cortex:transcribe`, `elevenRequest`, `speakable` in `main.js`; `loadVoice` in `src/renderer-v2.js`.
+**Module.** `cortex:voiceTurn`, `voiceLocalIntent`, `cortex:speak`, `cortex:transcribe`, `elevenRequest`, `speakable` in `main.js`; `loadVoice`, `renderVcStrip` in `src/renderer-v2.js`.
 
 ## Motus Max (OmniDrive)
 
@@ -228,9 +228,9 @@ The console was designed from meaning outward. Before a room got its panels it g
 
 **Why.** An agent's baseline is a living canon. Reading it beside the loops that use it shows what a pass is actually made of.
 
-**How.** Read live from a baseline clone in the WSL home. When no clone exists the view says so and the loops run without the organs.
+**How.** Read live from a baseline clone in the fleet's home. When no clone exists the view says so and the loops run without the organs. Her commands and protocols are controls, not a list: pressing a command types it for you on Command, pressing a protocol types an invocation of it, and her console asks her through one chosen protocol on the relay, with the reply inline under the reader. Nothing spends a turn until the button that says so is pressed.
 
-**Module.** `dvDir`, `dvRead`, `dvSection`, `dvOrgansFor`, `mindReport` in `main.js`; `loadMind` in `src/renderer-v2.js`.
+**Module.** `dvDir`, `dvRead`, `dvSection`, `dvOrgansFor`, `mindReport` in `main.js`; `loadMindV3`, `prefillCommand` in `src/renderer-v3.js`.
 
 ## Learn and Next
 

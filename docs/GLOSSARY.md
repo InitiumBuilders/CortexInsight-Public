@@ -34,6 +34,16 @@ The console uses a small vocabulary on purpose. Most of these words appear on sc
 
 **Goal.** The north star. Changed rarely, with a two-step confirm.
 
+**The well.** The Motus room's drawing of alignment: work that shares the Motus's words orbits close, work near it sits on the middle ring, work that shares none drifts on the outer ring.
+
+**Sharpen.** One relay turn that returns one line and one falsifier for a focus. It proposes; the operator uses it or does not.
+
+**The ladder.** The Goal room's descent from the star to the Motus to today's turns and closes, and back up as learning.
+
+**Her console.** The panel on the Davara room that asks her through one chosen protocol, with the reply inline.
+
+**Local intent.** A spoken ask the app answers by itself with no turn: the reading, the board, the arm, the clock, a room by name.
+
 **The Board.** Tasks as a flow: four lanes, a WIP limit, the sweep, the close, the NEXT tray.
 
 **Duo-Drive.** The autonomous partner that runs approved loops on a cadence. Also the first MotusAgent.

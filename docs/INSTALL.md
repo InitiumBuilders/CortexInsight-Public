@@ -17,7 +17,7 @@ Three ways to put the console on your machine, from the quickest to the most han
 | The relay, Command, loops, workflows, the board, the reading | yes | yes |
 | Motus Max in work mode (files, commands, APIs) | yes | yes |
 | Motus Max on the screen (pointer, keyboard, window probe) | yes | not yet; the console says so when asked |
-| Self-update from a staged build | yes | not yet; run the install script again |
+| Self-update from a staged build beside the project tree | yes | yes, since 3.66 |
 | Relay restart from the heal panel | yes, through WSL services | no; start the relay by hand |
 | Sealed keys | DPAPI | Keychain |
 | Voice, the studio, the second stack, the broadcast | yes | yes |

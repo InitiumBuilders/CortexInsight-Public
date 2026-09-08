@@ -659,7 +659,7 @@ function setBadge(view, on) { const b = $(`#railNav .nav-btn[data-nav="${view}"]
 /* ============================ THE TWO FOCUSES — Motus & Goal ============================ */
 const FOCUS_META = {
   motus: { title: 'Motus', icon: '◆', tag: 'Prime mover · now',
-    sub: 'The single strongest thing you are moving on right now — the focus of focus. Shorter-horizon than your goal. Naming it points every agent at the same push.',
+    sub: 'The single strongest thing you are moving on right now, the focus of focus. Shorter horizon than your goal. Naming it points every agent at the same push.',
     ph: 'e.g. Get the CortexInsight Motus + Goal screens live and verified tonight', cmd: '/motus', noun: 'prime mover' },
   goal: { title: 'Goal', icon: '◎', tag: 'North star · long-term',
     sub: 'Your long-term north star. Every reflection, next-step and Davara recommendation is weighed against this. It changes rarely.',

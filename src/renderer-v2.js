@@ -1234,10 +1234,19 @@ function renderVcStrip() {
   const sec = (ms) => ms ? (ms / 1000).toFixed(1) + 's' : '—';
   const cell = (cls, big, sub) => '<div class="st-si ' + (cls || '') + '"><b>' + big + '</b><i>' + sub + '</i></div>';
   const mth = med('think');
+  /* the instrument feeds an actor: three slow turns in a row and quick mode
+     turns itself on, said out loud in the log. Unticking it is the operator's
+     veto; the strip says it happened by itself. */
+  if (mth > 15000 && met.length >= 3 && VOICE.quick === false && !VOICE.autoQuick) {
+    VOICE.quick = true; VOICE.autoQuick = true;
+    const cb = $('#vcQuick'); if (cb) cb.checked = true;
+    voicePush('sys', 'Answers were slow, so quick mode is on: a breath, not a briefing. Untick it to go deep again.');
+    renderVoiceLog();
+  }
   setHTML(host, '<div class="st-strip n5">'
     + cell(VOICE.busy ? 'live' : '', VOICE.busy ? 'LIVE' : 'READY', VOICE.busy ? 'a turn is in flight' : 'the line is open')
     + cell('', sec(med('stt')), 'median: heard in')
-    + cell(mth > 12000 ? 'zero' : '', sec(mth), 'median: thought for')
+    + cell(mth > 12000 ? 'zero' : '', sec(mth), VOICE.autoQuick ? 'median: thought for · quick mode on by itself' : 'median: thought for')
     + cell('', sec(med('voice')), 'median: first word in')
     + cell(met.length ? 'go' : '', met.length, 'turn(s) this session')
     + '</div>');
@@ -1269,12 +1278,12 @@ async function loadVoice() {
   const supported = voiceSupported();
   setHTML($('#voiceBody'), `
     <div class="view-head"><h2>DASH-OPS</h2>
-      <p class="view-desc">Talk to the fleet and hear it answer. Your voice is transcribed on this machine and never sent anywhere by this app — only the agent's written reply goes out to be spoken.</p></div>
+      <p class="view-desc">Talk to the fleet and hear it answer. Your voice is transcribed on this machine and never sent anywhere by this app. Only the agent's written reply goes out to be spoken.</p></div>
 
     ${v.keySet ? `<div class="bridge ok glass-deep">
       <div class="br-ic">🔊</div>
       <div><div class="br-t">Voice is connected</div>
-        <div class="br-d">Using the ElevenLabs key already on this machine${v.keySource ? ` (<code>~/${esc(v.keySource)}</code>)` : ''} — the same one MotusMoves and DAV-OPS use. It was read from disk, sealed with Windows DPAPI, and is <b>bound to this PC and this Windows account</b>: copied anywhere else, the vault is inert. It is never shown on screen, never sent to the interface, and never written to a log.</div></div>
+        <div class="br-d">Using the ElevenLabs key already on this machine${v.keySource ? ` (<code>~/${esc(v.keySource)}</code>)` : ''}, the same one MotusMoves and DAV-OPS use. It was read from disk, sealed with Windows DPAPI, and is <b>bound to this PC and this Windows account</b>: copied anywhere else, the vault is inert. It is never shown on screen, never sent to the interface, and never written to a log.</div></div>
     </div>`
     : v.machineKeyAvailable ? `<div class="bridge warn glass-deep">
       <div class="br-ic">🔑</div>
@@ -1310,8 +1319,17 @@ async function loadVoice() {
       <button class="od" data-od="dark"><b>🛡 Am I dark?</b><span>the broadcast verdict, spoken</span></button>
     </div>
 
+    <div class="vc-intents">say
+      <b data-say="the reading">the reading</b>
+      <b data-say="what's on the board">what's on the board</b>
+      <b data-say="is she armed">is she armed</b>
+      <b data-say="go to the board">go to the board</b>
+      <b data-say="how long have we been at it">how long have we been at it</b>
+      <span>and the app answers by itself with no turn spent. Any room opens by name.</span>
+    </div>
+
     <label class="om-check vc-quick"><input type="checkbox" id="vcQuick" ${VOICE.quick !== false ? 'checked' : ''} />
-      <span><b>Quick mode</b> — she answers in a breath (three sentences), and offers to go deeper. Off = full-depth replies, slower to think and to speak.</span></label>
+      <span><b>Quick mode</b>: she answers in a breath (three sentences) and offers to go deeper. Off means full-depth replies, slower to think and to speak.</span></label>
 
     <div class="vc glass-deep">
       <div class="vc-orb ${VOICE.mode}" id="vcOrb"><span></span><i></i></div>
@@ -1333,6 +1351,7 @@ async function loadVoice() {
 
     <div class="panel glass">
       <div class="panel-head"><h3>Conversation</h3><span class="panel-sub">this session</span>
+        <button class="mini" id="vcCopy" title="copy the whole conversation as text">⧉ copy</button>
         <button class="mini" id="vcClear">✕ clear</button></div>
       <div id="vcPending"></div>
       <div class="vc-log" id="vcLog"></div>
@@ -1349,6 +1368,10 @@ async function loadVoice() {
         <div class="vc-vrow">
           <div><label class="fr-lbl">Voice</label>
             <select id="vcVoice" class="sel"><option value="${esc(v.voiceId)}">${esc(v.voiceName || 'current')}</option></select></div>
+          <div><label class="fr-lbl">Model</label>
+            <select id="vcModel" class="sel">
+              ${[['eleven_flash_v2_5', 'Flash v2.5 · fastest first word'], ['eleven_turbo_v2_5', 'Turbo v2.5 · fast'], ['eleven_multilingual_v2', 'Multilingual v2 · richest']].map(([id, lab]) => `<option value="${id}" ${(v.model || v.voiceModel || 'eleven_turbo_v2_5') === id ? 'selected' : ''}>${lab}</option>`).join('')}
+            </select></div>
           <div><label class="fr-lbl">Stability ${Math.round(v.stability * 100)}%</label>
             <input type="range" id="vcStab" min="0" max="100" value="${Math.round(v.stability * 100)}" /></div>
           <div><label class="fr-lbl">Similarity ${Math.round(v.similarity * 100)}%</label>
@@ -1402,6 +1425,12 @@ async function loadVoice() {
   if (send) send.onclick = doTyped;
   if (typed) typed.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); doTyped(); } };
   const clr = $('#vcClear'); if (clr) clr.onclick = () => { VOICE.turns = []; renderVoiceLog(); };
+  const cpy = $('#vcCopy'); if (cpy) cpy.onclick = () => {
+    const lines = (VOICE.turns || []).slice().reverse().map((t) => (t.role === 'me' ? 'You' : t.role === 'them' ? 'Fleet' : 'Console') + (t.meta ? ' (' + t.meta + ')' : '') + ': ' + t.text);
+    navigator.clipboard.writeText(lines.join('\n')).then(() => toast('Conversation copied', 'good')).catch(() => toast('Could not copy', 'bad'));
+  };
+  const vm = $('#vcModel'); if (vm) vm.onchange = async () => { await C.voiceSave({ model: vm.value }); toast('Voice model set ✓', 'good'); };
+  $$('#voiceBody [data-say]').forEach((b) => b.onclick = () => { if (!VOICE.busy) voiceSend(b.dataset.say); });
 
   const adopt = $('#vcAdopt');
   if (adopt) adopt.onclick = async () => {
@@ -2341,7 +2370,7 @@ function startField() {
    Every panel below is built from data the app ALREADY has — zero extra turns. */
 const FOCUS_V2 = {
   motus: { icon: '◆', title: 'Motus', tag: 'Prime mover · now',
-    sub: 'The single strongest thing you are moving on right now. Shorter-horizon than the goal — naming it points every agent at the same push.',
+    sub: 'The single strongest thing you are moving on right now. Shorter horizon than the goal. Naming it points every agent at the same push.',
     ph: 'e.g. Get MotusMoves.US launch-ready and onboard the first Davara Operators', cmd: '/motus' },
   goal: { icon: '◎', title: 'Goal', tag: 'North star · long-term',
     sub: 'Your north star. Reflections, next-steps and every Davara recommendation are weighed against it. It should change rarely.',

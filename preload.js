@@ -19,7 +19,8 @@ contextBridge.exposeInMainWorld('cortex', {
   security: () => ipcRenderer.invoke('cortex:security'),
   learnings: () => ipcRenderer.invoke('cortex:learnings'),
   nextSteps: () => ipcRenderer.invoke('cortex:nextSteps'),
-  focus: () => ipcRenderer.invoke('cortex:focus'),                    // { goal, motus } — the two focuses
+  focus: () => ipcRenderer.invoke('cortex:focus'),                    // { goal, motus, history, alignment, evidence }
+  focusSharpen: (p) => ipcRenderer.invoke('cortex:focusSharpen', p),  // one relay turn: a sharper line and a falsifier
   models: () => ipcRenderer.invoke('cortex:models'),
   settings: () => ipcRenderer.invoke('cortex:settings'),
 

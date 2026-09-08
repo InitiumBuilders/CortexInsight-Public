@@ -795,6 +795,7 @@ function relayViaWsl(payload, timeoutMs = 1850000) {
   });
 }
 function relaySend(agent, message, timeoutMs = 1850000) {
+  message = withOperator(message);                 // the fleet hears the operator's own name
   if ((FLEET_BY_ID[agent] || {}).lane === 'openai') return openaiSend(agent, message);   // the second stack
   if (!isRelayAgent(agent)) {
     return Promise.resolve({ ok: false, text: '', latency: 0,
@@ -1273,7 +1274,7 @@ function writeAgentBrief() {
       // of this file, so the shape of the system goes before the lists: the
       // window, the attractor, the lever, what waits on August. The app's systems
       // sight becomes the fleet's sight, every turn, at no token cost.
-      safe(() => { const rd = systemReading(); const cl = closeCandidates(3); return '## THE READING — the shape of the system right now\n' + rd.line + (rd.more ? ' ' + rd.more : '') + (cl.length ? '\n' + cl.length + ' decision(s) wait for ' + operatorName() + ' on the board; do not re-propose those tasks.' : ''); }, ''),
+      safe(() => { const rd = systemReading(); const cl = closeCandidates(3); return '## THE READING — the shape of the system right now\n' + rd.line + (rd.more ? ' ' + rd.more : '') + (cl.length ? '\n' + cl.length + ' decision(s) wait for ' + operatorName() + ' on the board; do not re-propose those tasks.' : '') + (() => { const al = motusAlignment(); return al.set && al.drifting.length ? '\n' + al.drifting.length + ' open task(s) share no words with the Motus; prefer the work that moves it.' : ''; })(); }, ''),
       '',
       STATE.motus ? `## MOTUS — the strongest thing moving now\n${String(STATE.motus.text).slice(0, 400)}` : '## MOTUS\n(not set)',
       '',
@@ -1941,8 +1942,8 @@ async function openaiSend(agent, message) {
   if (!model) return { ok: false, text: '', latency: 0, error: 'no OpenAI model chosen; save a key on Settings → Integrations first' };
   const t0 = now();
   const brief = safe(() => continuityBrief(), '') || '';
-  const system = 'You are the GPT seat inside CortexInsight, the operator console of a small fleet run by August. Answer plainly and concretely. Never invent files, numbers or receipts. If asked to do something only a seat with tools could do, say so.'
-    + (brief ? '\n\nSTANDING BRIEF:\n' + brief.slice(0, 3000) : '');
+  const system = withOperator('You are the GPT seat inside CortexInsight, the operator console of a small fleet run by August. Answer plainly and concretely. Never invent files, numbers or receipts. If asked to do something only a seat with tools could do, say so.'
+    + (brief ? '\n\nSTANDING BRIEF:\n' + brief.slice(0, 3000) : ''));
   const r = await openaiRequest({ path: '/v1/chat/completions', method: 'POST', timeout: 180000,
     body: { model, messages: [{ role: 'system', content: system }, { role: 'user', content: String(message || '').slice(0, 60000) }] } });
   const latency = (now() - t0) / 1000;
@@ -2049,12 +2050,21 @@ function mindReport() {
       return { title, body: body.slice(0, 900), confidence: conf };
     });
   }
-  // her commands, from COMMANDS.md headings
+  // her commands, from COMMANDS.md headings, each with the first line under it
+  // so the room can say what a command does before it is pressed
   let commands = [];
   if (available) {
-    const t = readTextCached(path.join(dir, 'protocols', 'COMMANDS.md'));
+    const t = String(readTextCached(path.join(dir, 'protocols', 'COMMANDS.md')) || '');
     const seen = new Set();
-    for (const m of String(t || '').matchAll(/^#{2,4}\s*`?(\/[a-z][a-z0-9-]*)`?/gim)) { const c = m[1].toLowerCase(); if (!seen.has(c)) { seen.add(c); commands.push(c); } }
+    const lines = t.split(NL);
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^#{2,4}\s*`?(\/[a-z][a-z0-9-]*)`?/i.exec(lines[i]);
+      if (!m) continue;
+      const c = m[1].toLowerCase(); if (seen.has(c)) continue; seen.add(c);
+      let what = '';
+      for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) { const w = lines[j].trim(); if (w && !/^#/.test(w)) { what = w.replace(/[*_`>]/g, '').slice(0, 160); break; } }
+      commands.push({ name: c, what });
+    }
     commands = commands.slice(0, 30);
   }
   const organsByKind = {
@@ -2177,6 +2187,22 @@ const IS_MAC = process.platform === 'darwin';
 function localUser() { return safe(() => os.userInfo().username, 'operator'); }
 // the operator's name, for prompts and the brief; empty until they tell us
 function operatorName() { return String((STATE && STATE.settings && STATE.settings.operatorName) || '').trim() || 'the operator'; }
+// Everything the fleet is told was written naming the founder. A fork's fleet
+// must hear its own operator's name, so the substitution stands where text
+// leaves the app: the relay, the second stack, the agent tool. The month keeps
+// its name ("in August", "August 5", "August 2026" are left alone), and when
+// the operator IS August nothing changes at all.
+function withOperator(s) {
+  const raw = String((STATE && STATE.settings && STATE.settings.operatorName) || '').trim();
+  const text = String(s || '');
+  if (raw === 'August' || !/August/.test(text)) return text;
+  const n = raw || 'the operator';
+  let out = text
+    .replace(/(^|[^\w])August's(?!\s+\d)/g, (m, p) => p + n + "'s")
+    .replace(/(?<!\w)(?<!(?:in|of|by|since|until|last|next|this|early|late|mid-)\s)August(?![\w'])(?!\s+\d)/g, n);
+  if (!raw) out = out.replace(/(^|[.!?]\s+|\n)the operator\b/g, '$1The operator');
+  return out;
+}
 function rootParts() {
   const r = String(root() || '');
   const m = /^\\\\wsl\.localhost\\([^\\]+)\\home\\([^\\]+)\\/i.exec(r);
@@ -2219,6 +2245,44 @@ function discoverRoot() {
   return '';
 }
 // ===========================================================================
+//  v3.66 · THE FOCUS AS AN INSTRUMENT.
+//  The Motus used to be read by the room that showed it and by nothing else.
+//  Alignment is now computed once, here, and fed to the close (a task that
+//  drifts from the Motus for a week is a decision not yet made), the brief
+//  (the fleet is told how many open tasks drift), and the room. History keeps
+//  every focus that was held, with what closed while it stood.
+// ===========================================================================
+const FOCUS_STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'our', 'from', 'into', 'all', 'are', 'was', 'has', 'get', 'set', 'out', 'new', 'use', 'can', 'will', 'make', 'more', 'than', 'then', 'now', 'you', 'your', 'they', 'their']);
+function focusBag(s) { return new Set(String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length > 3 && !FOCUS_STOP.has(w))); }
+function focusScore(fb, s) { const b = focusBag(s); if (!fb.size || !b.size) return 0; let n = 0; for (const w of b) if (fb.has(w)) n++; return n / Math.min(b.size, fb.size); }
+function motusAlignment() {
+  const cur = STATE.motus;
+  const tasks = STATE.tasks || [];
+  if (!cur || !cur.text) return { set: false, aligned: [], drifting: [], partial: [], pct: 0, total: tasks.length };
+  const fb = focusBag(cur.text);
+  const scored = tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, priority: t.priority, created: t.created, updated: t.updated, s: focusScore(fb, t.title + ' ' + (t.body || '')) }));
+  const aligned = scored.filter((x) => x.s >= 0.18).sort((a, b) => b.s - a.s);
+  const drifting = scored.filter((x) => x.s < 0.06 && x.status !== 'done' && !((tasks.find((t) => t.id === x.id) || {}).tags || []).includes('parked'));
+  const partial = scored.filter((x) => x.s >= 0.06 && x.s < 0.18);
+  return { set: true, aligned, drifting, partial, pct: tasks.length ? Math.round((aligned.length / tasks.length) * 100) : 0, total: tasks.length };
+}
+// what the system banked while a focus stood: turns, closes, shipped passes, learnings since it was set
+function focusEvidence(f) {
+  if (!f || !f.ts) return null;
+  const since = Date.parse(f.ts) || 0;
+  const turns = parseInteractions().filter((x) => x.epoch >= since).length;
+  const closed = (STATE.tasks || []).filter((t) => t.status === 'done' && (Date.parse(t.doneAt || t.updated || '') || 0) >= since).length;
+  const shipped = (STATE.duoWork || []).filter((w) => w.verdict === 'shipped' && (Date.parse(w.ts || '') || 0) >= since).length;
+  const learned = (STATE.learnings || []).filter((l) => (Date.parse(l.ts || '') || 0) >= since).length;
+  return { since: f.ts, days: Math.max(0, Math.floor((now() - since) / 864e5)), turns, closed, shipped, learned };
+}
+// when a focus changes, the one it replaces is remembered with what it earned
+function focusRecord(kind, prev) {
+  if (!prev || !prev.text) return;
+  const ev = safe(() => focusEvidence(prev), null);
+  STATE.focusHistory = [{ kind, text: String(prev.text).slice(0, 400), ts: prev.ts, endedTs: new Date().toISOString(), agent: prev.agent || '', evidence: ev }, ...(STATE.focusHistory || [])].slice(0, 60);
+}
+// ===========================================================================
 //  v3.59 · THE CLOSE — the board's closing mechanism.
 //  The reading says closing is the lever; this is the hand on it. Three
 //  decisions a day, chosen by what the ledger already knows: a done claim that
@@ -2239,6 +2303,14 @@ function closeCandidates(n = 3) {
   for (const t of open.filter((x) => x.status === 'active' && age(x) >= 14).sort((a, b) => age(b) - age(a))) push(t, 'in motion for ' + Math.round(age(t)) + ' days; finish it or park it', 'stuck');
   // 4 · the oldest high-priority item still open
   for (const t of open.filter((x) => String(x.priority) === '1').sort((a, b) => age(b) - age(a))) push(t, 'the oldest high-priority item still open, ' + Math.round(age(t)) + ' days', 'oldest');
+  // 5 · drifting from the Motus for a week: the Motus is the priority the
+  //     operator named; work that shares none of its words for that long is
+  //     either the wrong work or the wrong Motus, and either is a decision
+  const al = safe(() => motusAlignment(), null);
+  if (al && al.set) {
+    const ids = new Set(al.drifting.map((x) => x.id));
+    for (const t of open.filter((x) => ids.has(x.id) && age(x) >= 7).sort((a, b) => age(b) - age(a))) push(t, 'shares no words with the Motus and has drifted for ' + Math.round(age(t)) + ' days; park it, or it is telling you the Motus is stale', 'drifting');
+  }
   return out.slice(0, n);
 }
 function closeAct(id, action) {
@@ -2663,6 +2735,57 @@ ${actionVocabulary()}`;
 }));
 
 // ONE voice turn: what he said → the agent → the reply, spoken.
+// ---------------------------------------------------------------------------
+//  VOICE · LOCAL INTENTS — what the app can answer without a turn.
+//  "go to the board", "what's on the board", "is she armed", "how long have we
+//  been at it". Each one is a reading the app already holds; saying it aloud
+//  should cost the operator a breath, never a relay turn.
+// ---------------------------------------------------------------------------
+const VOICE_ROOMS = [
+  ['overview', /\b(pulse|overview|home|dashboard)\b/], ['motus', /\bmotus(?!\s*max| ?live| ?models)\b/], ['goal', /\bgoal\b/],
+  ['live', /\blive(?! ?stream)\b/], ['omni', /\b(motus ?max|omni ?drive|the drive)\b/], ['tasks', /\b(board|tasks?)\b/],
+  ['duo', /\b(duo|duo[- ]?drive|loops?)\b/], ['workflows', /\bworkflows?\b/], ['chat', /\b(command|chat)\b/],
+  ['voice', /\b(dash[- ]?ops|voice)\b/], ['agents', /\bagents?\b/], ['subagents', /\bsub[- ]?agents?\b/],
+  ['sympath', /\bsympath\b/], ['motusmodels', /\bmotus ?models?\b/], ['stream', /\b(motus ?live|stream|broadcast|on air)\b/],
+  ['output', /\boutput\b/], ['work', /\bwork\b/], ['systems', /\bsystems?\b/], ['mind', /\b(davara|the mind)\b/],
+  ['learnings', /\blearn(ings)?\b/], ['nextsteps', /\bnext( steps)?\b/], ['usage', /\busage\b/],
+  ['models', /\bmodels?\b/], ['security', /\b(secure|security)\b/], ['settings', /\b(config|settings)\b/], ['levels', /\b(levels|arden)\b/],
+];
+const VOICE_ROOM_NAMES = { overview: 'Pulse', motus: 'Motus', goal: 'Goal', live: 'Live', omni: 'Motus Max', tasks: 'the Board', duo: 'Duo-Drive', workflows: 'Workflows', chat: 'Command', voice: 'DASH-OPS', agents: 'Agents', subagents: 'Subagents', sympath: 'Sympath', motusmodels: 'MotusModels', stream: 'MotusLive', output: 'Output', work: 'Work', systems: 'Systems', mind: 'Davara', learnings: 'Learn', nextsteps: 'Next', usage: 'Usage', models: 'Model', security: 'Secure', settings: 'Config', levels: 'Levels' };
+function voiceLocalIntent(said) {
+  const s = String(said || '').trim();
+  const nav = /^(?:please\s+)?(?:go to|open|show me|show|take me to|switch to|jump to)\s+(?:the\s+)?(.+?)(?:\s+(?:page|view|room|screen|tab))?[.!?]?$/i.exec(s);
+  if (nav) {
+    const what = nav[1].toLowerCase();
+    const hit = VOICE_ROOMS.find(([, re]) => re.test(what));
+    if (hit) return { text: 'Opening ' + VOICE_ROOM_NAMES[hit[0]] + '.', goView: hit[0] };
+  }
+  if (/\b(what'?s|what is) on (the|my) board\b|\bboard status\b|\bwhat am i working on\b/i.test(s)) {
+    const open = (STATE.tasks || []).filter((t) => t.status !== 'done' && !(t.tags || []).includes('parked'));
+    const active = open.filter((t) => t.status === 'active'), waiting = open.filter((t) => t.status === 'waiting');
+    const top = open.slice().sort((a, b) => (a.priority || 2) - (b.priority || 2)).slice(0, 3).map((t) => t.title).join('; ');
+    const text = open.length
+      ? `${open.length} open on the board, ${active.length} in motion, ${waiting.length} waiting.${top ? ' At the top: ' + top + '.' : ''}`
+      : 'The board is clear. Nothing open.';
+    return { text, goView: 'tasks' };
+  }
+  if (/\b(is (she|motus max|it) armed|arm status|armed\?|are we armed)\b/i.test(s)) {
+    const o = omniState();
+    const left = o.armed && o.armedAt ? Math.max(0, Math.round((o.armedAt + (o.ttlMin || 25) * 60000 - now()) / 60000)) : 0;
+    const drv = o.session && o.session.status;
+    return { text: o.armed ? `Armed, ${left} minute${left === 1 ? '' : 's'} left on the fuse${drv === 'running' ? ', and she is driving' : drv === 'waiting' ? ', and she is waiting on you' : ', nothing driving'}.` : 'Not armed. The switch is yours.', goView: 'omni' };
+  }
+  if (/\b(how long (have we|has this|has it) been|what time is it|how long since)\b/i.test(s)) {
+    const up = now() - bootEpoch;
+    const h = Math.floor(up / 36e5), m = Math.floor((up % 36e5) / 60000);
+    const t = new Date();
+    return { text: `It is ${t.getHours() % 12 || 12}:${String(t.getMinutes()).padStart(2, '0')}${t.getHours() >= 12 ? ' PM' : ' AM'}. The console has been up ${h ? h + ' hour' + (h === 1 ? '' : 's') + ' and ' : ''}${m} minute${m === 1 ? '' : 's'}.` };
+  }
+  if (/\b(what can (i|you) say|what can you do here|help me|list (the )?commands)\b/i.test(s)) {
+    return { text: 'Say the reading, what is on the board, is she armed, how long have we been at it, or go to any room by name. Anything else goes to the seat on the line.' };
+  }
+  return null;
+}
 ipcMain.handle('cortex:voiceTurn', requireGate(async (_e, { text, agent, speak } = {}) => {
   const said = String(text || '').trim();
   if (!said) return { ok: false, error: 'nothing was heard' };
@@ -2684,6 +2807,14 @@ ipcMain.handle('cortex:voiceTurn', requireGate(async (_e, { text, agent, speak }
     const line = rd.line + (rd.more ? ' ' + rd.more : '');
     const out = { ok: true, text: line, latency: 0, agent: a, actions: [], pending: [], goView: 'overview', local: true };
     if (speak !== false && STATE.settings.elevenKeyEnc) { const t = await ttsSpeak(line); if (t.ok) { out.audio = t.audio; out.spoken = t.spoken; } }
+    return out;
+  }
+  // the local intents: navigation, the board, the arm, the clock. The app
+  // already knows these answers; a relay turn for them would be a tax.
+  const li = voiceLocalIntent(said);
+  if (li) {
+    const out = { ok: true, text: li.text, latency: 0, agent: a, actions: [], pending: [], goView: li.goView || '', local: true };
+    if (speak !== false && STATE.settings.elevenKeyEnc) { const t = await ttsSpeak(li.text); if (t.ok) { out.audio = t.audio; out.spoken = t.spoken; } }
     return out;
   }
   const trig = /^\s*(?:hey\s+)?(?:davara[,\s]+)?(?:let'?s\s+)?(?:go\s+)?(?:into\s+)?(?:motus\s*max|omni\s*drive|omnidrive|full\s+drive|take\s+the\s+wheel|drive\s+it|drive\s+for\s+me)\b[\s,.:—-]*(.*)$/i.exec(said);
@@ -2913,12 +3044,33 @@ ipcMain.handle('cortex:omniSight', requireGate(async () => {
 // every caller treats null as "no project here" rather than guessing a path.
 function projectRoot() {
   const a = app.getAppPath();
-  const cand = app.isPackaged ? path.dirname(path.dirname(path.dirname(path.dirname(a)))) : a;
-  return safe(() => fs.existsSync(path.join(cand, 'main.js')), false) ? cand : null;
+  // packaged: Windows sits four folders under the project (release\<app>\resources\app.asar),
+  // macOS six (release/<app>/CortexInsight.app/Contents/Resources/app.asar)
+  const up = (p, n) => { let x = p; for (let i = 0; i < n; i++) x = path.dirname(x); return x; };
+  const cands = app.isPackaged ? [up(a, 4), up(a, 6)] : [a];
+  return cands.find((c) => safe(() => fs.existsSync(path.join(c, 'main.js')), false)) || null;
+}
+// the version a packaged macOS bundle carries, read from its Info.plist
+function macBundleVersion(appDir) {
+  const t = safe(() => fs.readFileSync(path.join(appDir, 'Contents', 'Info.plist'), 'utf8'), '');
+  const m = /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/.exec(t);
+  return m ? m[1].trim() : '';
 }
 function stagedBuild() {
   return safe(() => {
-    if (!IS_WIN) return null;                                        // self-update is Windows-only for now
+    if (IS_MAC) {
+      const proj = projectRoot();
+      if (!proj) return null;
+      const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+      const nextApp = path.join(proj, 'release-next', 'CortexInsight-darwin-' + arch, 'CortexInsight.app');
+      if (!exists(nextApp)) return null;
+      const nv = macBundleVersion(nextApp);
+      const cur = app.getVersion();
+      if (!nv || nv === cur) return null;
+      const newer = nv.split('.').map(Number).some((x, i) => x !== (cur.split('.').map(Number)[i] || 0) && x > (cur.split('.').map(Number)[i] || 0));
+      return newer ? { version: nv, current: cur, path: nextApp, arch } : null;
+    }
+    if (!IS_WIN) return null;
     const here = path.dirname(path.dirname(app.getAppPath()));      // …\CortexInsight-win32-x64
     const proj = projectRoot();
     if (!proj) return null;
@@ -2978,6 +3130,42 @@ ipcMain.handle('cortex:updateApply', requireGate(() => {
   if (!u) return { ok: false, error: 'nothing newer is staged' };
   const proj = projectRoot();
   if (!proj) return { ok: false, error: 'this build does not sit beside its project tree, so there is nowhere to stage from' };
+  if (IS_MAC) {
+    // the same discipline as the Windows swap: wait for exit, keep the previous
+    // bundle, prove the version from the installed plist, roll back on a miss,
+    // clear staging only after proof, relaunch
+    const sh = path.join(app.getPath('temp'), 'ci-selfupdate.sh');
+    const log = path.join(app.getPath('temp'), 'ci-selfupdate.log');
+    const q = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
+    const live = path.join(proj, 'release', 'CortexInsight-darwin-' + u.arch, 'CortexInsight.app');
+    const prev = live + '.prev';
+    const script = [
+      '#!/bin/bash',
+      `LOG=${q(log)}; L() { echo "$(date +%H:%M:%S)  $1" >> "$LOG"; }`,
+      `echo "=== update to ${u.version} (from ${u.current}) ===" > "$LOG"`,
+      `LIVE=${q(live)}; NEXT=${q(u.path)}; PREV=${q(prev)}; PID=${process.pid}`,
+      'for i in $(seq 1 40); do kill -0 "$PID" 2>/dev/null || break; sleep 0.5; done',
+      'if kill -0 "$PID" 2>/dev/null; then L "ABORT: the app is still running"; exit 1; fi',
+      'L "the app has exited"',
+      'rm -rf "$PREV"',
+      'mkdir -p "$(dirname "$LIVE")"',
+      '[ -d "$LIVE" ] && mv "$LIVE" "$PREV" && L "previous kept at $PREV"',
+      'mv "$NEXT" "$LIVE" || { L "ABORT: could not move the staged app"; [ -d "$PREV" ] && mv "$PREV" "$LIVE"; exit 1; }',
+      'xattr -dr com.apple.quarantine "$LIVE" 2>/dev/null',
+      'V=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$LIVE/Contents/Info.plist" 2>/dev/null)',
+      `if [ "$V" != ${q(u.version)} ]; then L "ROLLBACK: installed reports $V"; rm -rf "$LIVE"; [ -d "$PREV" ] && mv "$PREV" "$LIVE"; exit 1; fi`,
+      `rm -rf ${q(path.join(proj, 'release-next'))}`,
+      'L "installed $V, staging cleared"',
+      'open "$LIVE"',
+    ].join('\n');
+    safe(() => fs.writeFileSync(sh, script, { mode: 0o755 }));
+    STATE.updateAttempt = { from: u.current, to: u.version, ts: new Date().toISOString(), log };
+    omniAudit('update', `installing v${u.version} (was v${u.current}) — the app will restart`);
+    saveState();
+    safe(() => require('child_process').spawn('/bin/bash', [sh], { detached: true, stdio: 'ignore' }).unref());
+    setTimeout(() => { app.isQuitting = true; app.quit(); }, 600);
+    return { ok: true, version: u.version };
+  }
   const ps = path.join(app.getPath('temp'), 'ci-selfupdate.ps1');
   const log = path.join(app.getPath('temp'), 'ci-selfupdate.log');
   const q = (s) => String(s).replace(/'/g, "''");           // single-quoted PS literal
@@ -3386,10 +3574,12 @@ ipcMain.handle('cortex:send', requireGate(async (_e, { agent, kind, text }) => {
   }
   if (kind === 'steer') { message = `/STEER (live nudge from August via CortexInsight): ${text}`; STATE.steers.unshift({ ts: new Date().toISOString(), agent, text }); }
   else if (kind === 'goal') {
+    focusRecord('goal', STATE.goal);
     STATE.goal = { text, ts: new Date().toISOString(), agent };
     message = `/GOAL — August is setting your long-term session focus. Hold this as the north star across turns:\n\n${text}\n\nAcknowledge briefly and state your first move toward it.`;
   }
   else if (kind === 'motus') {
+    focusRecord('motus', STATE.motus);
     STATE.motus = { text, ts: new Date().toISOString(), agent };
     message = `/MOTUS — August is naming the SINGLE strongest thing in motion right now: the active push, shorter-horizon than /goal, the focus of focus this moment. Hold it as today's prime mover:\n\n${text}\n\nAcknowledge briefly and name the one next move it implies right now.`;
   }
@@ -3407,7 +3597,35 @@ ipcMain.handle('cortex:send', requireGate(async (_e, { agent, kind, text }) => {
 }));
 
 // the two focuses — long-term north star (goal) + the strongest thing moving now (motus)
-ipcMain.handle('cortex:focus', requireGate(() => ({ goal: STATE.goal || null, motus: STATE.motus || null })));
+ipcMain.handle('cortex:focus', requireGate(() => ({
+  goal: STATE.goal || null, motus: STATE.motus || null,
+  history: (STATE.focusHistory || []).slice(0, 24),
+  alignment: safe(() => motusAlignment(), null),
+  evidence: safe(() => ({ motus: focusEvidence(STATE.motus), goal: focusEvidence(STATE.goal) }), null),
+})));
+// SHARPEN — one relay turn that turns a soft focus into one line with a
+// falsifier. It proposes; the operator presses "use it" or does not.
+ipcMain.handle('cortex:focusSharpen', requireGate(async (_e, { which, text } = {}) => {
+  const kind = which === 'goal' ? 'GOAL (the north star, changed rarely)' : 'MOTUS (the single strongest thing moving now, shorter than the goal)';
+  const draft = String(text || (which === 'goal' ? (STATE.goal && STATE.goal.text) : (STATE.motus && STATE.motus.text)) || '').trim();
+  if (!draft) return { ok: false, error: 'nothing to sharpen yet' };
+  const al = safe(() => motusAlignment(), null);
+  const prompt = `/SHARPEN — August wants this ${kind} sharpened, not replaced.
+
+DRAFT: ${draft.slice(0, 600)}
+${al ? `THE BOARD RIGHT NOW: ${al.aligned.length} open item(s) move on it, ${al.drifting.length} drift from it.` : ''}
+
+Reply in EXACTLY this shape and nothing else:
+LINE: <one line, at most 140 characters, that names the move AND its subject, in plain words, no hedging>
+FALSIFIER: <one observable with a clock: "if X is not seen by Y, this was the wrong ${which === 'goal' ? 'star' : 'mover'}">
+WHY: <one sentence on what the draft was missing>`;
+  const r = await relaySend('davara', prompt, 300000);
+  if (!r.ok) return { ok: false, error: r.error || 'no reply' };
+  const pick = (k) => ((r.text || '').match(new RegExp('^' + k + ':\\s*(.+)$', 'mi')) || [])[1] || '';
+  const line = pick('LINE').trim().slice(0, 200);
+  if (!line) return { ok: false, error: 'she did not return a line', raw: (r.text || '').slice(0, 600) };
+  return { ok: true, line, falsifier: pick('FALSIFIER').trim().slice(0, 300), why: pick('WHY').trim().slice(0, 300), latency: r.latency };
+}));
 
 // Recursive self-improvement: Davara reads her own telemetry and returns durable
 // learnings / next-steps. Appended to the ledger so the system compounds over time.
@@ -5537,7 +5755,7 @@ function ensureAgentBridgeFiles() {
       'echo "queued for CortexInsight: $OP"',
       '',
     ].join('\n');
-    fs.writeFileSync(path.join(dir, 'ci.sh'), cli);
+    fs.writeFileSync(path.join(dir, 'ci.sh'), withOperator(cli));
 
     const readme = [
       '# Talking to CortexInsight (for the fleet)',
@@ -5578,7 +5796,7 @@ function ensureAgentBridgeFiles() {
       'You cannot delete his data, change his settings, or spend tokens through this.',
       '',
     ].join('\n');
-    fs.writeFileSync(path.join(dir, 'README-FOR-AGENTS.md'), readme);
+    fs.writeFileSync(path.join(dir, 'README-FOR-AGENTS.md'), withOperator(readme));
     return true;
   }, false);
 }
@@ -13602,7 +13820,12 @@ async function runSmoke() {
   const flushSmoke = () => safe(() => fs.writeFileSync(smokeReport, _smokeLines.join("\n") + "\n", 'utf8'));
   console.log('[smoke] writing screenshots to', outDir);
   console.log('[smoke] report ->', smokeReport);
-  const shoot = (name) => safe(() => wc.capturePage().then((img) => fs.writeFileSync(path.join(outDir, name), img.toPNG())));
+  // a capture of a hidden window is a stale compositor frame (the fresh harness
+  // proved it: DOM at opacity 1, PNG empty). Keep the window composited and
+  // wait for two real frames before every capture, so a screenshot can be judged.
+  safe(() => { wc.setBackgroundThrottling(false); mainWin.show(); mainWin.focus(); });
+  const framed = () => Promise.race([wc.executeJavaScript('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(1))))').catch(() => 0), wait(900)]);
+  const shoot = async (name) => { await framed(); return safe(() => wc.capturePage().then((img) => fs.writeFileSync(path.join(outDir, name), img.toPNG()))); };
   // Capture EVERY renderer console error/warning — a view that throws would
   // otherwise render blank and look "fine" in a screenshot.
   const problems = [];
@@ -14258,6 +14481,22 @@ async function runSmoke() {
         problems.push(`[SIGHT] capture failed: ${(sf && sf.error) || 'no frame'} — the Motus Max frame panel will be blind`);
       }
     } catch (e) { problems.push('[SIGHT] threw: ' + (e && e.message)); }
+    // ── v3.66: the focus as an instrument, the voice as a local answer, the name ──
+    const fx = await wc.executeJavaScript('window.cortex.focus()').catch(() => null);
+    if (!fx || !fx.alignment || !Array.isArray(fx.history)) problems.push('[FOCUS] cortex:focus does not carry alignment and history');
+    else console.log(`[smoke] focus: alignment ${fx.alignment.aligned.length} moving · ${fx.alignment.drifting.length} drifting · ${fx.history.length} past focus(es) · evidence ${fx.evidence && fx.evidence.motus ? fx.evidence.motus.turns + ' turns since' : '—'}`);
+    const vl = await wc.executeJavaScript(`window.cortex.voiceTurn({ text: 'go to the board', speak: false })`).catch(() => null);
+    if (!vl || !vl.local || vl.goView !== 'tasks') problems.push('[VOICE] "go to the board" did not resolve locally to the Board: ' + JSON.stringify(vl && { local: vl.local, goView: vl.goView, error: vl.error }));
+    else console.log('[smoke] voice: "go to the board" answered locally → ' + vl.goView + ' · "' + vl.text + '"');
+    const vb = await wc.executeJavaScript(`window.cortex.voiceTurn({ text: "what's on the board", speak: false })`).catch(() => null);
+    if (!vb || !vb.local) problems.push('[VOICE] the board summary was not answered locally');
+    else console.log('[smoke] voice: the board, spoken locally: "' + String(vb.text).slice(0, 90) + '"');
+    const wo = withOperator("August's board is what August reads; born in August 1990; the August 5 release.");
+    const nameNow = String(STATE.settings.operatorName || '').trim();
+    if (nameNow && nameNow !== 'August') { if (!wo.includes(nameNow + "'s board") || !/born in August 1990/.test(wo) || !/the August 5 release/.test(wo)) problems.push('[NAME] withOperator mis-substituted: ' + wo); }
+    else if (!nameNow) { if (!/^The operator's board is what the operator reads/.test(wo) || !/born in August 1990/.test(wo)) problems.push('[NAME] withOperator (unset) mis-substituted: ' + wo); }
+    console.log('[smoke] name: withOperator → "' + wo + '"');
+    if (IS_WIN && stagedBuild() && !stagedBuild().version) problems.push('[UPDATE] stagedBuild returned a shape without a version');
   } catch (e) { problems.push(`[THROW] ${e && e.message}`); }
   await wait(400);
   if (problems.length) {
