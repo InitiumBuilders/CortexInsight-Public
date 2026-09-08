@@ -6,7 +6,8 @@ Start here. Each page below is one door into the same house. Read them in the or
 
 ```mermaid
 flowchart LR
-  R[README<br/>the front door] --> G[GUIDE<br/>the first hour, fourteen walkthroughs]
+  R[README<br/>the front door] --> N[INSTALL<br/>a release, one command, or by hand]
+  R --> G[GUIDE<br/>the first hour, fourteen walkthroughs]
   R --> F[FEATURES<br/>what every room is for]
   G --> H[FIRST-HOUR<br/>a narrative of a new operator's day]
   F --> A[ARCHITECTURE<br/>processes, organs, data on disk]
@@ -21,6 +22,7 @@ flowchart LR
 | Page | Read it when |
 |---|---|
 | [`PITCH.md`](PITCH.md) | You want to know whether this console is for you, in five minutes. |
+| [`INSTALL.md`](INSTALL.md) | You want it on your machine: a release zip, one command from a clone, or by hand. |
 | [`GUIDE.md`](GUIDE.md) | You have it running and want to do something real with it. |
 | [`FIRST-HOUR.md`](FIRST-HOUR.md) | You want to see a whole first session, told as a story, before you start your own. |
 | [`FEATURES.md`](FEATURES.md) | You want to know what a room is for, why it exists, and which module makes it work. |

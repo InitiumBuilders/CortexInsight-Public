@@ -26,26 +26,21 @@ CortexInsight turns the box into a room with instruments. The fleet's own files 
 - **Receipts over claims.** Loops and workflow stages must report a confidence with its basis and a falsifier with a clock. Low quality slows a loop down. A gate that passes at low confidence is a block.
 - **Off means absent.** When the broadcast is off, the payload carries nothing. When a key is cleared, the ciphertext is deleted. When a task is parked, it is never scheduled.
 
-## Quick start
+## Get the app
 
-You need Windows 10 or 11, Node 20 or newer, and a WSL2 distribution that holds a fleet tree (a folder in the home directory with `logs/interactions` and `agents/` inside it, and the loopback relay on `127.0.0.1:8788`). The relay is a small proxy that turns each message into a Claude Code turn on your own subscription. The console never calls a model provider directly for the fleet.
+**Download.** Every version tag is built on a Windows runner none of the authors have touched, and the zip lands on the [Releases page](https://github.com/InitiumBuilders/Semble-CC/releases). Unzip, run `CortexInsight.exe`.
 
-```bash
+**Or build it yourself, one command.** Windows 10 or 11, Node 20 or newer, Git.
+
+```powershell
 git clone https://github.com/InitiumBuilders/Semble-CC.git
 cd Semble-CC
-npm install
-npm start
+powershell -ExecutionPolicy Bypass -File .\Build-And-Install.ps1
 ```
 
-On first run the gate asks you to set a passphrase (12 characters or more, typed twice). The vault pairs itself to this machine, then looks for the fleet tree under every WSL home it can see. If it finds none, set the path on Config → Preferences.
+The script checks the toolchain, installs from the lockfile, packages, swaps the build in, proves the version by re-reading the binary, keeps the previous build for rollback, puts a shortcut on the desktop, and launches. `npm run deploy` does the same. `npm start` runs from source without packaging. Details, switches and the uninstall are in [`docs/INSTALL.md`](docs/INSTALL.md).
 
-To make a portable build:
-
-```bash
-npm run package
-```
-
-The exe lands in `release-next\CortexInsight-win32-x64\`. The running app notices a newer staged build and offers to swap itself.
+On first run the gate asks you to set a passphrase (12 characters or more, typed twice). The vault pairs itself to this machine, then looks for a fleet tree under every WSL home it can see: a folder holding `logs/interactions` and `agents`, with the loopback relay on `127.0.0.1:8788`. The relay is a small proxy that turns each message into a Claude Code turn on your own subscription; the console never calls a model provider directly for the fleet. If no tree is found, Pulse says so and points at Config → Preferences. The console opens and runs without one.
 
 ## The rooms
 

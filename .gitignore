@@ -13,6 +13,10 @@ release-next/
 /index.html
 /styles.css
 
+# zips the workflow or a hand build leaves behind
+*.zip
+fresh-artifacts/
+
 # local state, secrets, scratch
 .env
 .env.*

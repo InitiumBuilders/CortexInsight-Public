@@ -1,0 +1,94 @@
+# The foreign machine, every push. A Windows runner nobody here has touched
+# runs the gate, the stranger's first hour, and the packager. On a version tag
+# the zip becomes a Release anyone can download and run.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    name: open-source gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: parse
+        run: |
+          node --check main.js
+          node --check preload.js
+          node --check src/renderer.js
+          node --check src/renderer-v2.js
+      - name: gate
+        run: node scripts/oss-check.js
+
+  windows:
+    name: fresh run and package (windows)
+    needs: gate
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: dependencies
+        run: npm ci --no-audit --no-fund
+      - name: the stranger's first hour
+        shell: pwsh
+        run: |
+          Remove-Item "$env:TEMP\ci-fresh-report.txt" -ErrorAction SilentlyContinue
+          $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList ". --freshtest" -PassThru -Wait
+          "electron exit code: $($p.ExitCode)"
+          if (-not (Test-Path "$env:TEMP\ci-fresh-report.txt")) { throw "the fresh harness wrote no report" }
+          Get-Content "$env:TEMP\ci-fresh-report.txt"
+          if (Select-String -Path "$env:TEMP\ci-fresh-report.txt" -Pattern 'PROBLEM' -Quiet) { throw "the fresh harness found problems" }
+          if (-not (Select-String -Path "$env:TEMP\ci-fresh-report.txt" -Pattern 'CLEAN' -Quiet)) { throw "the fresh harness did not reach its verdict" }
+          New-Item -ItemType Directory -Force fresh-artifacts | Out-Null
+          Copy-Item "$env:TEMP\ci-fresh-report.txt" fresh-artifacts\
+          Copy-Item "$env:TEMP\fresh-*.png" fresh-artifacts\ -ErrorAction SilentlyContinue
+      - name: keep the first hour's evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-run
+          path: fresh-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: package
+        run: npm run package
+      - name: zip
+        shell: pwsh
+        run: |
+          $ver = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $zip = "CortexInsight-$ver-win-x64.zip"
+          Compress-Archive -Path "release-next\CortexInsight-win32-x64\*" -DestinationPath $zip -CompressionLevel Optimal
+          "zip: $zip  $([math]::Round((Get-Item $zip).Length / 1MB)) MB"
+          "ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: keep the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: CortexInsight-win-x64
+          path: ${{ env.ZIP }}
+          retention-days: 14
+      - name: release on a version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP }}
+          generate_release_notes: true
+          body: |
+            Unzip anywhere, run `CortexInsight.exe`. The gate asks you to set a passphrase on first run.
+            Your vault lives in `%APPDATA%\cortexinsight\`, never inside the app folder.
+            Read `docs/INSTALL.md` in the repository for the fleet tree, the relay, and what the console needs from WSL.

@@ -11,10 +11,20 @@ Walkthroughs, in the order an operator meets them. Each one ends with what you s
 
 ## 1. First run
 
+Download a release zip and run `CortexInsight.exe`, or from a clone:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Build-And-Install.ps1
+```
+
+To run from source without packaging:
+
 ```bash
 npm install
 npm start
 ```
+
+Either way `docs/INSTALL.md` has the details, the switches and the uninstall.
 
 The gate opens in setup mode. Type a passphrase of twelve characters or more, twice. The vault stores its hash and pairs itself to this machine. The console then looks under every WSL home it can see for a folder holding `logs/interactions` and `agents`, and uses the one whose interactions moved most recently.
 

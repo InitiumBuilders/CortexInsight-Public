@@ -16,6 +16,8 @@ npm run package     # a portable build in release-next\
 
 `node --check main.js` before running anything. Parsing is not loading, so run the smoke too.
 
+Every push to `main` and every pull request runs the gate on Linux and then, on a Windows runner nobody here has touched, the fresh-vault harness and the packager (`.github/workflows/build.yml`). The fresh run's report and screenshots are uploaded as artifacts; read them when a run goes red. A `v*` tag turns the zip into a Release.
+
 ## The laws
 
 These are the rules the code already keeps. A change that breaks one is not a change we can take, however good the feature.
