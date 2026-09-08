@@ -18,7 +18,7 @@ Four principles hold across every horizon:
 The console has run on one machine for one person. The nearest future is the first run on a machine its authors never touched.
 
 - A license file, chosen by the founder.
-- A first foreign-machine run: fresh vault, passphrase setup, root discovery, no baked paths. The gate at zero warnings. The local rehearsal exists (`npm run fresh`); the real run needs someone else's hardware.
+- A first foreign-machine run: fresh vault, passphrase setup, root discovery, no baked paths. The gate at zero warnings. Since 3.63 the fresh harness runs on a GitHub Windows runner on every push and passed on its first run there (setup, pairing, every room, the first-run card). What remains is a person: a real session with their own fleet tree and relay, on their own hardware.
 - The operator's own name in every prompt, from a settings field, so a fork's agents address their operator and not the founder.
 - The Motivus.One license door: a sealed license key on Config, verified like every other key, unlocking services and never data.
 - Issue and proposal templates that produce receipts, not requests.
