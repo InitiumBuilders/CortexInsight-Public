@@ -144,6 +144,14 @@ const P = (...segs) => path.join(root(), ...segs);
 // ---------------------------------------------------------------------------
 //  Tiny utilities
 // ---------------------------------------------------------------------------
+// The runner stamps records and names its daily files in LOCAL time. Any
+// "today" compared against those must be the local date; the UTC date is
+// already tomorrow for most of the evening west of Greenwich, which froze the
+// live log as a past day and zeroed the day's counts every night.
+function localDay(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
 const now = () => Date.now();
 // ───────────────────────────────────────────────────────────────────────────
@@ -877,7 +885,9 @@ let _ixLoaded = false, _ixFrozenDirty = false, _ixFrozenTimer = null;
 function ixFrozenLoad() {
   _ixLoaded = true;
   const o = safe(() => JSON.parse(fs.readFileSync(ixFrozenPath(), 'utf8')), null);
-  if (!o || o.v !== 1 || !o.files) return 0;
+  // v2: entries frozen by the UTC-day rule could hold a partial live day; they
+  // are discarded once and the past is re-read, then frozen by the local day
+  if (!o || o.v !== 2 || !o.files) return 0;
   let n = 0;
   for (const k of Object.keys(o.files)) if (Array.isArray(o.files[k])) { _ixFrozen.set(k, o.files[k]); n++; }
   return n;
@@ -885,7 +895,7 @@ function ixFrozenLoad() {
 function ixFrozenSave(sync) {
   _ixFrozenDirty = false;
   const files = {}; for (const [k, v] of _ixFrozen) files[k] = v;
-  const body = JSON.stringify({ v: 1, at: now(), files });
+  const body = JSON.stringify({ v: 2, at: now(), files });
   const tmp = ixFrozenPath() + '.tmp';
   if (sync) { safe(() => { fs.writeFileSync(tmp, body); fs.renameSync(tmp, ixFrozenPath()); }); return; }
   fs.promises.writeFile(tmp, body).then(() => fs.promises.rename(tmp, ixFrozenPath())).catch(() => {});
@@ -902,7 +912,7 @@ function ixFileDay(p) {
 function parseInteractions(maxPerFile = 160 * 1024) {
   if (!_ixLoaded) ixFrozenLoad();
   const files = interactionFiles();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   const sigParts = [];
   const stats = [];
   for (const f of files) {
@@ -1718,7 +1728,7 @@ function buildOverview() {
         focus: la ? la.msg.slice(0, 160) : '(session open)' });
     }
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   // whole-ledger totals once per ledger change (the array identity only moves
   // when the signature moved), not three full walks per tick
   if (_ovTot.items !== interactions || _ovTot.day !== today) {
@@ -1735,6 +1745,7 @@ function buildOverview() {
     // false when the fleet tree is not where the settings point: the first-run
     // card on Pulse keys off this, and the relay verdict stays quiet
     rootReadable: exists(P('logs')) && exists(P('agents')),
+    platform: process.platform,                                   // the first-run card words the path for the machine
     uptime: proxy.lastStart ? now() - proxy.lastStart : null,    // proxy uptime (ms)
     proxyStart: proxy.lastStart || null,
     appUptime: now() - bootEpoch,
@@ -2115,7 +2126,8 @@ function systemReading() {
     if (d.flows.shipped7) bits.push(`${d.flows.shipped7} shipped by the loops this week`);
     if (m && m.meanQuality != null) bits.push(`her last ${m.qualityN} passes score ${m.meanQuality.toFixed(1)}`);
     if (sc && sc.n) bits.push(`the drive seat answers in about ${sc.median >= 60 ? Math.round(sc.median / 60) + ' min' : sc.median + ' s'}`);
-    if (bits.length) S.push(bits.join(', ') + '.');
+    // a sentence that follows a full stop starts with a capital, whichever bit came first
+    if (bits.length) { const s = bits.join(', '); S.push(s.charAt(0).toUpperCase() + s.slice(1) + '.'); }
   }
   const stacks = ['Claude Code' + (oa && oa.keySet ? ' and OpenAI are' : ' is')];
   S.push(stacks[0] + ' open' + (oa && oa.keySet ? ', both stacks live.' : '; add an OpenAI key to open the second stack.'));
@@ -4365,7 +4377,7 @@ ipcMain.handle('cortex:diagnosis', requireGate(() => {
   // Every relay agent, not just the two with dedicated runners — cortex-run.sh writes
   // logs/runner-stderr/<agent>-<date>.log for all of them, and Davari's was never read.
   for (const a of AGENTS) {
-    const f = P('logs', 'runner-stderr', `${a}-${new Date().toISOString().slice(0, 10)}.log`);
+    const f = P('logs', 'runner-stderr', `${a}-${localDay()}.log`);
     const t = tailFile(f, 6000).split('\n').filter(Boolean).slice(-12);
     if (t.length) stderr[a] = t;
   }
@@ -4373,7 +4385,7 @@ ipcMain.handle('cortex:diagnosis', requireGate(() => {
     const dir = P('agents', a, 'memory');
     const files = listDir(dir).filter((f) => f.endsWith('.md'));
     let bytes = 0, today = 0;
-    for (const f of files) { const st = statOf(path.join(dir, f)); if (st) { bytes += st.size; if (f.startsWith(new Date().toISOString().slice(0, 10))) today = st.size; } }
+    for (const f of files) { const st = statOf(path.join(dir, f)); if (st) { bytes += st.size; if (f.startsWith(localDay())) today = st.size; } }
     return { agent: a, files: files.length, totalKB: Math.round(bytes / 1024), todayKB: Math.round(today / 1024) };
   });
   const verdict = healthVerdict(interactions, parseProxyLog());
@@ -4417,7 +4429,7 @@ function archiveOldMemory() {
   return moved;
 }
 function dayDigest() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   const xs = parseInteractions().filter((x) => (x.ts || '').slice(0, 10) === today);
   const secs = xs.reduce((s, x) => s + x.latency, 0);
   const byA = {}; for (const x of xs) byA[x.agent] = (byA[x.agent] || 0) + 1;
@@ -5163,7 +5175,7 @@ Do the work. If it is a build task, build it. Report what you did, what you veri
 // ===========================================================================
 function autoWorkState() {
   STATE.autoWork = STATE.autoWork || { on: false, perDay: 6, day: '', ran: 0, current: '', log: [] };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();                      // the per-day cap rolls at local midnight
   if (STATE.autoWork.day !== today) { STATE.autoWork.day = today; STATE.autoWork.ran = 0; }
   if (typeof STATE.autoWork.perDay !== 'number') STATE.autoWork.perDay = 6;
   return STATE.autoWork;
@@ -11990,7 +12002,7 @@ let _autonomyBusy = false;
 async function autonomyTick(s, interactions) {
   if (_autonomyBusy) return; _autonomyBusy = true;
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDay();
     const todays = interactions.filter((x) => (x.ts || '').slice(0, 10) === today);
     const lastEpoch = interactions[0] ? interactions[0].epoch : 0;
     const firstTodayEpoch = todays.length ? todays[todays.length - 1].epoch : 0;
@@ -12146,6 +12158,7 @@ function createWindow() {
   // whenReady, because they deliberately never create a window.
   if (process.argv.includes('--smoke')) runSmoke();
   if (process.argv.includes('--freshtest')) runFreshTest();
+  if (process.argv.includes('--fleettest')) runFleetTest();
   if (process.argv.includes('--voicetest')) runVoiceTest();
   if (process.argv.includes('--strategytest')) runStrategyTest();
   // window controls
@@ -14332,6 +14345,111 @@ async function runFreshTest() {
 }
 
 // ---------------------------------------------------------------------------
+//  THE STRANGER'S FLEET.   electron . --fleettest
+//  The sandbox above built a small fleet tree in a throwaway home and pointed a
+//  fresh vault at it. This walks the loop against it: the readers (today's
+//  growth and yesterday's frozen file), the checkpoint and its transcript, the
+//  files an agent wrote, the metered usage, the brief with the reading first,
+//  the agent tool on disk, a task appended through the inbox and a done claim
+//  corroborated, then the rooms that show all of it. Report:
+//  %TEMP%\ci-fleet-report.txt, screenshots fleet-<view>.png.
+// ---------------------------------------------------------------------------
+async function runFleetTest() {
+  const wc = mainWin.webContents;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const outDir = app.getPath('temp');
+  const lines = [];
+  const log = (s) => { lines.push(s); console.log(s); };
+  const report = path.join(outDir, 'ci-fleet-report.txt');
+  const flush = () => safe(() => fs.writeFileSync(report, lines.join('\n') + '\n', 'utf8'));
+  safe(() => { wc.setBackgroundThrottling(false); mainWin.show(); mainWin.focus(); });
+  const framed = () => Promise.race([wc.executeJavaScript('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(1))))').catch(() => 0), wait(900)]);
+  const shoot = async (name) => { await framed(); return safe(() => wc.capturePage().then((img) => fs.writeFileSync(path.join(outDir, name), img.toPNG()))); };
+  const problems = [];
+  const ok = (label, cond, detail) => { log(`[fleet] ${cond ? 'ok  ' : 'FAIL'} ${label}${detail ? ' · ' + detail : ''}`); if (!cond) problems.push('[' + label.split(' ')[0].toUpperCase() + '] ' + label + (detail ? ' · ' + detail : '')); };
+  wc.on('console-message', (_ev, level, message, line, source) => {
+    if (level >= 2) problems.push(`[${level === 3 ? 'ERROR' : 'WARN'}] ${message} (${String(source || '').split('/').pop()}:${line})`);
+  });
+  wc.on('render-process-gone', (_e, d) => problems.push(`[FATAL] renderer gone: ${d && d.reason}`));
+  const textOf = (nav) => wc.executeJavaScript(`(function(){const s=document.querySelector('section[data-view="${nav}"]');return s?(s.innerText||'').replace(/\\s+/g,' ').trim():''})()`).catch(() => '');
+  const visit = async (nav, ms) => { await wc.executeJavaScript(`document.querySelector('[data-nav=${nav}]')?.click()`).catch(() => {}); await wait(ms); const t = await textOf(nav); await shoot(`fleet-${nav}.png`); return t; };
+  try {
+    log('[fleet] vault: ' + userDataDir());
+    log('[fleet] root: ' + root() + ' · readable=' + exists(root()) + ' · paired=' + ((STATE.trustedFingerprints || []).length > 0));
+    ok('root readable', exists(P('logs')) && exists(P('agents')));
+    // the gate, with a throwaway passphrase seeded the way the smoke does it
+    const PASS = 'fleet-harness-' + newId();
+    STATE.settings.passSha = sha256(PASS); saveState();
+    await wait(2000);
+    await wc.executeJavaScript(`document.getElementById('gatePass').value=${JSON.stringify(PASS)};document.getElementById('gateForm').requestSubmit();`);
+    await wait(4000);
+    ok('gate opened', !!(GUARD && GUARD.trusted), 'trusted=' + !!(GUARD && GUARD.trusted));
+    // the readers
+    const ixs = parseInteractions();
+    ok('interactions parsed', ixs.length >= 13, ixs.length + ' records');
+    ok('two seats seen', ixs.some((x) => x.agent === 'davara') && ixs.some((x) => x.agent === 'davaris'));
+    parseInteractions();
+    const frozen = [..._ixFrozen.keys()].filter((f) => !ixFileDay(f) || ixFileDay(f) < localDay());
+    ok('yesterday froze', frozen.length >= 1, frozen.length + ' frozen file(s)');
+    // the live day must never freeze, whatever the hour is in Greenwich
+    ok('today stays live', ![..._ixFrozen.keys()].some((f) => ixFileDay(f) === localDay()), 'local day ' + localDay());
+    const ov0 = buildOverview();
+    ok('today counted', ov0.stats && ov0.stats.todayTurns >= 9, (ov0.stats ? ov0.stats.todayTurns : 'no stats') + ' today');
+    const cp = readCheckpoint('davara');
+    ok('checkpoint read', !!cp && cp.sid === FLEET_SID, cp ? cp.sid : 'none');
+    const tx = findTranscript(FLEET_SID);
+    ok('transcript found', !!tx, tx || 'not found');
+    const fw = safe(() => transcriptFileWrites(), []);
+    ok('file writes seen', fw.some((f) => /GATE-NOTE\.md$/.test(String(f.file || ''))), fw.length + ' write(s)');
+    const ov = buildOverview();
+    ok('overview reads the tree', ov.rootReadable === true && !!ov.uptime, 'uptime=' + ov.uptime);
+    await usageRefreshAsync().catch(() => null);          // the refresh fills the cache; the picture is read from it
+    const u = safe(() => buildUsage(false), null);
+    const us = JSON.stringify(u || {});
+    ok('usage metered', /"out":\s*[1-9]/.test(us), us.slice(0, 160));
+    // the brief and the agent tool
+    ensureAgentBridgeFiles(); writeAgentBrief();
+    const brief = safe(() => fs.readFileSync(path.join(ciDir(), 'brief.md'), 'utf8'), '');
+    ok('brief written', brief.length > 200, brief.length + ' chars');
+    ok('reading rides first', /## THE READING/.test(brief.slice(0, 2000)), 'at ' + brief.indexOf('## THE READING'));
+    ok('agent tool on disk', exists(path.join(ciDir(), 'ci.sh')) && exists(path.join(ciDir(), 'README-FOR-AGENTS.md')));
+    // the inbox: a task appended the way ci.sh appends it, then a done claim
+    const TITLE = 'Fleet test: wire the lantern';
+    fs.appendFileSync(inboxPath(), JSON.stringify({ op: 'task.add', title: TITLE, body: 'appended by the fleet harness', priority: 2, by: 'davara', ts: new Date().toISOString() }) + '\n');
+    const r1 = ingestAgentInbox();
+    const t1 = (STATE.tasks || []).find((t) => t.title === TITLE);
+    ok('inbox task applied', r1.applied === 1 && !!t1, 'applied=' + r1.applied);
+    fs.appendFileSync(inboxPath(), JSON.stringify({ op: 'task.done', match: 'Fleet test', by: 'davara', ts: new Date().toISOString() }) + '\n');
+    const r2 = ingestAgentInbox();
+    const t2 = (STATE.tasks || []).find((t) => t.title === TITLE);
+    ok('done claim corroborated', r2.applied === 1 && !!t2 && t2.status === 'done' && !!(t2.verified && t2.verified.strength), t2 && t2.verified ? t2.verified.strength : 'no verdict');
+    // the rooms that show it
+    const pulse = await visit('overview', 2600);
+    ok('pulse shows a fleet', !/No fleet tree is set/.test(pulse) && /turn/i.test(pulse), pulse.slice(0, 120));
+    const board = await visit('tasks', 2200);
+    ok('board shows the task', board.includes('Fleet test'), board.slice(0, 100));
+    const live = await visit('live', 2800);
+    ok('live shows a session', !/Davara NO SESSION/.test(live), live.slice(0, 120));
+    const out = await visit('output', 2600);
+    ok('output shows the file', /GATE-NOTE/.test(out), out.slice(0, 120));
+    const usage = await visit('usage', 3400);
+    ok('usage shows tokens', !/no usage|0 tokens/i.test(usage) && /[1-9]/.test(usage), usage.slice(0, 100));
+    const agents = await visit('agents', 2200);
+    // idle seats legitimately show zero; one seat with real turns is the proof
+    ok('agents shows turns', /\b[1-9]\d* TURNS/i.test(agents), (agents.match(/\d+ TURNS/gi) || []).slice(0, 6).join(' · '));
+  } catch (e) { problems.push(`[THROW] ${e && e.message}\n${e && e.stack}`); }
+  await wait(400);
+  if (problems.length) {
+    log(`\n[fleet] ===== ${problems.length} PROBLEM(S) =====`);
+    for (const p of [...new Set(problems)]) log('[fleet] ' + p);
+  } else {
+    log('\n[fleet] ===== CLEAN: a stranger\'s fleet is read, briefed, tooled and shown =====');
+  }
+  flush();
+  setTimeout(() => app.quit(), 600);
+}
+
+// ---------------------------------------------------------------------------
 //  Single-instance lock — ONLY ONE CortexInsight may run at a time.
 //  Because closing the window hides the app to the tray (it keeps running), a fresh
 //  launch used to spawn a SECOND instance alongside the lingering one. The stale
@@ -14388,6 +14506,59 @@ if (_FRESH) safe(() => {
   const dir = path.join(app.getPath('temp'), 'cortexinsight-fresh');
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
+  app.setPath('userData', dir);
+});
+// THE STRANGER'S FLEET. `--fleettest` builds a small fleet tree in a throwaway
+// home (interactions for two seats over two days, a proxy log, a checkpoint,
+// memory, a Claude Code transcript with a file write and usage) and points a
+// fresh vault at it. Then the readers, the brief, the agent tool, the inbox
+// and the views are walked against it. It is the only run that proves the
+// fleet path on a machine that has no fleet.
+const _FLEET = process.argv.includes('--fleettest');
+const FLEET_SID = '00000000-0000-4000-8000-00000000f1ee';
+if (_FLEET) safe(() => {
+  const dir = path.join(app.getPath('temp'), 'cortexinsight-fleet');
+  const home = path.join(app.getPath('temp'), 'cortexinsight-fleet-home');
+  for (const d of [dir, home]) { fs.rmSync(d, { recursive: true, force: true }); fs.mkdirSync(d, { recursive: true }); }
+  const tree = path.join(home, 'cortex');
+  const mk = (...p) => { const d = path.join(tree, ...p); fs.mkdirSync(d, { recursive: true }); return d; };
+  // the runner writes LOCAL time and the readers parse it as local; a UTC stamp
+  // here would shift every turn by the zone and put "today" in yesterday
+  const p2 = (n) => String(n).padStart(2, '0');
+  const stamp = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+  const day = (d) => stamp(d).slice(0, 10);
+  const t0 = new Date(); const yday = new Date(t0.getTime() - 864e5);
+  const rec = (agent, when, latency, chars, msg) => JSON.stringify({ ts: stamp(when), agent, status: 'OK', via: 'mouth-proxy', attempts: 1, latency_s: latency, out_chars: chars, msg }) + '\n';
+  const ix = mk('logs', 'interactions');
+  let today = '', yest = '', dv = '';
+  for (let i = 6; i >= 1; i--) today += rec('davara', new Date(t0.getTime() - i * 37 * 60e3), 40 + i * 9, 900 + i * 210, 'Turn ' + i + ': read the board, refine the gate copy, report in the contract.');
+  for (let i = 3; i >= 1; i--) dv += rec('davaris', new Date(t0.getTime() - i * 53 * 60e3), 25 + i * 5, 1400 + i * 100, 'Build turn ' + i + ': ship the lantern component.');
+  for (let i = 4; i >= 1; i--) yest += rec('davara', new Date(yday.getTime() - i * 61 * 60e3), 70 + i, 800 + i * 50, 'Yesterday turn ' + i);
+  fs.writeFileSync(path.join(ix, 'davara-' + day(t0) + '.jsonl'), today);
+  fs.writeFileSync(path.join(ix, 'davaris-' + day(t0) + '.jsonl'), dv);
+  fs.writeFileSync(path.join(ix, 'davara-' + day(yday) + '.jsonl'), yest);
+  fs.writeFileSync(path.join(tree, 'logs', 'mouth-proxy.log'),
+    stamp(new Date(yday.getTime() - 3600e3)) + ' START cortex-mouth-proxy on 127.0.0.1:8788 (claude-code-cli relay)\n' +
+    stamp(new Date(t0.getTime() - 40 * 60e3)) + ' REQ davara stream=False\n' +
+    stamp(new Date(t0.getTime() - 37 * 60e3)) + ' OK davara 2160c in 49.0s (attempt 1)\n');
+  for (const a of ['davara', 'davaris']) {
+    const ad = mk('agents', a); mk('agents', a, 'memory');
+    fs.writeFileSync(path.join(ad, 'checkpoint.state'), 'SID=' + (a === 'davara' ? FLEET_SID : '11111111-1111-4111-8111-111111111111') + '\nSTATUS=complete\nEPOCH=' + Math.floor(t0.getTime() / 1000) + '\n');
+    fs.writeFileSync(path.join(ad, 'memory', day(t0) + '.md'), '# ' + a + ' · ' + day(t0) + '\n\n## ' + stamp(t0) + '\n**Ask:** refine the gate copy.\n**Delivered:** the gate says what it stores and nothing more.\n');
+  }
+  const proj = path.join(home, '.claude', 'projects', '-cortex'); fs.mkdirSync(proj, { recursive: true });
+  const written = path.join(tree, 'GATE-NOTE.md');
+  fs.writeFileSync(written, '# gate note\nthe gate stores a hash, never the text.\n');
+  const ts = (m) => new Date(t0.getTime() - m * 60e3).toISOString();
+  const usage = (i, o) => ({ input_tokens: i, output_tokens: o, cache_read_input_tokens: 1200, cache_creation_input_tokens: 300 });
+  const lines = [
+    { type: 'user', sessionId: FLEET_SID, timestamp: ts(39), message: { role: 'user', content: 'Refine the gate copy so it says what it stores and nothing more.' } },
+    { type: 'assistant', sessionId: FLEET_SID, timestamp: ts(38), message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'Reading the gate copy now.' }, { type: 'tool_use', id: 'tu1', name: 'Write', input: { file_path: written, content: '# gate note' } }], usage: usage(2100, 180) } },
+    { type: 'user', sessionId: FLEET_SID, timestamp: ts(38), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu1', content: 'ok' }] } },
+    { type: 'assistant', sessionId: FLEET_SID, timestamp: ts(37), message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'TITLE: gate copy refined\nCONFIDENCE: 8/10 — BASIS: the smoke asserts the line\nFALSIFIER: if the Access panel still names a built-in password by the next release, this was wrong\nSHUTTLE: a new operator opens Config and reads one sentence\nDID: rewrote the Access copy\nFILES: ' + written + '\nNEXT: none' }], usage: usage(2600, 420) } },
+  ];
+  fs.writeFileSync(path.join(proj, FLEET_SID + '.jsonl'), lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
+  fs.writeFileSync(path.join(dir, 'cortex-insight-state.json'), JSON.stringify({ settings: { cortexRoot: tree } }));
   app.setPath('userData', dir);
 });
 // ───────────────────────────────────────────────────────────────────────────
@@ -14471,7 +14642,7 @@ process.on('unhandledRejection', (e) => {
 let _lastRevive = 0;
 app.on('web-contents-created', (_e, wc) => {
   wc.on('render-process-gone', (_ev, d) => {
-    if (_ISOLATED || _SMOKE || _FRESH) return;     // harnesses report, never revive
+    if (_ISOLATED || _SMOKE || _FRESH || _FLEET) return;   // harnesses report, never revive
     if (!d || d.reason === 'clean-exit') return;
     safe(() => omniAudit('guard', 'renderer process gone (' + (d && d.reason) + ')'));
     if (Date.now() - _lastRevive < 30000) return;
@@ -14479,7 +14650,7 @@ app.on('web-contents-created', (_e, wc) => {
     safe(() => wc.reload());
   });
 });
-if (!_ISOLATED && !_SMOKE && !_FRESH && !app.requestSingleInstanceLock()) {
+if (!_ISOLATED && !_SMOKE && !_FRESH && !_FLEET && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => { showWindow(); });

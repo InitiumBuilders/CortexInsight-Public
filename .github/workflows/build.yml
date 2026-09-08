@@ -58,6 +58,18 @@ jobs:
           New-Item -ItemType Directory -Force fresh-artifacts | Out-Null
           Copy-Item "$env:TEMP\ci-fresh-report.txt" fresh-artifacts\
           Copy-Item "$env:TEMP\fresh-*.png" fresh-artifacts\ -ErrorAction SilentlyContinue
+      - name: the stranger's fleet
+        shell: pwsh
+        run: |
+          Remove-Item "$env:TEMP\ci-fleet-report.txt" -ErrorAction SilentlyContinue
+          $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList ". --fleettest" -PassThru -Wait
+          "electron exit code: $($p.ExitCode)"
+          if (-not (Test-Path "$env:TEMP\ci-fleet-report.txt")) { throw "the fleet harness wrote no report" }
+          Get-Content "$env:TEMP\ci-fleet-report.txt"
+          if (Select-String -Path "$env:TEMP\ci-fleet-report.txt" -Pattern 'PROBLEM' -Quiet) { throw "the fleet harness found problems" }
+          if (-not (Select-String -Path "$env:TEMP\ci-fleet-report.txt" -Pattern 'CLEAN' -Quiet)) { throw "the fleet harness did not reach its verdict" }
+          Copy-Item "$env:TEMP\ci-fleet-report.txt" fresh-artifacts\
+          Copy-Item "$env:TEMP\fleet-*.png" fresh-artifacts\ -ErrorAction SilentlyContinue
       - name: keep the first hour's evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -122,6 +134,20 @@ jobs:
           mkdir -p fresh-artifacts
           cp "$R" fresh-artifacts/
           cp "$(dirname "$R")"/fresh-*.png fresh-artifacts/ 2>/dev/null || true
+      - name: the stranger's fleet
+        run: |
+          set -uo pipefail
+          T="${TMPDIR:-/tmp}"
+          rm -f "$T/ci-fleet-report.txt"
+          npx electron . --fleettest || echo "electron exit: $?"
+          R=$(find "$T" /tmp "$HOME/Library/Application Support" -maxdepth 2 -name ci-fleet-report.txt 2>/dev/null | head -1)
+          if [ -z "$R" ]; then echo "the fleet harness wrote no report"; exit 1; fi
+          cat "$R"
+          if grep -q PROBLEM "$R"; then echo "the fleet harness found problems"; exit 1; fi
+          if ! grep -q CLEAN "$R"; then echo "the fleet harness did not reach its verdict"; exit 1; fi
+          mkdir -p fresh-artifacts
+          cp "$R" fresh-artifacts/
+          cp "$(dirname "$R")"/fleet-*.png fresh-artifacts/ 2>/dev/null || true
       - name: keep the first hour's evidence
         if: always()
         uses: actions/upload-artifact@v4

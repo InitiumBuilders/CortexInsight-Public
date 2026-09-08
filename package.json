@@ -1,6 +1,6 @@
 {
   "name": "cortexinsight",
-  "version": "3.64.2",
+  "version": "3.65.0",
   "private": true,
   "description": "CortexInsight: a desktop operator console over a local agent fleet. Reads the fleet's own logs, drives agents through a loopback relay, and keeps every key sealed on the machine.",
   "author": "Outlier.Systems",
@@ -19,6 +19,7 @@
     "smoke": "electron . --smoke",
     "clicktest": "electron . --clicktest",
     "fresh": "electron . --freshtest",
+    "fleet": "electron . --fleettest",
     "gate": "node scripts/oss-check.js",
     "package": "npm run package:win",
     "package:win": "electron-packager . CortexInsight --platform=win32 --arch=x64 --out=release-next --overwrite --asar --icon=assets/icon.ico --ignore=\"^/release\" --ignore=\"^/release-next\" --ignore=\"\\.bak\" --ignore=\"^/\\.git\" --ignore=\"^/\\.github\"",

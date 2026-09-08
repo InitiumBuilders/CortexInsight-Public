@@ -106,7 +106,8 @@ Close the console (tray → Quit), delete the app folder, and delete `%APPDATA%\
 ```bash
 npm run gate      # secret shapes, private names, personal defaults
 npm run fresh     # a stranger's first hour on this machine; read %TEMP%\ci-fresh-report.txt
+npm run fleet     # a stranger's fleet: a synthetic tree is built, read, briefed, tooled and shown; read %TEMP%\ci-fleet-report.txt
 npm run smoke     # every view with your own vault copied into a sandbox
 ```
 
-The continuous build runs the gate and the fresh harness on every push, and uploads the fresh run's report and screenshots as artifacts, so the foreign-machine proof is a link away on the Actions page.
+The continuous build runs the gate, the fresh harness and the fleet harness on every push, on a Windows runner and a macOS runner, and uploads each run's reports and screenshots as artifacts, so the foreign-machine proof is a link away on the Actions page. The fleet harness is the one that proves the readers, the brief, the agent tool and the inbox against a fleet tree on a machine that has none.

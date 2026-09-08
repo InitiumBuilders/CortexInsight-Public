@@ -4668,7 +4668,10 @@ async function paintTheMove() {
   // A new operator with no fleet tree must be told the way in before anything
   // else; the relay verdict is read from a log inside that tree, so without the
   // tree it is unknown, never "offline".
-  if (o && o.rootReadable === false) push(110, 45, 'FIRST RUN', 'No fleet tree is set', 'The console reads a fleet tree in WSL: a home folder holding logs/interactions and agents. Set the fleet path on Config → Preferences (it is discovered on first run when one exists), then reopen Pulse.', { go: 'settings', label: 'Set the fleet path' });
+  if (o && o.rootReadable === false) push(110, 45, 'FIRST RUN', 'No fleet tree is set', (o.platform === 'darwin'
+    ? 'The console reads a fleet tree: a folder in your home holding logs/interactions and agents. '
+    : 'The console reads a fleet tree in WSL: a home folder holding logs/interactions and agents. ')
+    + 'Set the fleet path on Config → Preferences (it is discovered on first run when one exists), then reopen Pulse.', { go: 'settings', label: 'Set the fleet path' });
   else if (o && !o.uptime) push(100, 355, 'BROKEN', 'The relay is offline', 'Nothing can run until the mouth-proxy answers on 127.0.0.1:8788.', { go: 'settings', label: 'Open diagnosis' });
   else if (h.level === 'degraded') push(92, 355, 'DEGRADED', 'The Cortex is degraded', 'Turns are faulting. Look at why before starting anything new.', { go: 'settings', label: 'See the diagnosis' });
 
