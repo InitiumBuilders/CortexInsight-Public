@@ -395,7 +395,7 @@ async function loadRemote() {
         <label class="fr-lbl">SSH password</label>
         <input id="rmPass" class="txt" type="password" placeholder="${r.hasPassword ? 'stored — leave blank to keep it' : 'the password for that account'}" autocomplete="off"/>
         `}
-        <label class="fr-lbl">Its passphrase</label>
+        <label class="fr-lbl">Console passphrase</label>
         <input id="rmPhrase" class="txt" type="password" placeholder="${r.hasPhrase ? 'stored — leave blank to keep it' : 'the gate passphrase of the console over there'}" autocomplete="off"/>
       </div>
       <div class="focus-actions">
