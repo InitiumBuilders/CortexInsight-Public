@@ -85,3 +85,37 @@ body.reduce-motion .gw-orbit{animation:none}
 .bearing>*{min-width:0;overflow-wrap:anywhere}
 .bearing .bg-arrow{transform:none;padding:2px 0}
 .bearing .bg-v{font-size:16px;font-weight:600;line-height:1.4}
+
+/* ── Remote: a console that runs somewhere else ────────────────────────── */
+.rm-form{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px 14px;align-items:center;margin:4px 0 14px}
+.rm-form .fr-lbl{margin-bottom:0;text-align:right}
+.rm-form .txt{width:100%}
+.rm-form .txt.sm,.rm-form .sel.sm{width:140px}
+@media (max-width:760px){
+  .rm-form{grid-template-columns:minmax(0,1fr)}
+  .rm-form .fr-lbl{text-align:left;margin-top:6px}
+}
+.rm-p{font-size:14.5px;line-height:1.5;color:#e6ebf4;margin:6px 0}
+.rm-p.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;color:#dce3ec}
+.rm-ok{color:hsl(150 70% 70%);font-size:14px;padding:8px 0}
+.rm-err{color:hsl(345 85% 78%);font-size:14px;padding:8px 0;line-height:1.5}
+.rm-wait{color:#dce3ec;font-size:14px;padding:8px 0}
+.rm-warn{border-color:hsl(40 80% 60% / .3)}
+
+/* first contact: the operator says yes to this machine once, having compared
+   the fingerprint with what the server itself prints */
+.rm-host{padding:12px 0}
+.rm-host-h{font-family:Sora,Inter,system-ui,sans-serif;font-weight:700;font-size:17px;color:#fff;margin-bottom:6px}
+.rm-fp{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:14px;color:hsl(var(--view-hue) 95% 80%);
+  background:hsl(var(--view-hue) 40% 50% / .12);border-radius:12px;padding:10px 14px;margin:8px 0;word-break:break-all}
+/* a key that changed without you changing it is the one symptom of someone in
+   the middle, so it is the loudest thing on the page */
+.rm-loud{background:hsl(345 70% 45% / .14);border:1px solid hsl(345 85% 65% / .4);border-radius:16px;padding:14px 16px}
+
+.rm-reading{font-family:Sora,Inter,system-ui,sans-serif;font-size:18px;line-height:1.45;color:#fff;margin:4px 0 10px}
+.rm-tasks{display:flex;flex-direction:column;gap:6px}
+.rm-task{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:10px;align-items:baseline;
+  padding:9px 13px;border-radius:14px;background:hsl(var(--view-hue) 40% 50% / .08);border:1px solid hsl(var(--view-hue) 60% 70% / .12)}
+.rm-t-st{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:hsl(var(--view-hue) 95% 80%)}
+.rm-t-ti{font-size:14.5px;color:#f4f6f9;line-height:1.35}
+.rm-t-ag{font-size:12.5px;color:#dce3ec}

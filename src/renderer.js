@@ -321,6 +321,7 @@ const NAV = [
   ['security', 'Secure', 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', 355, 'CORE'],
   ['settings', 'Config', 'M12 9a3 3 0 1 0 .01 0M19 12l2 1-2 4-2-1a7 7 0 0 1-2 1l-.5 2h-5L9 19a7 7 0 0 1-2-1l-2 1-2-4 2-1a7 7 0 0 1 0-2l-2-1 2-4 2 1a7 7 0 0 1 2-1l.5-2h5l.5 2a7 7 0 0 1 2 1l2-1 2 4-2 1a7 7 0 0 1 0 2z', 240, 'CORE'],
   ['levels', 'Levels', 'M12 3l3.6 3.6L12 10.2 8.4 6.6 12 3zM12 11.2l3.6 3.6L12 18.4l-3.6-3.6L12 11.2z', 48, 'CORE'],
+  ['remote', 'Remote', 'M4 5h16v5H4zM4 14h16v5H4zM7.5 7.5h.01M7.5 16.5h.01M17 7.5h2M17 16.5h2', 195, 'CORE'],
 ];
 const FLEET = window.FLEET_DATA || { sympath: {}, arden: {} };
 function buildNav() {
@@ -929,6 +930,7 @@ function _loadView(view, quiet) {
     case 'models': return loadModels();
     case 'security': return loadSecurity();
     case 'settings': return loadSettings();
+    case 'remote': return (typeof loadRemote === 'function' ? loadRemote() : null);
   }
 }
 

@@ -339,3 +339,216 @@ async function loadMindV3() {
   };
 }
 async function loadMind() { return loadMindV3(); }
+
+/* ============================ REMOTE ============================ */
+/* A console that runs somewhere else — a server with no screen — reached over
+   SSH. Two locks, and the page says why: SSH proves you have an account on that
+   machine, the passphrase proves you are the operator of the console on it.
+   Nothing here ever holds a secret; the main process seals both and hands back
+   a yes or no. */
+let REMOTE_STATE = null;
+let REMOTE_WATCHING = false;
+
+async function loadRemote() {
+  const host = $('#remoteBody');
+  if (!host) return;
+  const r = await C.remote.get();
+  if (!r || r.error) return viewFail('remote', r || null);
+  REMOTE_STATE = r;
+
+  const connected = !!r.connected;
+  setHTML(host, `
+    <div class="view-head"><h2>Remote</h2>
+      <p class="view-desc">A console running on another machine, driven from this one. It is reached over SSH, so that machine opens no new port and nothing extra is exposed to the internet. Two things have to be true before anything moves: SSH proves you have an account there, and the passphrase proves you are the operator of the console running on it.</p></div>
+
+    <div class="st-strip n5">
+      ${siCell(connected ? 'live' : 'zero', connected ? 'LINKED' : 'OFF', connected ? 'this console is driving that one' : 'not connected')}
+      ${siCell('', r.host ? esc(r.host) : '—', 'the machine')}
+      ${siCell('', r.user ? esc(r.user) : '—', 'the account there')}
+      ${siCell(r.hostKey ? 'go' : '', r.hostKey ? 'PINNED' : 'NEW', r.hostKey ? 'its host key is remembered' : 'its host key has not been seen yet')}
+      ${siCell(r.lastConnected ? 'go' : '', r.lastConnected ? new Date(r.lastConnected).toLocaleDateString() : '—', 'last connected')}
+    </div>
+
+    ${!r.available ? `<div class="panel glass rm-warn"><div class="panel-head"><h3>The SSH client is missing from this build</h3></div>
+      <div class="rm-p">Run <code>npm install</code> in the project folder and start the app again.</div></div>` : ''}
+
+    <div class="panel glass">
+      <div class="panel-head"><h3>The machine</h3><span class="panel-sub">where the other console runs</span></div>
+      <div class="rm-form">
+        <label class="fr-lbl">Host</label>
+        <input id="rmHost" class="txt" type="text" value="${escAttr(r.host)}" placeholder="203.0.113.10 or vps.example.com" spellcheck="false"/>
+        <label class="fr-lbl">Port</label>
+        <input id="rmPort" class="txt sm" type="number" value="${escAttr(String(r.port || 22))}" min="1" max="65535"/>
+        <label class="fr-lbl">User</label>
+        <input id="rmUser" class="txt" type="text" value="${escAttr(r.user)}" placeholder="the account you log in with" spellcheck="false"/>
+        <label class="fr-lbl">Sign in with</label>
+        <select id="rmAuth" class="sel sm">
+          <option value="password"${r.auth === 'password' ? ' selected' : ''}>a password</option>
+          <option value="key"${r.auth === 'key' ? ' selected' : ''}>a key file</option>
+        </select>
+        <label class="fr-lbl">${r.auth === 'key' ? 'Key file' : 'SSH password'}</label>
+        ${r.auth === 'key'
+          ? `<input id="rmKeyPath" class="txt" type="text" value="${escAttr(r.keyPath)}" placeholder="~/.ssh/id_ed25519" spellcheck="false"/>`
+          : `<input id="rmPass" class="txt" type="password" placeholder="${r.hasPassword ? 'stored — leave blank to keep it' : 'the password for that account'}" autocomplete="off"/>`}
+        <label class="fr-lbl">Its passphrase</label>
+        <input id="rmPhrase" class="txt" type="password" placeholder="${r.hasPhrase ? 'stored — leave blank to keep it' : 'the gate passphrase of the console over there'}" autocomplete="off"/>
+      </div>
+      <div class="focus-actions">
+        <button class="prime-btn" id="rmConnect">${connected ? '⏻ Disconnect' : '⇄ Connect'}</button>
+        <button class="mini" id="rmSave">Save without connecting</button>
+        ${r.hostKey ? '<button class="mini" id="rmForget">Forget its host key</button>' : ''}
+        <span class="focus-hint">both secrets are sealed by this machine's keystore and never shown again</span>
+      </div>
+      <div id="rmOut">${r.lastError ? `<div class="rm-err">${esc(r.lastError)}</div>` : ''}</div>
+    </div>
+
+    <div class="panel glass">
+      <div class="panel-head"><h3>What this does over there</h3></div>
+      <div class="rm-p">Everything the console answers here, it answers there: the reading, the board, the fleet, the focus, the loops. Turning the agents off from this page turns them off on that machine, which is the setting that stops it spending anything while you are not using it.</div>
+      <div class="rm-p mono">on that machine, the same things are: <b>cortex status</b> · <b>cortex board</b> · <b>cortex off</b></div>
+    </div>
+
+    <div id="rmLinked">${connected ? '<div class="rm-p">reading that machine…</div>' : ''}</div>
+  `);
+
+  $('#rmAuth').onchange = async () => {
+    await C.remote.save({ auth: $('#rmAuth').value });
+    loadRemote();
+  };
+  $('#rmSave').onclick = () => saveRemote(false);
+  $('#rmConnect').onclick = () => (connected ? disconnectRemote() : saveRemote(true));
+  if ($('#rmForget')) $('#rmForget').onclick = async () => {
+    await C.remote.save({ forgetHostKey: true });
+    loadRemote();
+  };
+  if (connected) paintRemoteLinked();
+}
+
+function remoteFields() {
+  const auth = $('#rmAuth') ? $('#rmAuth').value : 'password';
+  const p = {
+    host: $('#rmHost') ? $('#rmHost').value.trim() : '',
+    port: $('#rmPort') ? Number($('#rmPort').value) || 22 : 22,
+    user: $('#rmUser') ? $('#rmUser').value.trim() : '',
+    auth,
+  };
+  if (auth === 'key' && $('#rmKeyPath')) p.keyPath = $('#rmKeyPath').value.trim();
+  if ($('#rmPass') && $('#rmPass').value) p.password = $('#rmPass').value;
+  if ($('#rmPhrase') && $('#rmPhrase').value) p.phrase = $('#rmPhrase').value;
+  return p;
+}
+
+async function saveRemote(thenConnect) {
+  const out = $('#rmOut');
+  const p = remoteFields();
+  if (!p.host || !p.user) { out.innerHTML = '<div class="rm-err">A host and a user, at least.</div>'; return; }
+  const s = await C.remote.save(p);
+  if (s && s.error) { out.innerHTML = `<div class="rm-err">${esc(s.error)}</div>`; return; }
+  // the fields are emptied the moment they are sealed; nothing readable stays on screen
+  if ($('#rmPass')) $('#rmPass').value = '';
+  if ($('#rmPhrase')) $('#rmPhrase').value = '';
+  if (!thenConnect) { out.innerHTML = '<div class="rm-ok">saved</div>'; return; }
+  await connectRemote(false);
+}
+
+async function connectRemote(acceptHostKey) {
+  const out = $('#rmOut');
+  out.innerHTML = '<div class="rm-wait">reaching that machine…</div>';
+  const r = await C.remote.connect({ acceptHostKey });
+
+  if (r && r.unknownHost) {
+    // First contact. The operator has to say yes to this machine once, and they
+    // should be able to compare the fingerprint with the one the server prints.
+    out.innerHTML = `
+      <div class="rm-host">
+        <div class="rm-host-h">This machine has not been seen before</div>
+        <div class="rm-p">Its key fingerprint is</div>
+        <div class="rm-fp mono">${esc(r.fingerprint)}</div>
+        <div class="rm-p">On the server, <code>ssh-keyscan -t ed25519 localhost | ssh-keygen -lf -</code> prints the same thing. If they match, this is the machine you think it is.</div>
+        <div class="focus-actions"><button class="prime-btn" id="rmTrust">Trust this machine</button><button class="mini" id="rmCancel">Not now</button></div>
+      </div>`;
+    $('#rmTrust').onclick = () => connectRemote(true);
+    $('#rmCancel').onclick = () => { out.innerHTML = ''; };
+    return;
+  }
+
+  if (r && r.mismatch) {
+    out.innerHTML = `<div class="rm-err rm-loud"><b>The host key changed.</b><br>${esc(r.error)}<br><span class="mono">${esc(r.fingerprint)}</span></div>`;
+    return;
+  }
+
+  if (!r || !r.ok) { out.innerHTML = `<div class="rm-err">${esc((r && r.error) || 'it did not connect')}</div>`; return; }
+
+  out.innerHTML = `<div class="rm-ok">connected to ${esc(r.host || '')} · v${esc(r.version || '')}</div>`;
+  if (!REMOTE_WATCHING) { REMOTE_WATCHING = true; C.remote.watch(); }
+  loadRemote();
+}
+
+async function disconnectRemote() {
+  await C.remote.disconnect();
+  REMOTE_WATCHING = false;
+  loadRemote();
+}
+
+/* Once linked, the far console is read exactly like this one — same channels,
+   same shapes — so this is a thin painting of what it answers. */
+async function paintRemoteLinked() {
+  const wrap = $('#rmLinked');
+  if (!wrap) return;
+  const [ov, ctl, board] = await Promise.all([
+    C.remote.invoke('cortex:overview'),
+    C.remote.invoke('cortex:control'),
+    C.remote.invoke('cortex:board'),
+  ]);
+  if (!ov || ov.error) { wrap.innerHTML = `<div class="rm-err">${esc((ov && ov.error) || 'that console did not answer')}</div>`; return; }
+  const stopped = ctl && ctl.stopped;
+  const tasks = (board && board.tasks) || [];
+  wrap.innerHTML = `
+    <div class="st-strip n5">
+      ${siCell(ov.rootReadable ? 'go' : 'zero', ov.stats ? ov.stats.totalTurns : 0, 'turns on that machine')}
+      ${siCell('', ov.stats ? ov.stats.todayTurns : 0, 'today')}
+      ${siCell(ov.health && ov.health.level === 'nominal' ? 'go' : 'zero', ov.health ? ov.health.score : '—', 'health there')}
+      ${siCell(stopped ? 'zero' : 'live', stopped ? 'OFF' : 'ON', stopped ? 'its agents are stopped' : 'its agents are answering')}
+      ${siCell('', ov.openTasks || 0, 'open on its board')}
+    </div>
+
+    <div class="panel glass">
+      <div class="panel-head"><h3>Its reading</h3><span class="panel-sub">${esc(ov.model || '')}</span></div>
+      <div class="rm-reading">${esc((ov.reading && ov.reading.line) || ov.readingLine || 'no reading yet')}</div>
+      <div class="focus-actions">
+        <button class="prime-btn" id="rmToggle">${stopped ? '▶ Turn its agents on' : '⏸ Turn its agents off'}</button>
+        <button class="mini" id="rmHard">${stopped && ctl.hard ? 'hard stop is on' : 'and make its runner refuse turns'}</button>
+        <span class="focus-hint">${stopped ? 'nothing over there is spending' : 'turning them off stops that machine spending while you are away'}</span>
+      </div>
+    </div>
+
+    <div class="panel glass">
+      <div class="panel-head"><h3>Its board</h3><span class="panel-sub">${tasks.length} task(s)</span></div>
+      <div class="rm-tasks">${tasks.slice(0, 10).map((t) => `<div class="rm-task"><span class="rm-t-st st-${esc(t.status)}">${esc(t.status)}</span><span class="rm-t-ti">${esc(t.title)}</span>${t.agent ? `<span class="rm-t-ag">${esc(t.agent)}</span>` : ''}</div>`).join('') || '<div class="empty">nothing on it</div>'}</div>
+    </div>
+
+    <div class="panel glass">
+      <div class="panel-head"><h3>Talk to it</h3><span class="panel-sub">one real turn on that machine's subscription</span></div>
+      <textarea id="rmText" class="focus-input" rows="3" placeholder="ask the fleet over there…" spellcheck="true"></textarea>
+      <div class="focus-actions"><button class="prime-btn" id="rmSend">✦ Send</button><span class="focus-hint">it answers from there, on its own relay</span></div>
+      <div id="rmReply"></div>
+    </div>`;
+
+  $('#rmToggle').onclick = async () => {
+    await C.remote.invoke('cortex:control', [{ stopped: !stopped, hard: false }]);
+    paintRemoteLinked();
+  };
+  $('#rmHard').onclick = async () => {
+    await C.remote.invoke('cortex:control', [{ stopped: true, hard: true }]);
+    paintRemoteLinked();
+  };
+  $('#rmSend').onclick = async () => {
+    const t = $('#rmText').value.trim();
+    if (!t) return;
+    $('#rmReply').innerHTML = '<div class="rm-wait">asking…</div>';
+    const r = await C.remote.invoke('cortex:send', [{ agent: 'davara', text: t }]);
+    $('#rmReply').innerHTML = r && r.text
+      ? `<div class="mind-reply"><div class="mr-meta">from that machine</div><div class="mr-body">${esc(r.text)}</div></div>`
+      : `<div class="rm-err">${esc((r && r.error) || 'no answer')}</div>`;
+  };
+}

@@ -30,7 +30,8 @@
     "icons": "node make-icon.js && node make-tray-icons.js && node make-icns.js"
   },
   "dependencies": {
-    "nodemailer": "^6.10.1"
+    "nodemailer": "^6.10.1",
+    "ssh2": "^1.17.0"
   },
   "devDependencies": {
     "@electron/packager": "^20.0.1",

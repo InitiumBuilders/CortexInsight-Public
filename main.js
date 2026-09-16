@@ -2403,6 +2403,23 @@ function requireGate(fn) {
   };
 }
 
+// ---------------------------------------------------------------------------
+//  THE REMOTE CONSOLE.
+//  A console running on a server has no window. This is how this one reaches
+//  it: SSH, the far end's own bridge, and JSON in between. The remote machine
+//  opens no port for us — we use the door that is already there. remote.js
+//  holds the rules; this only hands it what it needs.
+// ---------------------------------------------------------------------------
+const REMOTE = safe(() => require('./remote')({
+  ipcMain,
+  requireGate,
+  getState: () => STATE,
+  saveState,
+  safeStorage,
+  notify: (_level, title, body) => pushNotification('info', title, body, 'remote', 'remote-' + title),
+  push: (channel, payload) => { if (mainWin && !mainWin.isDestroyed()) safe(() => mainWin.webContents.send(channel, payload)); },
+}), null);
+
 ipcMain.handle('cortex:overview', requireGate(() => buildOverview()));
 ipcMain.handle('cortex:agents', requireGate(() => {
   const interactions = parseInteractions();
@@ -7034,7 +7051,7 @@ const CI_ACTIONS = {
   'omni-go':      { tier: 'confirm', args: 'goal',        help: 'propose a Motus Max (OmniDrive) session — needs his tap AND the arm switch' },
   'motusmodel':   { tier: 'confirm', args: 'name|essence|mantra', help: 'draft a new MotusModel in the studio' },
 };
-const CI_VIEWS = ['overview', 'motus', 'goal', 'agents', 'subagents', 'tasks', 'workflows', 'duo', 'voice', 'chat', 'work', 'live', 'output', 'systems', 'usage', 'learnings', 'sympath', 'nextsteps', 'models', 'security', 'levels', 'settings', 'motusmodels', 'omni'];
+const CI_VIEWS = ['overview', 'motus', 'goal', 'agents', 'subagents', 'tasks', 'workflows', 'duo', 'voice', 'chat', 'work', 'live', 'output', 'systems', 'usage', 'learnings', 'sympath', 'nextsteps', 'models', 'security', 'levels', 'settings', 'motusmodels', 'omni', 'remote'];
 
 function actionVocabulary() {
   return Object.entries(CI_ACTIONS)
@@ -13948,7 +13965,21 @@ async function runSmoke() {
   // wait for two real frames before every capture, so a screenshot can be judged.
   safe(() => { wc.setBackgroundThrottling(false); mainWin.show(); mainWin.focus(); });
   const framed = () => Promise.race([wc.executeJavaScript('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(1))))').catch(() => 0), wait(900)]);
-  const shoot = async (name) => { await framed(); return safe(() => wc.capturePage().then((img) => fs.writeFileSync(path.join(outDir, name), img.toPNG()))); };
+  // A screenshot nobody can attribute is a screenshot nobody can trust. This
+  // records what was actually on screen at the moment of the capture — which
+  // room, how opaque, how tall — so a picture that looks empty can be told
+  // apart from a room that IS empty without guessing.
+  const shoot = async (name) => {
+    await framed();
+    const at = await wc.executeJavaScript(`(() => {
+      const v = document.querySelector('.view.active');
+      if (!v) return { view: 'none' };
+      const cs = getComputedStyle(v);
+      return { view: v.dataset.view, opacity: cs.opacity, display: cs.display, h: v.scrollHeight, scroll: (document.getElementById('content')||{}).scrollTop };
+    })()`).catch(() => ({ view: '?' }));
+    console.log(`[smoke] shot ${name} <- ${at.view} (opacity ${at.opacity}, ${at.h}px tall, scrolled ${at.scroll})`);
+    return safe(() => wc.capturePage().then((img) => fs.writeFileSync(path.join(outDir, name), img.toPNG())));
+  };
   // Capture EVERY renderer console error/warning — a view that throws would
   // otherwise render blank and look "fine" in a screenshot.
   const problems = [];
@@ -13961,9 +13992,22 @@ async function runSmoke() {
     await wc.executeJavaScript(`document.querySelector('[data-nav=${nav}]')?.click()`).catch(() => {});
     await wait(ms);
     if (containerId) {
-      const len = await wc.executeJavaScript(`(document.getElementById('${containerId}')||{}).innerHTML?.length||0`).catch(() => 0);
-      console.log(`[smoke] view ${nav}: ${len} chars in #${containerId}${len < 200 ? '   <-- SUSPICIOUSLY EMPTY' : ''}`);
-      if (len < 200) problems.push(`[EMPTY] view '${nav}' rendered only ${len} chars into #${containerId}`);
+      // ⚠ A ROOM WITH NOTHING IN IT IS STILL A ROOM. This measured length alone
+      // and called anything under 200 characters a problem, so an honest empty
+      // state — "No files written in the last 7 days of sessions." — failed the
+      // run. That is the harness crying wolf: the view rendered, correctly, and
+      // said the true thing. A harness that fails on the truth teaches people to
+      // stop reading it. So an element the app deliberately marks as empty
+      // counts as rendered, and only a view that says NOTHING is a problem.
+      const shape = await wc.executeJavaScript(`(() => {
+        const el = document.getElementById('${containerId}');
+        if (!el) return { len: 0, empty: false };
+        return { len: (el.innerHTML || '').length, empty: !!el.querySelector('.empty') };
+      })()`).catch(() => ({ len: 0, empty: false }));
+      const len = (shape && shape.len) || 0;
+      const honest = !!(shape && shape.empty) && len >= 40;
+      console.log(`[smoke] view ${nav}: ${len} chars in #${containerId}${honest ? '   (an honest empty state)' : (len < 200 ? '   <-- SUSPICIOUSLY EMPTY' : '')}`);
+      if (len < 200 && !honest) problems.push(`[EMPTY] view '${nav}' rendered only ${len} chars into #${containerId}`);
     }
     await shoot(`smoke-${nav}.png`);
   };
@@ -14035,6 +14079,11 @@ async function runSmoke() {
     await visit('stream', 3200, 'streamBody');
     await visit('nextsteps', 2000, null);
     await visit('security', 2000, null);
+    // REMOTE is the door to a console on another machine. It holds two sealed
+    // secrets and a pinned host key, so it is exactly the kind of room that must
+    // never ship having been opened only by hand.
+    await visit('remote', 2200, 'remoteBody');
+    await shoot('smoke-remote.png');
 
     // ── THE READINGS MUST ACTUALLY READ ────────────────────────────────────
     // A view that renders is not a view that reports. Each of these three
@@ -14661,7 +14710,7 @@ async function runFreshTest() {
   });
   wc.on('render-process-gone', (_e, d) => problems.push(`[FATAL] renderer gone: ${d && d.reason}`));
   const textOf = (nav) => wc.executeJavaScript(`(function(){const s=document.querySelector('section[data-view="${nav}"]');return s?(s.innerText||'').replace(/\\s+/g,' ').trim():''})()`).catch(() => '');
-  const VIEWS = ['overview', 'motus', 'goal', 'live', 'omni', 'tasks', 'duo', 'workflows', 'chat', 'voice', 'agents', 'subagents', 'sympath', 'motusmodels', 'stream', 'output', 'work', 'systems', 'mind', 'learnings', 'nextsteps', 'usage', 'models', 'security', 'settings', 'levels'];
+  const VIEWS = ['overview', 'motus', 'goal', 'live', 'omni', 'tasks', 'duo', 'workflows', 'chat', 'voice', 'agents', 'subagents', 'sympath', 'motusmodels', 'stream', 'output', 'work', 'systems', 'mind', 'learnings', 'nextsteps', 'usage', 'models', 'security', 'settings', 'levels', 'remote'];
   try {
     log('[fresh] vault: ' + userDataDir());
     log('[fresh] root: ' + root() + ' · readable=' + exists(root()) + ' · passSha=' + !!(STATE.settings || {}).passSha + ' · paired=' + ((STATE.trustedFingerprints || []).length > 0));

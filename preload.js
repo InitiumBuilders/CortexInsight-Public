@@ -226,6 +226,17 @@ contextBridge.exposeInMainWorld('cortex', {
   onLiveEvent: (cb) => ipcRenderer.on('cortex:liveEvent', (_e, data) => cb(data)),
   onOmni: (cb) => ipcRenderer.on('cortex:omni', (_e, data) => cb(data)),
 
+  // --- the console that runs somewhere else ---
+  remote: {
+    get: () => ipcRenderer.invoke('cortex:remote'),
+    save: (p) => ipcRenderer.invoke('cortex:remoteSave', p),
+    connect: (p) => ipcRenderer.invoke('cortex:remoteConnect', p || {}),
+    disconnect: () => ipcRenderer.invoke('cortex:remoteDisconnect'),
+    invoke: (channel, args) => ipcRenderer.invoke('cortex:remoteInvoke', { channel, args }),
+    watch: () => ipcRenderer.invoke('cortex:remoteWatch'),
+    onEvent: (cb) => ipcRenderer.on('cortex:remoteEvent', (_e, data) => cb(data)),
+  },
+
   // --- frameless window controls ---
   win: {
     min: () => ipcRenderer.invoke('win:min'),
