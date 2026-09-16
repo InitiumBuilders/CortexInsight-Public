@@ -37,6 +37,7 @@ jobs:
           node --check linux/rpc.js
           node --check linux/seal.js
           node --check linux/electron-shim.js
+          node --check scripts/remote-test.js
       - name: the shell and python the server runs
         run: |
           bash -n linux/install.sh
@@ -128,6 +129,15 @@ jobs:
               p.kill(); process.exit(0);
             }, 3200);
           '
+      # Remote is the one surface that crosses a network, so "the library is
+      # mature" is not a test of it. This stands up a throwaway SSH server on
+      # loopback, has it run the real bridge, and drives the real remote.js.
+      - name: the remote console, over a real ssh connection
+        run: |
+          set -e
+          export XDG_RUNTIME_DIR=/tmp/xdg
+          npm install --omit=dev --no-audit --no-fund
+          node scripts/remote-test.js
       # ⚠ There is deliberately no packaging step here. This job asserts that the
       # console runs with NO Electron installed, and @electron/packager needs
       # Electron, so adding one would quietly install the very thing the job

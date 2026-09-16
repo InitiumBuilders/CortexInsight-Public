@@ -77,6 +77,13 @@ module.exports = function attachRemote(ctx) {
   const waiting = new Map();
   let buf = '';
   let connecting = null;
+  // ⚠ Every connection carries a number, and its handlers check that number
+  // before touching anything shared. Without it, a 'close' arriving late from a
+  // connection that was already replaced would run the teardown against the
+  // LIVE one: connect, disconnect, connect again, and the second connection
+  // dies a second later for no visible reason. The events are asynchronous and
+  // arrive whenever the socket feels like it, so identity has to be explicit.
+  let generation = 0;
 
   function reset(why) {
     ready = false;
@@ -119,6 +126,8 @@ module.exports = function attachRemote(ctx) {
   function connect({ acceptHostKey } = {}) {
     if (connecting) return connecting;
     const r = S();
+    const gen = ++generation;
+    const mine = () => gen === generation;
     connecting = (async () => {
       if (!Client) throw new Error('the SSH client is not installed in this build');
       if (!r.host || !r.user) throw new Error('give it a host and a user first');
@@ -129,13 +138,25 @@ module.exports = function attachRemote(ctx) {
       if (r.auth === 'password' && !password) throw new Error('no SSH password is stored for this host');
       if (!phrase) throw new Error('no passphrase is stored for the console on that machine');
 
+      // ⚠ Decide WHY at the verifier, not afterwards. The first cut inferred the
+      // reason in the catch by comparing fingerprints, which meant it depended on
+      // whether ssh2 emitted 'error' or 'close' first and on the verifier having
+      // run at all. A rejected host key then surfaced as "the connection closed
+      // before it opened" — correct behaviour, useless explanation, on the one
+      // screen whose entire job is to explain. The verifier knows the answer at
+      // the moment it refuses, so it records it there.
       let offered = '';
+      let verdict = '';         // '' | 'unknown' | 'mismatch'
       await new Promise((resolve, reject) => {
         const c = new Client();
         conn = c;
         c.on('ready', resolve);
-        c.on('error', (e) => reject(new Error(friendly(e))));
-        c.on('close', () => { if (!ready) reject(new Error('the connection closed before it opened')); else reset('the connection closed'); });
+        c.on('error', (e) => { if (mine()) reject(new Error(friendly(e))); });
+        c.on('close', () => {
+          if (!mine()) return;                   // a ghost of a replaced connection
+          if (!ready) reject(new Error('the connection closed before it opened'));
+          else reset('the connection closed');
+        });
         const cfg = {
           host: r.host,
           port: Number(r.port) || 22,
@@ -145,8 +166,14 @@ module.exports = function attachRemote(ctx) {
           // ① the machine is who it says it is
           hostVerifier: (key) => {
             offered = fingerprintOf(key);
-            if (!r.hostKey) return !!acceptHostKey;       // first time: only with the operator's yes
-            return offered === r.hostKey;
+            if (!r.hostKey) {                            // first time: only with the operator's yes
+              if (acceptHostKey) return true;
+              verdict = 'unknown';
+              return false;
+            }
+            if (offered === r.hostKey) return true;
+            verdict = 'mismatch';
+            return false;
           },
         };
         if (r.auth === 'key') {
@@ -162,14 +189,13 @@ module.exports = function attachRemote(ctx) {
         }
         c.connect(cfg);
       }).catch((e) => {
-        const first = !r.hostKey;
         reset();
-        if (first && offered && !acceptHostKey) {
+        if (verdict === 'unknown') {
           const err = new Error('unknown-host');
           err.fingerprint = offered;
           throw err;
         }
-        if (!first && offered && offered !== r.hostKey) {
+        if (verdict === 'mismatch') {
           const err = new Error('THE HOST KEY CHANGED. This machine is not presenting the key it presented before. '
             + 'Do not enter your passphrase until you know why. If you rebuilt the server, clear the stored key and connect again.');
           err.fingerprint = offered;
@@ -185,14 +211,15 @@ module.exports = function attachRemote(ctx) {
       stream = await new Promise((resolve, reject) => {
         conn.exec('cortex rpc', (err, st) => (err ? reject(new Error('could not start the console there: ' + err.message)) : resolve(st)));
       });
-      stream.on('data', onData);
+      if (!mine()) { reset(); throw new Error('a newer connection replaced this one'); }
+      stream.on('data', (d) => { if (mine()) onData(d); });
       stream.stderr.on('data', (d) => {
         const s = String(d).trim();
         // A shell that cannot find cortex is the most common first failure, and
         // it looks like nothing at all without this.
-        if (/command not found|not found/i.test(s)) reset('cortex is not on the PATH for that account there');
+        if (mine() && /command not found|not found/i.test(s)) reset('cortex is not on the PATH for that account there');
       });
-      stream.on('close', () => reset('the console there closed the connection'));
+      stream.on('close', () => { if (mine()) reset('the console there closed the connection'); });
 
       const hello = await sendLine({ op: 'hello' });
       if (hello.needsSetup) throw new Error('the console on that machine has no passphrase yet. Run "cortex setup" there first.');

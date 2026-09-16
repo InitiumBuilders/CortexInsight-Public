@@ -27,7 +27,8 @@
     "package:mac-x64": "electron-packager . CortexInsight --platform=darwin --arch=x64 --out=release-next --overwrite --asar --icon=assets/icon.icns --app-bundle-id=com.outlier.cortexinsight --ignore=\"^/release\" --ignore=\"^/release-next\" --ignore=\"\\.bak\" --ignore=\"^/\\.git\" --ignore=\"^/\\.github\"",
     "deploy": "powershell -ExecutionPolicy Bypass -File Build-And-Install.ps1",
     "deploy:mac": "bash build-and-install.sh",
-    "icons": "node make-icon.js && node make-tray-icons.js && node make-icns.js"
+    "icons": "node make-icon.js && node make-tray-icons.js && node make-icns.js",
+    "remotetest": "node scripts/remote-test.js"
   },
   "dependencies": {
     "nodemailer": "^6.10.1",
