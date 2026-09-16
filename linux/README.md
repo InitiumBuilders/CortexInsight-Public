@@ -171,6 +171,32 @@ the honest way to stop it costing you anything.
 
 ---
 
+## If that machine already runs a Hermes harness
+
+It keeps working, and it goes through the same mouth.
+
+The bundled relay is a drop-in: it listens on `127.0.0.1:8788`, speaks the
+OpenAI chat-completions shape, streams when asked, and reads a seat out of the
+model name. A gateway already pointed at that address needs no change at all.
+
+Model names map to seats by the name inside them, longest first, so
+`cortex-davara`, `davaris-fast`, `anything-workhorse` all land where you would
+expect. Anything it does not recognise goes to the default seat, which you can
+change with `CORTEX_DEFAULT_AGENT` in the relay's service file.
+
+Two things to know if you had a relay there already:
+
+- The installer noticed your fleet tree and asked before replacing the runner in
+  it. If you said no, your runner is untouched and the console's fleet bridge is
+  not in it, which means per-seat model choices and the hard stop will not reach
+  your turns. `cortex doctor` says so.
+- Only one thing can hold port 8788. If your own relay is already running there,
+  either leave it and skip the bundled one (`systemctl --user disable --now
+  cortex-relay`), or stop yours and let this one serve. They do the same job.
+
+Either way, what an agent writes to the queue with `ci.sh` still lands on the
+board, and the brief still rides at the top of every turn.
+
 ## Reaching it from your desktop
 
 Open CortexInsight on your Windows or Mac machine and go to **Remote** in the
