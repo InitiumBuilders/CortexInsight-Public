@@ -196,7 +196,10 @@ for f in cortex-run.sh cortex-lib.sh cortex-mouth.py cortex-stream-parse.py; do
 done
 chmod +x "$RELAY_DST"/*.sh "$RELAY_DST"/*.py
 bash -n "$RELAY_DST/cortex-run.sh" || die "the runner did not pass a syntax check; nothing was started"
-python3 -m py_compile "$RELAY_DST/cortex-mouth.py" || die "the relay did not compile; nothing was started"
+# PYTHONDONTWRITEBYTECODE: the compile check used to leave a __pycache__ folder
+# sitting in the operator's fleet tree, which this app treats as read-only
+# territory by intent. Checking that something compiles should not write anything.
+PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile "$RELAY_DST/cortex-mouth.py" || die "the relay did not compile; nothing was started"
 ok "installed and checked into $RELAY_DST"
 ok "the console's fleet bridge is already in the runner"
 
