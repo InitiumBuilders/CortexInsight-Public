@@ -43,14 +43,41 @@ download any of that.
 Log into the machine as your normal user. Not as root: the console runs as you,
 and a vault owned by root would lock you out of your own console.
 
+### First, tell that machine who you are on GitHub
+
+This repository is private, which is the point. A plain `git clone` would sit
+there asking for a password that no longer exists, because GitHub stopped
+accepting account passwords over HTTPS years ago. Sign in once with GitHub's own
+tool instead:
+
 ```bash
-git clone https://github.com/InitiumBuilders/CortexInsight-Linux.git
+sudo apt update && sudo apt install -y gh git
+gh auth login
+```
+
+Answer **GitHub.com**, then **HTTPS**, then **yes** to authenticating git with
+your credentials, then **login with a web browser**. It shows you an eight
+character code and a link. Open the link on any device, type the code, approve.
+
+That machine is now signed in, and git will use it without asking again.
+
+### Then the install
+
+```bash
+gh repo clone InitiumBuilders/CortexInsight-Linux
 cd CortexInsight-Linux
 bash linux/install.sh
 ```
 
 That is the whole thing. It is safe to run again later; every step checks
 whether it is already done.
+
+If you would rather not put a GitHub login on the server, copy the folder up
+from your desktop instead and skip straight to `bash linux/install.sh`:
+
+```bash
+scp -r CortexInsight-Linux you@your-server:~/
+```
 
 ### What it will ask you
 
