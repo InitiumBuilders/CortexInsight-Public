@@ -386,10 +386,15 @@ async function loadRemote() {
           <option value="password"${r.auth === 'password' ? ' selected' : ''}>a password</option>
           <option value="key"${r.auth === 'key' ? ' selected' : ''}>a key file</option>
         </select>
-        <label class="fr-lbl">${r.auth === 'key' ? 'Key file' : 'SSH password'}</label>
-        ${r.auth === 'key'
-          ? `<input id="rmKeyPath" class="txt" type="text" value="${escAttr(r.keyPath)}" placeholder="~/.ssh/id_ed25519" spellcheck="false"/>`
-          : `<input id="rmPass" class="txt" type="password" placeholder="${r.hasPassword ? 'stored — leave blank to keep it' : 'the password for that account'}" autocomplete="off"/>`}
+        ${r.auth === 'key' ? `
+        <label class="fr-lbl">Key file</label>
+        <input id="rmKeyPath" class="txt" type="text" value="${escAttr(r.keyPath)}" placeholder="C:\\Users\\you\\.ssh\\id_ed25519" spellcheck="false"/>
+        <label class="fr-lbl">Key passphrase</label>
+        <input id="rmPass" class="txt" type="password" placeholder="${r.hasPassword ? 'stored — leave blank to keep it' : 'only if your key has one; most do not'}" autocomplete="off"/>
+        ` : `
+        <label class="fr-lbl">SSH password</label>
+        <input id="rmPass" class="txt" type="password" placeholder="${r.hasPassword ? 'stored — leave blank to keep it' : 'the password for that account'}" autocomplete="off"/>
+        `}
         <label class="fr-lbl">Its passphrase</label>
         <input id="rmPhrase" class="txt" type="password" placeholder="${r.hasPhrase ? 'stored — leave blank to keep it' : 'the gate passphrase of the console over there'}" autocomplete="off"/>
       </div>
@@ -412,7 +417,12 @@ async function loadRemote() {
   `);
 
   $('#rmAuth').onchange = async () => {
-    await C.remote.save({ auth: $('#rmAuth').value });
+    // ⚠ The stored secret means different things in the two modes: an account
+    // password in one, a key's own passphrase in the other. Carrying it across
+    // silently would hand ssh2 a passphrase for a key that has none, or an old
+    // key passphrase as an account password, and the failure would look like
+    // the server refusing you. Changing the mode forgets it.
+    await C.remote.save({ auth: $('#rmAuth').value, password: null });
     loadRemote();
   };
   $('#rmSave').onclick = () => saveRemote(false);
