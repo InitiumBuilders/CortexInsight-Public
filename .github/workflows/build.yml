@@ -128,24 +128,12 @@ jobs:
               p.kill(); process.exit(0);
             }, 3200);
           '
-      - name: package for a linux desktop
-        run: npx --yes @electron/packager . CortexInsight --platform=linux --arch=x64 --out=release-next --overwrite --asar --ignore="^/release" --ignore="^/release-next" --ignore="\.bak" --ignore="^/\.git" --ignore="^/\.github"
-      - name: zip
-        run: |
-          V=$(node -p "require('./package.json').version")
-          cd release-next && tar czf "../CortexInsight-$V-linux-x64.tar.gz" CortexInsight-linux-x64
-      - name: keep the build
-        uses: actions/upload-artifact@v4
-        with:
-          name: CortexInsight-linux-x64
-          path: CortexInsight-*-linux-x64.tar.gz
-          if-no-files-found: error
-      - name: release on a version tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: CortexInsight-*-linux-x64.tar.gz
-          generate_release_notes: true
+      # ⚠ There is deliberately no packaging step here. This job asserts that the
+      # console runs with NO Electron installed, and @electron/packager needs
+      # Electron, so adding one would quietly install the very thing the job
+      # exists to prove is unnecessary. A server is installed from the clone, not
+      # from a packaged build. If a Linux DESKTOP build is ever wanted it belongs
+      # in its own job, with its own dependencies and its own reason.
 
   windows:
     name: fresh run and package (windows)
