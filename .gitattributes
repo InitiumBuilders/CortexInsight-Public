@@ -10,3 +10,6 @@
 *.jpg binary
 *.woff binary
 *.woff2 binary
+
+# Linux carries shell and python; both must land with LF wherever they are checked out
+*.py eol=lf

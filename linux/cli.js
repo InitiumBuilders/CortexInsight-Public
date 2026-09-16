@@ -533,7 +533,7 @@ async function main() {
       case 'ask': await sendTo(cl, 'davara', rest); break;
       case 'setup': await setup(cl); break;
       case 'tree': await tree(cl, rest); break;
-      case 'doctor': await doctor(cl); break;
+      case 'doctor': await doctor(cl, argv.includes('--live')); break;
       case 'channels': (await cl.channels()).forEach((x) => OUT('  ' + x)); break;
       case 'raw': {
         const ch = argv[1];
@@ -596,7 +596,7 @@ async function tree(cl, p) {
   OUT(r && r.error ? rose('  ' + r.error) : green('  fleet tree set to ' + p));
 }
 
-async function doctor(cl) {
+async function doctor(cl, live) {
   const [g, ov, ctl] = await Promise.all([cl.invoke('guard:status'), cl.invoke('cortex:overview'), cl.invoke('cortex:control')]);
   head('Doctor', 'what is true right now');
   const line = (ok, label, fix) => {
@@ -609,6 +609,26 @@ async function doctor(cl) {
   line(ctl.bridgeInstalled, 'the fleet bridge is in the runner', 'cortex bridge install');
   line(!ctl.stopped, 'the agents are on', 'cortex on');
   line(ov.stats.totalTurns > 0, 'turns have been read from the tree', 'check the tree path');
+
+  // ⚠ SHAPE IS NOT FUNCTION. Everything above can be green on a machine that is
+  // quietly signed out: the token file exists, the relay is listening, the
+  // runner is in place, and every turn still dies with an auth error. The only
+  // way to know is to run one. It is a few words to the leanest seat.
+  if (live) {
+    OUT('  ' + dim('· asking the fleet one short question…'));
+    let said = '';
+    try {
+      const r = await cl.invoke('cortex:send', { agent: 'workhorse', text: 'Reply with exactly: READY' });
+      said = String((r && r.text) || (r && r.error) || '');
+    } catch (e) { said = String((e && e.message) || ''); }
+    const signedOut = /signed out of claude code|failed to authenticate|oauth session expired/i.test(said);
+    const answered = /ready/i.test(said);
+    line(answered && !signedOut, 'a real turn came back from the fleet',
+      signedOut ? 'claude setup-token, save it to ~/.claude/cortex-oauth-token, then: cortex relay restart' : 'cortex relay logs');
+    if (!answered && said) OUT(wrap(dim(said.slice(0, 300)), undefined, '      '));
+  } else {
+    OUT('  ' + dim('  (add --live to spend one short turn proving the fleet actually answers)'));
+  }
   OUT();
 }
 
