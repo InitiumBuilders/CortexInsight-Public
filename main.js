@@ -1022,7 +1022,14 @@ function parseProxyLog(maxBytes = 80 * 1024) {
     if (!m) continue;
     const epoch = Date.parse(m[1].replace(' ', 'T')) || 0;
     const kind = m[2];
-    if (/^START/.test(ln) || /cortex-mouth-proxy on/.test(ln)) lastStart = epoch;
+    // ⚠ This matched a PHRASE, and the phrase belonged to one particular relay.
+    // The line always begins with a timestamp, so /^START/ could never fire, and
+    // the whole check rested on the words "cortex-mouth-proxy on" appearing.
+    // A relay that introduced itself any other way was read as never having
+    // started: the console said the relay was down while the relay answered
+    // /health perfectly, and the operator had two of my own tools contradicting
+    // each other. The second field IS the kind. Read that.
+    if (kind === 'START' || /cortex-mouth-proxy on/.test(ln)) lastStart = epoch;
     events.push({ ts: m[1], epoch, kind, rest: m[3] });
   }
   const result = { events, lastStart, lines };

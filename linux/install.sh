@@ -70,7 +70,22 @@ say ""
 say "  ${VIO}${B}CortexInsight${R} ${D}— installing on this machine${R}"
 say "  ${D}$(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME") · $(uname -m) · $(whoami)@$(hostname)${R}"
 
-[ "$(id -u)" = "0" ] && die "Run this as your normal user, not as root. The console runs as you, and a vault owned by root would lock you out of it."
+# ⚠ Root is not a mistake on every machine. Plenty of VPS images hand you a root
+# account and nothing else, and refusing outright would mean the console simply
+# does not run there. What actually causes trouble is a SPLIT: installing as one
+# user and running as another, which leaves a vault the running user cannot
+# read. So say what root means, and carry on.
+if [ "$(id -u)" = "0" ]; then
+  warn "you are root"
+  info "Everything will be installed for root: the vault in /root/.config, the"
+  info "services under root, and the console running as root. That is fine if"
+  info "root is the only account on this machine, which is normal on a VPS."
+  info "If you have another account you actually work in, stop and run this"
+  info "there instead, because a vault made here will not open there."
+  if [ -t 0 ] && ! ask "carry on as root?" y; then
+    die "Nothing was changed. Log in as the account you want the console to run as."
+  fi
+fi
 
 # ── 1. the toolchain ────────────────────────────────────────────────────────
 step "Checking what is already here"

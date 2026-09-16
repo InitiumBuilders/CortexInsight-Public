@@ -60,6 +60,9 @@ const ago = (ms) => {
 //  Service control — systemd if it is there, a plain process if it is not.
 // ---------------------------------------------------------------------------
 const UNIT = 'cortexinsight.service';
+// The exact thing the desktop app asks this machine to run over SSH. Kept here
+// so the check below tests the real command and not a description of it.
+const BRIDGE_CMD = 'command -v cortex >/dev/null 2>&1 && exec cortex rpc; exec "$HOME/.local/bin/cortex" rpc';
 const APP_ROOT = path.resolve(__dirname, '..');
 
 function sh(file, args, opts = {}) {
@@ -625,6 +628,34 @@ async function doctor(cl, live) {
   const nodeReach = await sh('sh', ['-lc', 'command -v node >/dev/null 2>&1 && echo yes || echo no']);
   line(/yes/.test(nodeReach.out || ''), 'a remote login can find node',
     'sudo ln -s "$(command -v node)" /usr/local/bin/node');
+
+  // ⚠ THE WHOLE OF REMOTE, IN ONE LINE. The two checks above ask whether the
+  // pieces can be found. This runs the real command in the real kind of shell
+  // and waits for the bridge to announce itself, which is exactly what the
+  // desktop app does. If this is green and the app still cannot connect, the
+  // problem is between the two machines rather than on this one, and that is
+  // worth knowing without another round trip.
+  const bridge = await new Promise((resolve) => {
+    let out = '';
+    let done = false;
+    const finish = (r) => { if (!done) { done = true; resolve(r); } };
+    const p = spawn('sh', ['-lc', BRIDGE_CMD], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const timer = setTimeout(() => { try { p.kill(); } catch {} finish({ ok: false, why: 'it did not answer in 15 seconds' }); }, 15000);
+    p.stdout.on('data', (d) => {
+      out += String(d);
+      if (out.includes('"ready"')) { clearTimeout(timer); try { p.kill(); } catch {} finish({ ok: true }); }
+    });
+    let err = '';
+    p.stderr.on('data', (d) => { err += String(d); });
+    p.on('error', (e) => { clearTimeout(timer); finish({ ok: false, why: e.message }); });
+    p.on('close', (code) => {
+      clearTimeout(timer);
+      finish({ ok: false, why: (err.trim().split('\n')[0] || ('it exited with code ' + code)) });
+    });
+    setTimeout(() => { try { p.stdin.write('{"id":1,"op":"hello"}\n'); } catch {} }, 250);
+  });
+  line(bridge.ok, 'the bridge the desktop app runs starts and answers', bridge.ok ? '' : 'cortex logs');
+  if (!bridge.ok) OUT(wrap(dim(bridge.why || ''), undefined, '      '));
 
   // ⚠ The check nobody thinks of until the first reboot. Without lingering,
   // every user service stops the moment you log out, which on a server is most

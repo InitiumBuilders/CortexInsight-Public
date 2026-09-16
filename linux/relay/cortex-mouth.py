@@ -395,7 +395,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     os.makedirs(os.path.join(ROOT, "logs"), exist_ok=True)
-    log(f"START cortex-mouth on 127.0.0.1:{PORT} root={ROOT} key={'yes' if KEY else 'no'}")
+    # The phrase matters: a console older than this file recognises a relay
+    # starting by these exact words. Keeping them costs nothing and means a
+    # desktop build that has not been updated still sees the relay come up.
+    log(f"START cortex-mouth-proxy on 127.0.0.1:{PORT} root={ROOT} key={'yes' if KEY else 'no'}")
     print(f"relay listening on 127.0.0.1:{PORT}  (fleet tree: {ROOT})", flush=True)
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
 
