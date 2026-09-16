@@ -32,15 +32,33 @@ const violet = c('38;5;141'), cyan = c('38;5;80'), gold = c('38;5;179');
 const rose = c('38;5;204'), green = c('38;5;114'), grey = c('38;5;246');
 
 const OUT = (s = '') => process.stdout.write(s + '\n');
+// ⚠ This used to begin by replacing every run of whitespace with one space,
+// which flattened the whole reply into a single paragraph. Lists lost their
+// bullets, numbered steps ran together, and a fenced code block came out as
+// prose with backticks floating in it. An agent that answers in structure and
+// is rendered without it has been paraphrased by its own terminal.
+//
+// So: line breaks are the author's and are kept. Blank lines are kept, because
+// they are what separates a thought. Each line keeps its own leading space, so
+// a bullet stays under its bullet and an indented block stays indented. Only a
+// line too long for the window is wrapped, and only that line.
 const wrap = (s, w = Math.min((process.stdout.columns || 80) - 2, 96), indent = '') => {
-  const words = String(s).replace(/\s+/g, ' ').trim().split(' ');
-  const lines = []; let line = '';
-  for (const word of words) {
-    if ((line + ' ' + word).trim().length > w - indent.length) { lines.push(indent + line.trim()); line = word; }
-    else line += ' ' + word;
+  const out = [];
+  for (const raw of String(s == null ? '' : s).replace(/\r/g, '').split('\n')) {
+    const lead = (raw.match(/^[ \t]*/) || [''])[0].replace(/\t/g, '  ').slice(0, 10);
+    const body = raw.trim();
+    if (!body) { out.push(''); continue; }
+    const room = Math.max(24, w - indent.length - lead.length);
+    let line = '';
+    for (const word of body.split(/\s+/)) {
+      if (line && (line + ' ' + word).length > room) { out.push(indent + lead + line); line = word; }
+      else line = line ? line + ' ' + word : word;
+    }
+    if (line) out.push(indent + lead + line);
   }
-  if (line.trim()) lines.push(indent + line.trim());
-  return lines.join('\n');
+  // a reply that ends in blank lines should not push the prompt down the screen
+  while (out.length && !out[out.length - 1].trim()) out.pop();
+  return out.join('\n');
 };
 const rule = () => OUT(dim('─'.repeat(Math.min((process.stdout.columns || 80) - 2, 72))));
 const head = (t, sub) => { OUT(); OUT(bold(violet(t)) + (sub ? '  ' + dim(sub) : '')); rule(); };
@@ -377,7 +395,12 @@ async function repl(cl) {
   rl.on('line', (raw) => { rl.pause(); runLine(raw).then(() => { rl.resume(); rl.prompt(); }); });
 
   async function handleLine(raw) {
-    const line = raw.trim();
+    // ⚠ Inside the console you are already in cortex, but typing "cortex help"
+    // is the most natural thing in the world and it used to be SENT to an agent
+    // as a question. She read the source and explained the help text back, which
+    // took forty-two seconds and one real turn to tell him something this
+    // process already knew. Anything addressed to cortex is meant for cortex.
+    const line = raw.trim().replace(/^cortex\s+/i, '');
     if (!line) { rl.prompt(); return; }
     const [cmd, ...rest] = line.split(' ');
     const arg = rest.join(' ').trim();
