@@ -25,3 +25,7 @@ fresh-artifacts/
 .DS_Store
 Thumbs.db
 ci-*.txt
+
+# python leaves these behind whenever a script is compile-checked
+__pycache__/
+*.pyc

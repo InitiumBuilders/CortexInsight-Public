@@ -27,10 +27,125 @@ jobs:
         run: |
           node --check main.js
           node --check preload.js
+          node --check remote.js
           node --check src/renderer.js
           node --check src/renderer-v2.js
+          node --check src/renderer-v3.js
+          node --check linux/host.js
+          node --check linux/cli.js
+          node --check linux/client.js
+          node --check linux/rpc.js
+          node --check linux/seal.js
+          node --check linux/electron-shim.js
+      - name: the shell and python the server runs
+        run: |
+          bash -n linux/install.sh
+          bash -n linux/uninstall.sh
+          bash -n linux/relay/cortex-run.sh
+          bash -n linux/relay/cortex-lib.sh
+          python3 -m py_compile linux/relay/cortex-mouth.py linux/relay/cortex-stream-parse.py
       - name: gate
         run: node scripts/oss-check.js
+
+  # The server, on a machine nobody here has touched. This is the only job that
+  # proves the headless host actually boots: no Electron is installed at all, so
+  # if the shim ever stops standing in for it, this fails and nothing else would.
+  linux:
+    name: headless host and terminal (linux)
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: dependencies, without Electron
+        run: npm ci --omit=dev
+      - name: the console boots with no screen
+        run: |
+          set -e
+          export XDG_RUNTIME_DIR=/tmp/xdg
+          mkdir -p "$XDG_RUNTIME_DIR"
+          node linux/host.js > /tmp/host.log 2>&1 &
+          for i in $(seq 1 90); do
+            [ -S "$XDG_RUNTIME_DIR/cortexinsight/control.sock" ] && break
+            sleep 1
+          done
+          if [ ! -S "$XDG_RUNTIME_DIR/cortexinsight/control.sock" ]; then
+            echo "the console never opened its socket"; cat /tmp/host.log; exit 1
+          fi
+          echo "--- the host said ---"; cat /tmp/host.log
+      - name: the socket is the operator's alone
+        run: |
+          MODE=$(stat -c %a /tmp/xdg/cortexinsight/control.sock)
+          echo "socket mode $MODE"
+          [ "$MODE" = "600" ] || { echo "the socket is not owner-only"; exit 1; }
+      - name: the terminal answers
+        run: |
+          set -e
+          export XDG_RUNTIME_DIR=/tmp/xdg
+          node linux/cli.js status
+          node linux/cli.js doctor
+          node linux/cli.js channels | wc -l
+      - name: the vault is owner-only
+        run: |
+          set -e
+          cd ~/.config/cortexinsight
+          ls -la
+          for f in *; do
+            [ -f "$f" ] || continue
+            MODE=$(stat -c %a "$f")
+            [ "$MODE" = "600" ] || { echo "$f is $MODE, not 600"; exit 1; }
+          done
+          echo "every file in the vault is owner-only"
+      - name: the two locks hold
+        run: |
+          set -e
+          export XDG_RUNTIME_DIR=/tmp/xdg
+          node -e '
+            const { spawn } = require("child_process");
+            const p = spawn("node", ["linux/cli.js", "rpc"], { stdio: ["pipe", "pipe", "inherit"] });
+            const seen = [];
+            let buf = "";
+            p.stdout.on("data", (d) => {
+              buf += d;
+              let i;
+              while ((i = buf.indexOf("\n")) >= 0) {
+                const l = buf.slice(0, i); buf = buf.slice(i + 1);
+                if (l.trim()) seen.push(JSON.parse(l));
+              }
+            });
+            const send = (o) => p.stdin.write(JSON.stringify(o) + "\n");
+            setTimeout(() => send({ id: 1, op: "hello" }), 800);
+            setTimeout(() => send({ id: 2, op: "invoke", channel: "cortex:overview" }), 1800);
+            setTimeout(() => {
+              const hello = seen.find((m) => m.id === 1);
+              const locked = seen.find((m) => m.id === 2);
+              if (!hello || !hello.ok) { console.error("hello did not answer"); process.exit(1); }
+              if (!locked || locked.ok) { console.error("an invoke got through without the passphrase"); process.exit(1); }
+              console.log("hello answers freely; invoke is refused:", locked.error);
+              p.kill(); process.exit(0);
+            }, 3200);
+          '
+      - name: package for a linux desktop
+        run: npx --yes @electron/packager . CortexInsight --platform=linux --arch=x64 --out=release-next --overwrite --asar --ignore="^/release" --ignore="^/release-next" --ignore="\.bak" --ignore="^/\.git" --ignore="^/\.github"
+      - name: zip
+        run: |
+          V=$(node -p "require('./package.json').version")
+          cd release-next && tar czf "../CortexInsight-$V-linux-x64.tar.gz" CortexInsight-linux-x64
+      - name: keep the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: CortexInsight-linux-x64
+          path: CortexInsight-*-linux-x64.tar.gz
+          if-no-files-found: error
+      - name: release on a version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: CortexInsight-*-linux-x64.tar.gz
+          generate_release_notes: true
 
   windows:
     name: fresh run and package (windows)
