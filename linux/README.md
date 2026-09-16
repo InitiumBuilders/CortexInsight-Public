@@ -197,6 +197,21 @@ Two things to know if you had a relay there already:
 Either way, what an agent writes to the queue with `ci.sh` still lands on the
 board, and the brief still rides at the top of every turn.
 
+## One console per fleet tree
+
+Two consoles pointed at the same fleet tree will fight. Both write the bridge
+config and the brief into `<the tree's parent>/.cortexinsight/`, and the last
+one to write wins, so a second console can quietly hand your agents a different
+model or a stale orientation.
+
+In normal use this never comes up, because your desktop and your server have
+their own trees. It comes up the moment you point a second console at a tree
+that already has one, which is easy to do while trying things out.
+
+If you want to watch a machine's fleet from elsewhere, use Remote rather than a
+second console on the same tree. Remote drives the console that already owns
+that tree instead of becoming a rival to it.
+
 ## Reaching it from your desktop
 
 Open CortexInsight on your Windows or Mac machine and go to **Remote** in the
