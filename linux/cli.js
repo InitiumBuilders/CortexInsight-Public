@@ -609,6 +609,31 @@ async function doctor(cl, live) {
   line(!!ov.proxyStart, 'the relay is up on 127.0.0.1:8788', 'cortex relay start');
   line(ctl.bridgeInstalled, 'the fleet bridge is in the runner', 'cortex bridge install');
   line(!ctl.stopped, 'the agents are on', 'cortex on');
+  // ⚠ THE CHECK THAT ANSWERS "why won't Remote connect". The desktop app reaches
+  // this machine by running one command over SSH, and that command lands in a
+  // non-interactive, non-login shell which reads neither file that puts
+  // ~/.local/bin on the PATH. So ask the exact question the app asks, in the
+  // exact kind of shell it asks in, and report what comes back. node matters
+  // too: the cortex on the PATH is a two-line wrapper that runs node, so a node
+  // installed by nvm is just as invisible as an unfindable cortex.
+  const reach = await sh('sh', ['-lc',
+    'command -v cortex >/dev/null 2>&1 && echo path || { [ -x "$HOME/.local/bin/cortex" ] && echo fallback || echo no; }']);
+  const how = (reach.out || '').trim();
+  line(how === 'path' || how === 'fallback', 'a remote login can find cortex',
+    'sudo ln -s ~/.local/bin/cortex /usr/local/bin/cortex');
+  if (how === 'fallback') OUT(dim('      (not on the PATH, but the app knows where to look)'));
+  const nodeReach = await sh('sh', ['-lc', 'command -v node >/dev/null 2>&1 && echo yes || echo no']);
+  line(/yes/.test(nodeReach.out || ''), 'a remote login can find node',
+    'sudo ln -s "$(command -v node)" /usr/local/bin/node');
+
+  // ⚠ The check nobody thinks of until the first reboot. Without lingering,
+  // every user service stops the moment you log out, which on a server is most
+  // of the time, and comes back for nobody.
+  const linger = await sh('loginctl', ['show-user', String(process.env.USER || ''), '-p', 'Linger']);
+  if (linger.ok) {
+    line(/Linger=yes/.test(linger.out), 'it will come back after a reboot',
+      'sudo loginctl enable-linger ' + (process.env.USER || '$USER'));
+  }
   line(ov.stats.totalTurns > 0, 'turns have been read from the tree', 'check the tree path');
 
   // ⚠ SHAPE IS NOT FUNCTION. Everything above can be green on a machine that is
@@ -673,18 +698,60 @@ async function update() {
   OUT();
 }
 
+// ⚠ Which unit? This used to be hard-coded to the name the ORIGINAL machine
+// happened to use, which is not the name the installer writes. The command then
+// answered "Unit cortex-mouth-proxy.service not found" on a machine where the
+// relay was installed and working, which is the least helpful thing it could
+// have said. Ask systemd what is actually there, newest name first, and fall
+// back to the older one so a machine set up before this still answers.
+const RELAY_UNITS = ['cortex-relay.service', 'cortex-mouth-proxy.service'];
+async function relayUnit() {
+  for (const u of RELAY_UNITS) {
+    const r = await sh('systemctl', ['--user', 'list-unit-files', u, '--no-legend']);
+    if (r.ok && r.out.trim()) return u;
+  }
+  return null;
+}
+
 async function relay(action) {
-  const unit = 'cortex-mouth-proxy.service';
+  const unit = await relayUnit();
+
   if (action === 'status') {
-    const r = await sh('systemctl', ['--user', 'is-active', unit]);
     const h = await sh('curl', ['-s', '-m', '3', 'http://127.0.0.1:8788/health']);
-    OUT('  service: ' + (r.out.trim() === 'active' ? green('active') : rose(r.out.trim() || 'unknown')));
-    OUT('  health:  ' + (h.ok && h.out ? green(h.out.trim()) : rose('no answer on 127.0.0.1:8788')));
+    const answering = h.ok && /"status"/.test(h.out || '');
+    if (unit) {
+      const r = await sh('systemctl', ['--user', 'is-active', unit]);
+      OUT('  unit:    ' + dim(unit));
+      OUT('  service: ' + (r.out.trim() === 'active' ? green('active') : rose(r.out.trim() || 'unknown')));
+    } else {
+      OUT('  unit:    ' + gold('none installed'));
+    }
+    OUT('  health:  ' + (answering ? green(h.out.trim()) : rose('no answer on 127.0.0.1:8788')));
+    // A relay can be up without a unit, and a unit can be active while the
+    // relay is wedged. Say which of those is true rather than implying either.
+    if (!unit && answering) OUT(dim('  something is serving the relay on this machine, but not as a service of yours'));
+    if (!unit && !answering) OUT(dim('  install one by running the installer again:  bash linux/install.sh'));
     return;
   }
-  if (action === 'logs') { const p = spawn('journalctl', ['--user', '-u', unit, '-n', '60', '--no-pager'], { stdio: 'inherit' }); await new Promise((r) => p.on('close', r)); return; }
+
+  if (!unit) {
+    OUT(rose('  there is no relay service installed for this account.'));
+    OUT(dim('  the installer writes one. Run it again and it will skip everything already done:'));
+    OUT(dim('    bash linux/install.sh'));
+    OUT(dim('  or start the relay by hand, in the foreground, to see what it says:'));
+    OUT(dim('    CORTEX_ROOT=<your fleet tree> python3 <your fleet tree>/SystemsCortex/cortex-mouth.py'));
+    process.exitCode = 1;
+    return;
+  }
+
+  if (action === 'logs') {
+    const p = spawn('journalctl', ['--user', '-u', unit, '-n', '60', '--no-pager'], { stdio: 'inherit' });
+    await new Promise((r) => p.on('close', r));
+    return;
+  }
+
   const r = await sh('systemctl', ['--user', action, unit]);
-  OUT(r.ok ? green('  relay ' + action + 'ed') : rose('  ' + r.err.trim()));
+  OUT(r.ok ? green('  relay ' + action + 'ed') + dim('  (' + unit + ')') : rose('  ' + r.err.trim()));
 }
 
 main().catch((e) => { OUT(rose(String((e && e.stack) || e))); process.exit(1); });
