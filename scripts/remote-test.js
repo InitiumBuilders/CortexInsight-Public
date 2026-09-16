@@ -51,6 +51,39 @@ try {
   process.exit(1);
 }
 
+// ⚠ THE FIXTURE HAS TO BE AS AWKWARD AS REALITY.
+//
+//  The first version of this spawned the bridge directly, which meant it proved
+//  the protocol and nothing about whether the far end can FIND the bridge. On a
+//  real server it could not: `ssh host <command>` gets a non-interactive,
+//  non-login shell, and on Ubuntu that shell reads neither file that puts
+//  ~/.local/bin on the PATH. The operator saw "read ECONNRESET" while looking
+//  at a passphrase box, and this test had said everything was fine.
+//
+//  So the fixture now does what sshd does: it hands the command to a shell, in
+//  a home directory laid out the way the installer lays one out, with a PATH
+//  that does NOT already contain the install directory.
+const FAKE_HOME = path.join(os.tmpdir(), 'ci-remote-test-home');
+const FAKE_BIN = path.join(FAKE_HOME, '.local', 'bin');
+fs.mkdirSync(FAKE_BIN, { recursive: true });
+fs.writeFileSync(path.join(FAKE_BIN, 'cortex'),
+  '#!/usr/bin/env bash\nexec ' + JSON.stringify(process.execPath) + ' ' + JSON.stringify(path.join(APP, 'linux', 'cli.js')) + ' "$@"\n',
+  { mode: 0o755 });
+
+// Ubuntu's own .profile, which is what a LOGIN shell reads and a plain
+// `ssh host command` does not.
+const PROFILE = path.join(FAKE_HOME, '.profile');
+const writeProfile = () => fs.writeFileSync(PROFILE,
+  'if [ -d "$HOME/.local/bin" ] ; then\n    PATH="$HOME/.local/bin:$PATH"\nfi\n');
+writeProfile();
+
+// a PATH with no trace of the install directory, so the only ways to succeed
+// are the two the real command is written to try
+const BARE_PATH = (process.env.PATH || '')
+  .split(':')
+  .filter((p) => p && !p.includes('.local/bin'))
+  .join(':');
+
 const server = new Server({ hostKeys: [fs.readFileSync(KEYFILE)] }, (client) => {
   client.on('authentication', (ctx) => {
     if (ctx.method === 'password' && ctx.username === USER && ctx.password === SSH_PASS) return ctx.accept();
@@ -62,9 +95,14 @@ const server = new Server({ hostKeys: [fs.readFileSync(KEYFILE)] }, (client) => 
       accept().on('exec', (acceptExec, rejectExec, info) => {
         if (!/cortex rpc/.test(info.command)) return rejectExec();
         const stream = acceptExec();
-        const p = spawn(process.execPath, [path.join(APP, 'linux', 'cli.js'), 'rpc'], { stdio: ['pipe', 'pipe', 'ignore'] });
+        // exactly what sshd does with the command it is given
+        const p = spawn('sh', ['-c', info.command], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: { ...process.env, HOME: FAKE_HOME, PATH: BARE_PATH },
+        });
         stream.pipe(p.stdin);
         p.stdout.pipe(stream);
+        p.stderr.on('data', (d) => { try { stream.stderr.write(d); } catch { /* gone */ } });
         p.on('close', (code) => { try { stream.exit(code || 0); stream.end(); } catch { /* gone */ } });
       });
     });
@@ -168,6 +206,17 @@ const check = (name, ok, extra) => {
 
   const bad = await call('cortex:remoteInvoke', { channel: 'rm -rf /' });
   check('a string that is not a channel name never leaves this machine', !!bad.error, bad.error);
+
+  // ⚠ The one this test used to miss entirely. With .profile in place a login
+  // shell finds cortex on the PATH; with it gone, nothing does, and the command
+  // has to reach for where the installer put it. Both have to work, because a
+  // server may have either.
+  await call('cortex:remoteDisconnect');
+  fs.unlinkSync(PROFILE);
+  const noProfile = await call('cortex:remoteConnect', {});
+  check('it still finds cortex when nothing puts it on the PATH',
+    noProfile.ok === true, noProfile.ok ? 'reached it anyway' : noProfile.error);
+  writeProfile();
 
   // and the one that matters most: the key changed
   await call('cortex:remoteDisconnect');

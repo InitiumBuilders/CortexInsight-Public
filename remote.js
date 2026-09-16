@@ -69,6 +69,22 @@ module.exports = function attachRemote(ctx) {
 
   const fingerprintOf = (key) => 'SHA256:' + crypto.createHash('sha256').update(key).digest('base64').replace(/=+$/, '');
 
+  // ⚠ WHY THIS IS NOT JUST "cortex rpc".
+  //
+  //  `ssh host <command>` runs a NON-INTERACTIVE, NON-LOGIN shell. On Ubuntu
+  //  that shell reads neither file that puts ~/.local/bin on the PATH: .profile
+  //  is for login shells only, and .bashrc returns on its second line when the
+  //  shell is not interactive. So the installer can put cortex on your PATH
+  //  perfectly, you can run it all day in your own terminal, and it is still
+  //  not found over SSH.
+  //
+  //  The symptom was worse than "not found": the channel closed, this end wrote
+  //  its handshake into a dead pipe, and the operator was told "read ECONNRESET"
+  //  while looking at a passphrase box. So: ask a LOGIN shell (which does read
+  //  .profile), and if that still cannot find it, go straight to where the
+  //  installer puts it.
+  const REMOTE_CMD = 'sh -lc \'command -v cortex >/dev/null 2>&1 && exec cortex rpc; exec "$HOME/.local/bin/cortex" rpc\'';
+
   // --- the live connection -------------------------------------------------
   let conn = null;
   let stream = null;
@@ -209,7 +225,31 @@ module.exports = function attachRemote(ctx) {
 
       // ② start the bridge at the far end
       stream = await new Promise((resolve, reject) => {
-        conn.exec('cortex rpc', (err, st) => (err ? reject(new Error('could not start the console there: ' + err.message)) : resolve(st)));
+        conn.exec(REMOTE_CMD, (err, st) => (err ? reject(new Error('could not start the console there: ' + err.message)) : resolve(st)));
+      });
+
+      // The bridge announces itself the moment it starts. Waiting for that line
+      // is what turns "the pipe died while I was talking into it" into a
+      // sentence about what actually went wrong.
+      let exitCode = null;
+      let stderrSaid = '';
+      await new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('the console there did not answer within 20 seconds')), 20000);
+        const done = (e) => { clearTimeout(t); e ? reject(e) : resolve(); };
+        const first = (d) => {
+          if (String(d).includes('"ready"')) { stream.removeListener('data', first); done(); }
+        };
+        stream.on('data', first);
+        stream.once('exit', (code) => { exitCode = code; });
+        stream.once('close', () => {
+          if (exitCode === 127 || /not found/i.test(stderrSaid)) {
+            return done(new Error('cortex is installed but not on the PATH for a non-interactive login on that machine. '
+              + 'Check with:  ssh ' + r.user + '@' + r.host + " 'command -v cortex'"));
+          }
+          done(new Error('the console there closed the connection'
+            + (stderrSaid ? ': ' + stderrSaid.slice(0, 160) : '. Is it running? Try "cortex status" on that machine.')));
+        });
+        stream.stderr.on('data', (d) => { stderrSaid += String(d); });
       });
       if (!mine()) { reset(); throw new Error('a newer connection replaced this one'); }
       stream.on('data', (d) => { if (mine()) onData(d); });
@@ -249,6 +289,12 @@ module.exports = function attachRemote(ctx) {
     if (/ECONNREFUSED/.test(m)) return 'nothing is listening for SSH on that host and port';
     if (/ENOTFOUND|EAI_AGAIN/.test(m)) return 'that hostname does not resolve';
     if (/ETIMEDOUT|timed out/i.test(m)) return 'the host did not answer before the timeout';
+    // A bare errno on the one screen whose job is explaining is a failure of
+    // that screen. ECONNRESET here almost always means the far end started and
+    // then died, and the usual reason is cortex not being found.
+    if (/ECONNRESET/.test(m)) return 'that machine accepted the connection and then dropped it. Usually the console there is not running, or cortex is not on the PATH for a non-interactive login';
+    if (/EPIPE/.test(m)) return 'the console there stopped reading before this end finished speaking';
+    if (/EHOSTUNREACH|ENETUNREACH/.test(m)) return 'there is no route to that host from here';
     return m;
   }
 
