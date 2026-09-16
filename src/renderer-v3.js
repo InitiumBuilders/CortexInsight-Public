@@ -495,10 +495,14 @@ async function disconnectRemote() {
 async function paintRemoteLinked() {
   const wrap = $('#rmLinked');
   if (!wrap) return;
-  const [ov, ctl, board] = await Promise.all([
+  // The reading is its own channel. Asking the overview for it returned nothing
+  // every time and the room quietly said "no reading yet" about a machine that
+  // had one.
+  const [ov, ctl, board, rd] = await Promise.all([
     C.remote.invoke('cortex:overview'),
     C.remote.invoke('cortex:control'),
     C.remote.invoke('cortex:board'),
+    C.remote.invoke('cortex:reading'),
   ]);
   if (!ov || ov.error) { wrap.innerHTML = `<div class="rm-err">${esc((ov && ov.error) || 'that console did not answer')}</div>`; return; }
   const stopped = ctl && ctl.stopped;
@@ -514,7 +518,8 @@ async function paintRemoteLinked() {
 
     <div class="panel glass">
       <div class="panel-head"><h3>Its reading</h3><span class="panel-sub">${esc(ov.model || '')}</span></div>
-      <div class="rm-reading">${esc((ov.reading && ov.reading.line) || ov.readingLine || 'no reading yet')}</div>
+      <div class="rm-reading">${esc((rd && rd.line) || 'that machine has not read itself yet')}</div>
+      ${rd && rd.more ? `<div class="rm-p">${esc(rd.more)}</div>` : ''}
       <div class="focus-actions">
         <button class="prime-btn" id="rmToggle">${stopped ? '▶ Turn its agents on' : '⏸ Turn its agents off'}</button>
         <button class="mini" id="rmHard">${stopped && ctl.hard ? 'hard stop is on' : 'and make its runner refuse turns'}</button>

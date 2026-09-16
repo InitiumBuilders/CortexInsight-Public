@@ -14092,7 +14092,6 @@ async function runSmoke() {
     // secrets and a pinned host key, so it is exactly the kind of room that must
     // never ship having been opened only by hand.
     await visit('remote', 2200, 'remoteBody');
-    await shoot('smoke-remote.png');
 
     // ── THE READINGS MUST ACTUALLY READ ────────────────────────────────────
     // A view that renders is not a view that reports. Each of these three
