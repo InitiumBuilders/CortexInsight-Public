@@ -285,7 +285,18 @@ module.exports = function attachRemote(ctx) {
 
   function friendly(e) {
     const m = String((e && e.message) || e);
-    if (/All configured authentication methods failed/i.test(m)) return 'the password or key was refused by that machine';
+    // ⚠ sshd answers the same way whether the secret was wrong or the ACCOUNT
+    // does not exist, so "refused" sent him hunting through keys and passwords
+    // while the real answer was a username that had never existed on the box.
+    // The user is the one part of this the operator types from memory, so name
+    // it, and name the file the key has to be in for that user.
+    if (/All configured authentication methods failed/i.test(m)) {
+      const r = S();
+      return 'that machine refused the sign-in. Check the User first: it is set to "' + (r.user || '') + '", '
+        + 'and the key has to be in /home/' + (r.user || '<user>') + '/.ssh/authorized_keys on that machine '
+        + '(or /root/.ssh/authorized_keys if the account is root). sshd answers the same way for a wrong key '
+        + 'and for an account that does not exist.';
+    }
     if (/ECONNREFUSED/.test(m)) return 'nothing is listening for SSH on that host and port';
     if (/ENOTFOUND|EAI_AGAIN/.test(m)) return 'that hostname does not resolve';
     if (/ETIMEDOUT|timed out/i.test(m)) return 'the host did not answer before the timeout';
