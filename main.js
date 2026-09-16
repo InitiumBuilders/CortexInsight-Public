@@ -25,6 +25,26 @@ const crypto = require('crypto');
 const { execFile } = require('child_process');
 
 // ---------------------------------------------------------------------------
+//  ONE LINE THAT COVERS EVERY WRITE.
+//
+//  Until 3.67 this app had only ever run on a machine with exactly one person
+//  on it. A server is different: other accounts can exist, and the vault holds
+//  the board, the learnings and the operator's focuses in plain text beside the
+//  sealed secrets. They were being written 0644 — readable by anyone with a
+//  shell on the box.
+//
+//  Chasing each writer would have missed one; the frozen index alone is 14 MB
+//  of message text and is written somewhere else entirely. A umask is the whole
+//  fix: from here on, every file this process creates is owner-only and every
+//  directory is owner-only, wherever the write happens.
+//
+//  The fleet tree is unaffected in practice because the runner that reads what
+//  we write there (the bridge config, the brief, the agent tool) runs as the
+//  same user. Windows ignores umask and loses nothing by it.
+// ---------------------------------------------------------------------------
+if (process.platform !== 'win32') { try { process.umask(0o077); } catch { /* not permitted; the explicit modes below still stand */ } }
+
+// ---------------------------------------------------------------------------
 //  No baked secrets. The gate password is created on first run and lives in
 //  the vault as a hash (settings.passSha); the vault pairs itself to the first
 //  machine that opens it (trustedFingerprints). Nothing identifying ships in
@@ -519,9 +539,14 @@ function saveStateNow() {
     clearTimeout(_stTimer); _stTimer = 0;
     _stDirty = false;
     const p = statePath(), tmp = p + '.tmp';
-    fs.writeFileSync(tmp, stateBytes());
-    safe(() => { if (exists(p)) fs.copyFileSync(p, p + '.bak'); });
+    // 0600, because a server is the first machine this app runs on where other
+    // people may hold accounts. Sealed secrets are ciphertext either way, but the
+    // board, the learnings and the operator's own focuses are not, and they were
+    // being written world-readable. Windows ignores the mode and loses nothing.
+    fs.writeFileSync(tmp, stateBytes(), { mode: 0o600 });
+    safe(() => { if (exists(p)) { fs.copyFileSync(p, p + '.bak'); fs.chmodSync(p + '.bak', 0o600); } });
     fs.renameSync(tmp, p);
+    safe(() => fs.chmodSync(p, 0o600));
     _stWrites++;
   });
 }
@@ -579,6 +604,14 @@ async function machineGuid() {
     const m = out.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/);
     return m ? m[1].trim() : '';
   }
+  if (IS_LINUX) {
+    // the machine id every systemd box writes once at first boot and keeps
+    for (const f of ['/etc/machine-id', '/var/lib/dbus/machine-id']) {
+      const v = safe(() => fs.readFileSync(f, 'utf8').trim(), '');
+      if (v) return v;
+    }
+    return '';
+  }
   // 15 s, not 4: a cold runner answers the registry slowly, and an empty answer
   // here once left a fresh vault unable to pair
   const out = await runCmd('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'], 15000);
@@ -590,6 +623,18 @@ async function hardwareUuid() {
     const out = await runCmd('ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'], 6000);
     const m = out.match(/"IOPlatformSerialNumber"\s*=\s*"([^"]+)"/);
     return m ? m[1].trim() : '';
+  }
+  if (IS_LINUX) {
+    // the firmware's own serial. Most clouds keep product_uuid readable only by
+    // root, which is fine: pairing works from whichever facts the machine gives,
+    // and the machine id above is always one of them.
+    for (const f of ['/sys/class/dmi/id/product_uuid', '/sys/class/dmi/id/board_serial', '/sys/class/dmi/id/product_serial']) {
+      const v = safe(() => fs.readFileSync(f, 'utf8').trim(), '');
+      if (v && !/^(none|to be filled.*|0+)$/i.test(v)) return v;
+    }
+    // a container has no firmware to ask; the boot id is stable until reboot and
+    // the machine id above already carries the durable half
+    return '';
   }
   // 20 s: the first PowerShell start on a machine that has never run one can
   // take longer than the old 6 s, and the CI runner proved it
@@ -2184,6 +2229,13 @@ function authSetup(password) {
 // ===========================================================================
 const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
+// Linux is the third home. On a desktop it runs with a window like the others;
+// on a server it runs headless, where linux/host.js stands in for the parts of
+// Electron a machine with no screen cannot provide. Everything below this line
+// is the same code either way.
+const IS_LINUX = process.platform === 'linux';
+// true only when this process has no window and no display behind it
+const HEADLESS = !!process.env.CORTEX_HEADLESS;
 function localUser() { return safe(() => os.userInfo().username, 'operator'); }
 // the operator's name, for prompts and the brief; empty until they tell us
 function operatorName() { return String((STATE && STATE.settings && STATE.settings.operatorName) || '').trim() || 'the operator'; }
@@ -3070,6 +3122,23 @@ function stagedBuild() {
       const newer = nv.split('.').map(Number).some((x, i) => x !== (cur.split('.').map(Number)[i] || 0) && x > (cur.split('.').map(Number)[i] || 0));
       return newer ? { version: nv, current: cur, path: nextApp, arch } : null;
     }
+    if (IS_LINUX) {
+      // a packaged Linux build staged beside its project, read the same way:
+      // the version is the one inside the staged build's own package.json
+      const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+      const dir = path.join(proj, 'release-next', 'CortexInsight-linux-' + arch);
+      const bin = path.join(dir, 'CortexInsight');
+      if (!exists(bin)) return null;
+      const nv = safe(() => JSON.parse(fs.readFileSync(path.join(dir, 'resources', 'app', 'package.json'), 'utf8')).version, '');
+      const cur = app.getVersion();
+      const cmpv = (a, b) => {
+        const A = String(a).split('.').map(Number), B = String(b).split('.').map(Number);
+        for (let i = 0; i < 3; i++) { if ((A[i] || 0) !== (B[i] || 0)) return (A[i] || 0) - (B[i] || 0); }
+        return 0;
+      };
+      if (!nv || cmpv(nv, cur) <= 0) return null;
+      return { version: nv, current: cur, path: dir, bin, arch };
+    }
     if (!IS_WIN) return null;
     const here = path.dirname(path.dirname(app.getAppPath()));      // …\CortexInsight-win32-x64
     const proj = projectRoot();
@@ -3157,6 +3226,45 @@ ipcMain.handle('cortex:updateApply', requireGate(() => {
       `rm -rf ${q(path.join(proj, 'release-next'))}`,
       'L "installed $V, staging cleared"',
       'open "$LIVE"',
+    ].join('\n');
+    safe(() => fs.writeFileSync(sh, script, { mode: 0o755 }));
+    STATE.updateAttempt = { from: u.current, to: u.version, ts: new Date().toISOString(), log };
+    omniAudit('update', `installing v${u.version} (was v${u.current}) — the app will restart`);
+    saveState();
+    safe(() => require('child_process').spawn('/bin/bash', [sh], { detached: true, stdio: 'ignore' }).unref());
+    setTimeout(() => { app.isQuitting = true; app.quit(); }, 600);
+    return { ok: true, version: u.version };
+  }
+  if (IS_LINUX) {
+    // one discipline on every platform: wait for the process to go, keep the
+    // previous build, prove the version the installed build reports, roll back
+    // on a miss, clear staging only after the proof, then start again.
+    // Headless is refused on purpose: on a server the service manager owns the
+    // process, so a swap underneath it would race the thing that restarts it.
+    if (HEADLESS) return { ok: false, error: 'a headless host updates with "cortex update", which pulls, reinstalls and restarts the service' };
+    const sh = path.join(app.getPath('temp'), 'ci-selfupdate.sh');
+    const log = path.join(app.getPath('temp'), 'ci-selfupdate.log');
+    const q = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
+    const live = path.join(proj, 'release', 'CortexInsight-linux-' + u.arch);
+    const prev = live + '.prev';
+    const script = [
+      '#!/bin/bash',
+      `LOG=${q(log)}; L() { echo "$(date +%H:%M:%S)  $1" >> "$LOG"; }`,
+      `echo "=== update to ${u.version} (from ${u.current}) ===" > "$LOG"`,
+      `LIVE=${q(live)}; NEXT=${q(u.path)}; PREV=${q(prev)}; PID=${process.pid}`,
+      'for i in $(seq 1 40); do kill -0 "$PID" 2>/dev/null || break; sleep 0.5; done',
+      'if kill -0 "$PID" 2>/dev/null; then L "ABORT: the app is still running"; exit 1; fi',
+      'L "the app has exited"',
+      'rm -rf "$PREV"',
+      'mkdir -p "$(dirname "$LIVE")"',
+      '[ -d "$LIVE" ] && mv "$LIVE" "$PREV" && L "previous kept at $PREV"',
+      'mv "$NEXT" "$LIVE" || { L "ABORT: could not move the staged build"; [ -d "$PREV" ] && mv "$PREV" "$LIVE"; exit 1; }',
+      'chmod +x "$LIVE/CortexInsight" 2>/dev/null',
+      'V=$(node -e "process.stdout.write(require(process.argv[1]).version)" "$LIVE/resources/app/package.json" 2>/dev/null)',
+      `if [ "$V" != ${q(u.version)} ]; then L "ROLLBACK: installed reports $V"; rm -rf "$LIVE"; [ -d "$PREV" ] && mv "$PREV" "$LIVE"; exit 1; fi`,
+      `rm -rf ${q(path.join(proj, 'release-next'))}`,
+      'L "installed $V, staging cleared"',
+      'nohup "$LIVE/CortexInsight" >/dev/null 2>&1 &',
     ].join('\n');
     safe(() => fs.writeFileSync(sh, script, { mode: 0o755 }));
     STATE.updateAttempt = { from: u.current, to: u.version, ts: new Date().toISOString(), log };
@@ -5833,6 +5941,21 @@ function ingestAgentInbox() {
   const st = statOf(p);
   if (!st || !st.size) return { applied: 0 };
   STATE.inbox = STATE.inbox || { offset: 0, applied: 0, lastTs: '' };
+  // ⚠ THE REPLAY. The queue is append-only and the read position lives in the
+  // vault, so a vault that has never read it starts at byte 0 — which is correct
+  // for a queue written since this console existed, and badly wrong for one that
+  // was already drained by another machine. Opening a new vault beside a fleet
+  // that had been running for months replayed its whole history: 308 lines
+  // applied at once, 81 tasks and 120 learnings conjured out of work that was
+  // finished long ago. A console meeting a queue for the first time adopts where
+  // that queue is NOW, and reads forward from there.
+  if (!STATE.inbox.applied && !STATE.inbox.offset && !STATE.inbox.lastTs && st.size > 0) {
+    STATE.inbox.offset = st.size;
+    STATE.inbox.lastTs = new Date().toISOString();
+    saveState();
+    safe(() => omniAudit('inbox', 'the agent queue was already ' + st.size + ' bytes long, so this console starts from its end rather than replaying work that is already done'));
+    return { applied: 0, adopted: st.size };
+  }
   if (st.size < STATE.inbox.offset) STATE.inbox.offset = 0;      // file was truncated/rotated
   if (st.size === STATE.inbox.offset) return { applied: 0 };
   let chunk = '';
@@ -7863,7 +7986,7 @@ function ensureOmniScript() {
 }
 function runOmniPs(args, timeout = 60000) {
   return new Promise((resolve) => {
-    if (!IS_WIN) return resolve({ ok: false, error: 'the screen instruments are Windows-only for now; on macOS Motus Max drives in work mode (files, commands, APIs)' });
+    if (!IS_WIN) return resolve({ ok: false, error: 'the screen instruments are Windows-only for now. Everywhere else Motus Max drives in work mode: files, commands and APIs. On a server that is the only mode there is, because there is no screen to drive.' });
     const script = ensureOmniScript();
     execFile('powershell.exe',
       ['-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', script, ...args],
@@ -14918,7 +15041,36 @@ if (!_ISOLATED && !_SMOKE && !_FRESH && !_FLEET && !app.requestSingleInstanceLoc
     // the moment the watchdog woke — the process is gone, so the turn is too
     safe(() => { omniState().turnInFlight = null; });
     // the root: set by the operator, or discovered once where WSL keeps homes
-    safe(() => { if (!_FRESH && STATE && STATE.settings && !STATE.settings.cortexRoot) { const d = discoverRoot(); if (d) { STATE.settings.cortexRoot = d; saveState(); omniAudit('root', 'fleet tree found at ' + d); } } });
+    // The root: set by the operator, or discovered where this machine keeps homes.
+    // ⚠ This used to run only when the setting was EMPTY, and a fresh vault is
+    // born holding the placeholder — which is a string, so it never ran at all.
+    // A new machine with a perfectly good fleet tree sitting in its home opened
+    // on "no fleet tree is set" and waited to be told where it was. Discovery now
+    // also runs when the configured root has no interactions to read, and it only
+    // ever replaces it with a tree it actually found.
+    safe(() => {
+      if (_FRESH || !STATE || !STATE.settings) return;
+      const set = String(STATE.settings.cortexRoot || '');
+      const readable = !!set && exists(path.join(set, 'logs', 'interactions'));
+      if (readable) return;
+      const d = discoverRoot();
+      if (!d || d === set) return;
+      STATE.settings.cortexRoot = d;
+      saveState();
+      omniAudit('root', 'fleet tree found at ' + d);
+    });
+    // A vault written by an older build is still sitting there world-readable,
+    // and a umask only governs files made from now on. Tighten what is already
+    // on disk, once, quietly.
+    safe(() => {
+      if (IS_WIN) return;
+      const dir = userDataDir();
+      safe(() => fs.chmodSync(dir, 0o700));
+      for (const f of listDir(dir)) {
+        const p = path.join(dir, f);
+        safe(() => fs.chmodSync(p, safe(() => fs.statSync(p).isDirectory(), false) ? 0o700 : 0o600));
+      }
+    });
     // the gate hash lives in the vault (created at first run, or migrated by
     // v3.57 for the original install); a vault without one asks at the gate
     safe(() => bindPTT());

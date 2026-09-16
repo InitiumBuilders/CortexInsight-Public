@@ -11,7 +11,7 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 // every text file at the root ships (source, docs, helper scripts, lockfile), plus these trees
 const SHIP_EXT = /\.(js|json|md|ps1|sh|yml|yaml|txt|html|css)$/i;
-const SHIP_DIRS = ['src', 'docs', 'scripts', 'assets', '.github'];
+const SHIP_DIRS = ['src', 'docs', 'scripts', 'assets', '.github', 'linux'];
 const SKIP = /node_modules|^release|\.bak|\.asar|\.png$|\.ico$|\.jpg$|\.woff/;
 
 const HARD = [
