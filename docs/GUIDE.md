@@ -4,7 +4,7 @@ Walkthroughs, in the order an operator meets them. Each one ends with what you s
 
 ## 0. What you need
 
-- Windows 10 or 11, Node 20 or newer, npm.
+- Windows 10 or 11, macOS 12 or newer, or a Linux machine with systemd. Node 20 or newer, npm.
 - A WSL2 distribution with a fleet tree: a folder in the home directory (any name) holding `logs/interactions/*.jsonl`, `agents/<name>/checkpoint.state`, `agents/<name>/memory/*.md`, and the runner scripts. The console reads these and never rewrites them.
 - The loopback relay on `127.0.0.1:8788`: a proxy that turns each message into a `claude -p` turn on your Claude Code subscription. Check it with `curl http://127.0.0.1:8788/health`.
 - Optional: a Davara baseline clone in the WSL home (the Davara view reads it), an OpenAI key (the second seat and the studio), an ElevenLabs key (voice), a Gmail app password (the canary email).
@@ -170,6 +170,54 @@ The fresh run is the one to read before you hand the console to someone else. It
 
 A running app that finds a newer build staged in `release-next` offers to swap itself. `Update-MotusMax.ps1` does the same by hand and proves the version it landed on.
 
+## 15. On a server
+
+A Linux machine with no screen runs the same console as a service. One command:
+
+```bash
+bash linux/install.sh
+```
+
+It checks the toolchain, signs you in with a token that lasts about a year
+rather than one that expires overnight, installs the bundled relay into your
+fleet tree, puts `cortex` on your PATH, writes two services that come back after
+a reboot, walks you through the passphrase, and finishes by asking the fleet one
+short question so the install cannot claim success without ever having spoken.
+
+Then `cortex` is the console in a terminal. `cortex status` for the nine lines
+that matter, `cortex board`, `cortex pulse`, `cortex focus`, `cortex live` for
+the feed, and a bare `cortex` to open it and talk. A line starting with `/` is
+handled by the fleet exactly as it is in the window.
+
+`cortex off` stops everything the console drives. `cortex off --hard` writes the
+pause the runner itself obeys, which is the only setting that guarantees nothing
+reaches your subscription while you are away.
+
+You should see: `cortex doctor` with seven ticks, and a turn coming back from a
+seat in a few seconds.
+
+The whole thing, written for someone who has not run a server before, is in
+[`linux/README.md`](../linux/README.md).
+
+## 16. Drive that server from your desktop
+
+Open Remote, at the bottom of the rail under CORE. Give it the host, your user,
+your SSH password and the passphrase you chose on the server. Press Connect.
+
+The first time it shows you the server's host key fingerprint and waits, with
+the command that prints the same thing on the server so you can compare them.
+Press Trust this machine once they match. Every connection after that checks
+that key, and if it ever changes the page stops and says so instead of
+connecting, because a host key that changed without you changing it is the one
+symptom of somebody standing in the middle.
+
+Two locks, on purpose: SSH proves you have an account on that machine, the
+passphrase proves you are the operator of the console running on it. Both
+secrets are sealed by your machine's keystore and are never shown again.
+
+You should see: the server's reading, its board and its fleet, and a box that
+talks to it. Turning its agents off from that page turns them off there.
+
 ## Troubleshooting
 
 | You see | What it means | What to do |
@@ -182,3 +230,6 @@ A running app that finds a newer build staged in `release-next` offers to swap i
 | A loop keeps skipping | its confidence floor is above what the passes reach | lower the floor or sharpen the instruction; the cadence stretches on its own |
 | Hard stop banner is amber | the bridge is not installed, so the runner cannot refuse turns | install the bridge on Model |
 | Smoke exits 0 but something looks wrong | exit codes are not proof | read `%TEMP%\ci-smoke-report.txt` and the screenshots |
+| On a server, every turn says the machine is signed out | the subscription token expired or was never saved | `claude setup-token`, save it to `~/.claude/cortex-oauth-token`, then `cortex relay restart` |
+| On a server, the console stops when you log out | user services need lingering enabled | `sudo loginctl enable-linger $USER` |
+| Remote says the host key changed | the server is not presenting the key it presented before | do not enter the passphrase until you know why; if you rebuilt the server, forget the stored key and connect again |

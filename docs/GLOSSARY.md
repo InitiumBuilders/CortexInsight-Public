@@ -195,3 +195,21 @@ The console uses a small vocabulary on purpose. Most of these words appear on sc
 **Presented By Outlier.Systems**
 
 **This Is A Service From Motivus.One**
+
+## The server's words
+
+**Headless.** The console with no window: the same engine room, answering on a socket instead of drawing on a screen.
+
+**The shim.** What stands where Electron stands on a machine with no display. A window made of nothing, so one `main.js` serves every platform.
+
+**The seal.** What replaces the OS keyring on a server. A secret encrypted under a key derived from a 0600 key file, the machine's own id and the user's id, so a vault carried elsewhere is inert.
+
+**The socket.** The Unix socket the terminal talks to, at mode 0600. Never a TCP port: on a Unix box those permissions are the authentication.
+
+**The bridge.** `cortex rpc`, the far end of a remote connection. Speaks JSON over SSH and refuses everything until the vault passphrase lands.
+
+**Pinning.** Remembering a server's host key the first time and checking it every time after. A key that changed without you changing it stops the connection.
+
+**Lingering.** The setting that lets your services keep running after you log out, which on a server is most of the time.
+
+**The durable token.** A subscription token that lasts about a year, so a machine nobody sits at does not go quiet overnight when the ordinary credentials expire.

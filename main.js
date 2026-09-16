@@ -5956,7 +5956,6 @@ function evidenceFor(task, agent) {
 function ingestAgentInbox() {
   const p = inboxPath();
   const st = statOf(p);
-  if (!st || !st.size) return { applied: 0 };
   STATE.inbox = STATE.inbox || { offset: 0, applied: 0, lastTs: '' };
   // ⚠ THE REPLAY. The queue is append-only and the read position lives in the
   // vault, so a vault that has never read it starts at byte 0 — which is correct
@@ -5965,14 +5964,24 @@ function ingestAgentInbox() {
   // that had been running for months replayed its whole history: 308 lines
   // applied at once, 81 tasks and 120 learnings conjured out of work that was
   // finished long ago. A console meeting a queue for the first time adopts where
-  // that queue is NOW, and reads forward from there.
-  if (!STATE.inbox.applied && !STATE.inbox.offset && !STATE.inbox.lastTs && st.size > 0) {
-    STATE.inbox.offset = st.size;
+  // that queue is NOW and reads forward from there.
+  //
+  // What matters is the first LOOK, not the first line. Keying this on "there is
+  // something to read" meant a queue that did not exist yet at boot was treated
+  // as a stranger's history the moment it appeared — which is precisely what an
+  // agent's very first task looks like. So the meeting is recorded on the first
+  // look, file or no file.
+  if (!STATE.inbox.applied && !STATE.inbox.offset && !STATE.inbox.lastTs) {
+    STATE.inbox.offset = (st && st.size) || 0;
     STATE.inbox.lastTs = new Date().toISOString();
     saveState();
-    safe(() => omniAudit('inbox', 'the agent queue was already ' + st.size + ' bytes long, so this console starts from its end rather than replaying work that is already done'));
-    return { applied: 0, adopted: st.size };
+    if (st && st.size) {
+      safe(() => omniAudit('inbox', 'the agent queue was already ' + st.size + ' bytes long, so this console starts from its end rather than replaying work that is already done'));
+      return { applied: 0, adopted: st.size };
+    }
+    return { applied: 0 };
   }
+  if (!st || !st.size) return { applied: 0 };
   if (st.size < STATE.inbox.offset) STATE.inbox.offset = 0;      // file was truncated/rotated
   if (st.size === STATE.inbox.offset) return { applied: 0 };
   let chunk = '';

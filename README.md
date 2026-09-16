@@ -40,6 +40,14 @@ powershell -ExecutionPolicy Bypass -File .\Build-And-Install.ps1
 
 The script checks the toolchain, installs from the lockfile, packages, swaps the build in, proves the version by re-reading the binary, keeps the previous build for rollback, puts a shortcut on the desktop, and launches. `npm run deploy` does the same. On a Mac, `bash build-and-install.sh` does the equivalent into `~/Applications`. `npm start` runs from source without packaging on either. Details, switches, what works where, and the uninstall are in [`docs/INSTALL.md`](docs/INSTALL.md).
 
+**Or put it on a server.** A Linux machine with no screen runs the same console as a service, with a terminal in front of it:
+
+```bash
+bash linux/install.sh
+```
+
+One command takes a fresh machine to a running console: the toolchain, the Claude Code sign-in that does not expire overnight, the relay, the `cortex` command, two services that come back after a reboot, and a vault paired to that machine. Then `cortex` opens the console in the terminal, and Remote on your desktop drives that machine over SSH. [`linux/README.md`](linux/README.md) is written for someone who has not administered a server before.
+
 On first run the gate asks you to set a passphrase (12 characters or more, typed twice). The vault pairs itself to this machine, then looks for a fleet tree under every WSL home it can see: a folder holding `logs/interactions` and `agents`, with the loopback relay on `127.0.0.1:8788`. The relay is a small proxy that turns each message into a Claude Code turn on your own subscription; the console never calls a model provider directly for the fleet. If no tree is found, Pulse says so and points at Config → Preferences. The console opens and runs without one.
 
 ## The rooms

@@ -2,25 +2,29 @@
 
 Three ways to put the console on your machine, from the quickest to the most hands-on, on Windows or on a Mac. All of them end in the same place: an app you can open, a vault in your user data, and the gate asking you to set a passphrase.
 
+On a Linux server there is a fourth way, and it is one command. See [the Linux page](../linux/README.md), which is written for someone who has not run a server before.
+
 ## What you need
 
-- Windows 10 or 11 (64-bit), or macOS 12 or newer on Apple silicon or Intel.
+- Windows 10 or 11 (64-bit), macOS 12 or newer on Apple silicon or Intel, or a Linux machine with systemd.
 - For building from source: Node 20 or newer with npm, and Git.
 - For the fleet features: a fleet tree in a home folder (`logs/interactions` and `agents` inside it) and the loopback relay on `127.0.0.1:8788`. On Windows the tree lives in WSL2; on a Mac it is a folder in your home. The console opens and runs without these; Pulse tells you what is missing and where to set the path.
 
 ## What works where
 
-| | Windows | macOS |
-|---|---|---|
-| The console, every view, the harnesses | yes | yes |
-| Fleet tree discovery and the bridge | yes, in WSL | yes, in your home |
-| The relay, Command, loops, workflows, the board, the reading | yes | yes |
-| Motus Max in work mode (files, commands, APIs) | yes | yes |
-| Motus Max on the screen (pointer, keyboard, window probe) | yes | not yet; the console says so when asked |
-| Self-update from a staged build beside the project tree | yes | yes, since 3.66 |
-| Relay restart from the heal panel | yes, through WSL services | no; start the relay by hand |
-| Sealed keys | DPAPI | Keychain |
-| Voice, the studio, the second stack, the broadcast | yes | yes |
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| The console, every view, the harnesses | yes | yes | yes, in a terminal |
+| Fleet tree discovery and the bridge | yes, in WSL | yes, in your home | yes, in your home |
+| The relay, Command, loops, workflows, the board, the reading | yes | yes | yes |
+| The relay itself, bundled and installed for you | no, you point at yours | no, you point at yours | yes, since 3.67 |
+| Motus Max in work mode (files, commands, APIs) | yes | yes | yes |
+| Motus Max on the screen (pointer, keyboard, window probe) | yes | not yet; the console says so when asked | no, and there is no screen to drive |
+| Self-update from a staged build beside the project tree | yes | yes, since 3.66 | yes for a windowed build; a server updates with `cortex update` |
+| Relay restart from the heal panel | yes, through WSL services | no; start the relay by hand | yes, `cortex relay restart` |
+| Sealed keys | DPAPI | Keychain | a 0600 key file bound to the machine id |
+| Voice, the studio, the second stack, the broadcast | yes | yes | the studio and the second stack yes; voice needs a microphone |
+| Driving another machine's console over SSH | yes, since 3.67 | yes, since 3.67 | it is the machine being driven |
 
 ## 1. Download a release
 

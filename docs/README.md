@@ -23,6 +23,7 @@ flowchart LR
 |---|---|
 | [`PITCH.md`](PITCH.md) | You want to know whether this console is for you, in five minutes. |
 | [`INSTALL.md`](INSTALL.md) | You want it on your machine, Windows or Mac: a release zip, one command from a clone, or by hand. |
+| [`../linux/README.md`](../linux/README.md) | You want it on a Linux server with no screen, and you have not run one before. |
 | [`BUILD-PROMPT.md`](BUILD-PROMPT.md) | You want to rebuild this console yourself, with an agent, from a prompt that carries every law and every feature. |
 | [`GUIDE.md`](GUIDE.md) | You have it running and want to do something real with it. |
 | [`FIRST-HOUR.md`](FIRST-HOUR.md) | You want to see a whole first session, told as a story, before you start your own. |

@@ -471,7 +471,7 @@ const USAGE = `
   ${grey('looking')}   status  pulse  board  focus  agents  loops  mind  commands  protocols  live
   ${grey('moving')}    task "<title>"   done <id>   motus "<text>"   goal "<text>"   ask "<subject>"
   ${grey('control')}   off [--hard]   on   pause <seat>   resume <seat>
-  ${grey('service')}   start  stop  restart  logs [-f]  doctor  setup  tree [<path>]
+  ${grey('service')}   start  stop  restart  logs [-f]  doctor [--live]  setup  tree [<path>]  update
   ${grey('relay')}     relay status|start|stop|logs
   ${grey('raw')}       channels          every channel the console answers
               raw <channel> [json]   ask one directly
@@ -493,6 +493,7 @@ async function main() {
   if (cmd === 'restart') { await stopService(); await new Promise((r) => setTimeout(r, 700)); await startService(); return; }
   if (cmd === 'logs') { await showLogs(argv.includes('-f') || argv.includes('--follow')); return; }
   if (cmd === 'rpc') { return require('./rpc').bridge(); }
+  if (cmd === 'update') { await update(); return; }
 
   let cl;
   try { cl = await open(); }
@@ -629,6 +630,46 @@ async function doctor(cl, live) {
   } else {
     OUT('  ' + dim('  (add --live to spend one short turn proving the fleet actually answers)'));
   }
+  OUT();
+}
+
+// A server updates by pulling, not by swapping a packaged build under a service
+// manager that is trying to restart it. Every step is checked, and a pull that
+// would throw away local edits stops rather than discarding them.
+async function update() {
+  OUT();
+  const git = await sh('git', ['-C', APP_ROOT, 'rev-parse', '--abbrev-ref', 'HEAD']);
+  if (!git.ok) { OUT(rose('  this copy is not a git clone, so there is nothing to pull')); return; }
+  const branch = git.out.trim();
+  const dirty = await sh('git', ['-C', APP_ROOT, 'status', '--porcelain']);
+  if (dirty.out.trim()) {
+    OUT(gold('  there are local changes here, so nothing was pulled:'));
+    for (const l of dirty.out.trim().split('\n').slice(0, 10)) OUT(dim('    ' + l));
+    OUT(dim('  commit or stash them, then run this again'));
+    return;
+  }
+  const before = JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8')).version;
+  OUT(dim('  pulling ' + branch + '…'));
+  const pull = await sh('git', ['-C', APP_ROOT, 'pull', '--ff-only'], { timeout: 120000 });
+  if (!pull.ok) { OUT(rose('  ' + (pull.err || 'the pull failed').trim())); return; }
+  OUT(dim('  ' + pull.out.trim().split('\n').slice(-1)[0]));
+
+  OUT(dim('  installing what changed…'));
+  const npm = await sh('npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--prefix', APP_ROOT], { timeout: 300000 });
+  if (!npm.ok) { OUT(rose('  npm install failed; the old build is still running')); return; }
+
+  // Never restart onto a build that does not parse. A server with nobody at it
+  // would come back down and stay down.
+  const check = await sh(process.execPath, ['--check', path.join(APP_ROOT, 'main.js')]);
+  if (!check.ok) { OUT(rose('  the new main.js does not parse, so nothing was restarted')); return; }
+
+  const after = JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8')).version;
+  OUT(dim('  restarting…'));
+  await stopService();
+  await new Promise((r) => setTimeout(r, 700));
+  await startService();
+  OUT();
+  OUT('  ' + green(before === after ? 'up to date on ' + after : before + ' → ' + after));
   OUT();
 }
 

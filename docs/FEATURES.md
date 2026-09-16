@@ -277,3 +277,23 @@ The console was designed from meaning outward. Before a room got its panels it g
 **Why.** An exit code of zero proves only that the process ended. The report proves what ran, so read the report.
 
 **Module.** `runSmoke`, `runClickTest`, the `ok()` and `problems.push('[TAG] …')` assertions in `main.js`; `scripts/oss-check.js`.
+
+---
+
+## The server, the terminal, and the machine you are not sitting at
+
+**What.** The same console on a Linux machine with no screen. `linux/` stands in for the parts of Electron that need a display and runs the same `main.js`, so every channel the window answers is answered here too. `cortex` is that console in a terminal: the reading with the day as a ring, the board, the focus and what is drifting from it, the fleet, her commands and protocols, a live feed, and a prompt you can talk to. `cortex off` stops everything the console drives; `cortex off --hard` writes the pause the runner itself obeys. One command installs all of it, along with the bundled relay and two services that survive a reboot.
+
+**Why.** A console that only exists where somebody is sitting cannot watch a fleet that never sleeps. And the moment it runs somewhere shared, three things that never mattered start to: a vault written world-readable, a keyring that does not exist, and an account that is not the same thing as an operator.
+
+**Module.** `linux/host.js` boots it and serves every channel on a Unix socket at mode 0600; `linux/electron-shim.js` is the window made of nothing; `linux/seal.js` replaces the keyring with a key bound to the machine; `linux/cli.js` is the terminal; `linux/relay/` is the bundled relay and runner; `linux/install.sh` is the one command.
+
+---
+
+## Remote: driving a console that runs somewhere else
+
+**What.** A room in the desktop app that reaches a server over SSH and drives the console on it: its reading, its board, its fleet, a box to talk to it, and the switch that turns its agents off. The server's host key is pinned on first contact, with its fingerprint shown beside the command that prints the same thing on the server.
+
+**Why.** Two locks, because they are different claims. SSH proves you have an account on that machine; the vault passphrase proves you are the operator of the console running on it. An account can be shared and a key can be borrowed, so both are required, and a host key that changes without you changing it stops everything rather than connecting.
+
+**Module.** `remote.js` in the main process; `cortex rpc` (`linux/rpc.js`) at the far end; the Remote room in `src/renderer-v3.js`.
