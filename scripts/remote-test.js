@@ -37,8 +37,8 @@ const USER = 'test-operator';
 const SSH_PASS = 'fixture-ssh-password';
 const VAULT_PASS = 'fixture-passphrase-12345';
 
-let Server;
-try { ({ Server } = require('ssh2')); }
+let Server, utils;
+try { ({ Server, utils } = require('ssh2')); }
 catch { console.error('ssh2 is not installed; run npm install first'); process.exit(1); }
 
 // --- a host key, made fresh and thrown away ---------------------------------
@@ -84,10 +84,24 @@ const BARE_PATH = (process.env.PATH || '')
   .filter((p) => p && !p.includes('.local/bin'))
   .join(':');
 
+// A key, because plenty of servers refuse passwords outright and a key is then
+// the only way in. Proving one path and recommending the other is not proof.
+const USERKEY = path.join(os.tmpdir(), 'ci-remote-test-userkey');
+for (const f of [USERKEY, USERKEY + '.pub']) { try { fs.unlinkSync(f); } catch { /* not there */ } }
+execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', USERKEY]);
+const ALLOWED = utils.parseKey(fs.readFileSync(USERKEY + '.pub'));
+const ALLOWED_PUB = ALLOWED.getPublicSSH();
+
 const server = new Server({ hostKeys: [fs.readFileSync(KEYFILE)] }, (client) => {
   client.on('authentication', (ctx) => {
     if (ctx.method === 'password' && ctx.username === USER && ctx.password === SSH_PASS) return ctx.accept();
-    if (ctx.method === 'none') return ctx.reject(['password']);
+    if (ctx.method === 'publickey' && ctx.username === USER) {
+      const given = ctx.key.data;
+      if (given.length !== ALLOWED_PUB.length || !crypto.timingSafeEqual(given, ALLOWED_PUB)) return ctx.reject();
+      if (ctx.signature && !ALLOWED.verify(ctx.blob, ctx.signature, ctx.hashAlgo)) return ctx.reject();
+      return ctx.accept();
+    }
+    if (ctx.method === 'none') return ctx.reject(['password', 'publickey']);
     return ctx.reject();
   });
   client.on('ready', () => {
@@ -217,6 +231,17 @@ const check = (name, ok, extra) => {
   check('it still finds cortex when nothing puts it on the PATH',
     noProfile.ok === true, noProfile.ok ? 'reached it anyway' : noProfile.error);
   writeProfile();
+
+  // ⚠ The path a locked-down server forces you onto. `PermitRootLogin no` and
+  // `PasswordAuthentication no` are ordinary hardening, and on a box with
+  // either of them a password will never work however healthy the console is.
+  await call('cortex:remoteDisconnect');
+  await call('cortex:remoteSave', { auth: 'key', keyPath: USERKEY, password: null });
+  const byKey = await call('cortex:remoteConnect', {});
+  check('it connects with a key, not only a password',
+    byKey.ok === true, byKey.ok ? 'v' + byKey.version : byKey.error);
+  await call('cortex:remoteDisconnect');
+  await call('cortex:remoteSave', { auth: 'password', password: SSH_PASS });
 
   // and the one that matters most: the key changed
   await call('cortex:remoteDisconnect');
