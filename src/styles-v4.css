@@ -189,3 +189,78 @@ details.rm-machine:not([open]){padding-bottom:12px}
 .wk-greta.g-pass,.wk-reckon.r-held{color:var(--t-emerald)}
 .wk-greta.g-revise{color:var(--t-gold)}
 .wk-greta.g-block,.wk-reckon.r-broke{color:var(--t-rose)}
+
+/* ══ 3.69 · Greta's room, and saying each fact once ═════════════════════ */
+
+/* ── Greta: her standard leads the room ─────────────────────────────────── */
+.gr-standard{flex:1 1 100%;display:flex;flex-direction:column;gap:6px;margin:4px 0 2px;padding:18px 22px;border-radius:22px;
+  background:radial-gradient(120% 160% at 0% 0%,hsl(var(--view-hue,22) 80% 60% / .10),transparent 70%),rgba(255,255,255,.025);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.grs-k{font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:hsl(var(--view-hue,22) 90% 80%)}
+.grs-t{font-family:Sora,Inter,sans-serif;font-weight:500;font-size:clamp(18px,1.9vw,22px);line-height:1.45;letter-spacing:-.005em;color:var(--ink-1);max-width:60ch;
+  text-shadow:0 0 28px hsl(var(--view-hue,22) 90% 65% / .22)}
+.greta-ask .txt{max-width:min(100%, 880px)}   /* one measure for all three fields; ch scaled with the big title font */
+
+/* ── a verdict: five scores, flow first among equals ────────────────────── */
+.gc-sc{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px;margin-top:10px}
+.gcs{display:inline-flex;align-items:baseline;gap:6px}
+.gcs-k{font-size:12.5px;color:var(--ink-3)}
+.gcs b{font-size:14px;font-weight:600;color:var(--ink-1)}
+.gcs.flow .gcs-k{font-weight:600;color:hsl(var(--view-hue,22) 90% 82%)}
+.gcs.flow b{font-size:16px;font-weight:700;color:hsl(var(--view-hue,22) 95% 86%);text-shadow:0 0 16px hsl(var(--view-hue,22) 95% 62% / .5)}
+.gc-l.felt b{color:var(--t-cyan)}
+.gc-eyes{margin-top:8px;font-size:12.5px;color:var(--ink-3)}
+
+/* ── her journal ────────────────────────────────────────────────────────── */
+.gj{padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.035);margin-bottom:10px;cursor:pointer}
+.gj-day{font-size:12px;letter-spacing:.06em;color:hsl(var(--view-hue,22) 90% 80%)}
+.gj-std{margin-top:6px;font-family:Sora,Inter,sans-serif;font-weight:500;font-size:16px;line-height:1.45;color:var(--ink-1)}
+.gj-l{margin-top:8px;font-size:14px;line-height:1.45;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.gj.open .gj-l{-webkit-line-clamp:unset;display:block}
+.gj-l b{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-right:8px;font-weight:600}
+.gj-l.flow b{color:hsl(var(--view-hue,22) 95% 82%)}
+.gr-journal .focus-actions{margin-top:12px}
+
+/* ── the phone, her eyes, and the quiet settings line ───────────────────── */
+.gr-reach{display:flex;flex-direction:column;gap:8px;margin:0 0 12px;padding:14px 18px;border-radius:18px;background:rgba(255,255,255,.03)}
+.gr-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px;line-height:1.45;color:var(--ink-2)}
+.gr-line span{flex:1 1 260px;min-width:0}
+.gr-settings{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;margin:4px 0 8px;padding:12px 18px;border-radius:18px;background:rgba(255,255,255,.025)}
+.gr-settings input[type=checkbox]{accent-color:hsl(var(--view-hue,22) 85% 66%)}
+
+/* ── the hard stop is said once, on Pulse; the title bar carries it elsewhere */
+#content:not(:has(> .view.active[data-view="overview"])) > .stop-banner.hard{display:none}
+
+/* ── three-cell strip (Motus Max) and the Duo strip keep the room's light ── */
+.st-strip.n3{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:960px){.st-strip.n3{grid-template-columns:minmax(0,1fr);gap:8px}}
+.st-strip.n3 .st-si,#duoBody .st-strip.n4 .st-si{
+  border-color:hsl(var(--view-hue,195) 80% 62% / .20);
+  background:radial-gradient(120% 140% at 50% -20%,hsl(var(--view-hue,195) 92% 60% / .10),transparent 72%),var(--panel,rgba(16,20,38,.62))}
+#duoBody .st-strip.n4{margin-bottom:14px}
+/* one line per label; the full sentence is in the cell's tooltip. A label
+   that holds a button (the retry) wraps, so the button is never cut off. */
+#omniBody .st-strip.n3 .st-si i{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#omniBody .st-strip.n3 .st-si i:has(button){white-space:normal}
+
+/* ── the board: two tidy buttons sit together ───────────────────────────── */
+.bd-sweep .mini + .mini{margin-left:0}
+
+/* ── her standing intention: whole, two lines until opened ──────────────── */
+.duo-intent .di-t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.duo-intent.open .di-t{-webkit-line-clamp:unset;display:block}
+
+/* ── contrast: secondary text is near-bone, set apart by size ───────────── */
+.st-si i,.panel-sub,.omp-h span,.bcl-w,.bd-close-h span,.di-m,.focus-hint{color:var(--ink-3)}
+.panel-sub{text-transform:none;letter-spacing:0;font-size:13px}
+.view-desc{max-width:64ch}
+
+/* ── no rings: buttons and quiet panels carry no border ─────────────────── */
+.prime-btn,.ghost-btn,.mini,.chip,.qbtn,.tb-stop,.tb-duo{border:0}
+.mini.go{background:linear-gradient(rgba(240,212,140,.13),rgba(240,212,140,.13)),var(--surf-2)}
+.omp-conf,.aw-why,.bd-sweep,.bd-close,.duo-intent{border:0}
+.omp-conf{background:hsl(var(--view-hue,195) 80% 60% / .12)}
+
+/* ── title bar: one telemetry pill, never wrapped, gone under 1100px ────── */
+.tb-status .pill{white-space:nowrap}
+@media (max-width:1100px){#tbStatus .pill{display:none}}

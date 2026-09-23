@@ -254,6 +254,14 @@ The console uses a small vocabulary on purpose. Most of these words appear on sc
 
 **Greta.** The fleet's critic. A seat that reads and never writes, and judges big moves before they count.
 
+**Greta's journal.** One entry an evening: the standard to raise tomorrow, what was beautiful, what fell short, where the flow broke, and a lesson for the builders. The standard rides in every brief.
+
+**Background depth.** The effort and turn budget for passes the app starts by itself. High and 48 by default, so they finish inside the relay's thirty minutes.
+
+**A ghost turn.** A turn a relay restart cut off. Its checkpoint still says inflight, so the seat looks busy. The watchdog clears it.
+
+**The Clear.** Archiving what the console has moved past into gzip files. It previews first and never deletes.
+
 **A decision.** A message on the phone with an id, answered in one line to any seat you talk to. Five a day at most.
 
 **The reckoning.** Checking a shipped move against its own falsifier on the day it named. HELD, BROKE or UNKNOWN.

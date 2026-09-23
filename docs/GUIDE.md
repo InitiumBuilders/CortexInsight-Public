@@ -234,8 +234,12 @@ Open Greta in the rail under FLEET. Name what to judge, paste what was done or
 point at the files or a live URL, and press Judge it. She opens what you named
 before she answers. Big moves also come to her on their own.
 
-You should see: a verdict with four scores, the strongest flaw, the smallest
-fix, and what must survive it.
+You should see: a verdict with five scores, a line on what it felt like to use,
+the strongest flaw, the smallest fix, and what must survive it.
+
+Her journal sits in the same room. She writes one entry each evening once there
+is work to look back on, or press Write today's entry to ask for one now. The
+standard at the top of the room is what every seat is held to the next day.
 
 ## 19. Answer from your phone
 
@@ -246,6 +250,15 @@ Waiting on you, with a test button that sends one message to prove the path.
 
 You should see: the decision close on the Board, and the answer go back to the
 seat that asked.
+
+## 20. Clear what you moved past
+
+Open Settings, then Data & Maintenance, and find Clear what we moved past.
+Press Preview to see what would be archived. Tick the box to include fleet logs
+older than sixty days. Press Archive it.
+
+You should see: the vault size before and after, and the archive folder where
+every removed entry was written. Nothing is deleted.
 
 ## Troubleshooting
 

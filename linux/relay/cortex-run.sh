@@ -65,15 +65,22 @@ ALLOWED_TOOLS="${CORTEX_TOOLS:-Read Glob Grep}"
 # pins above stand exactly as they did before this block existed.
 CI_FLEET="${HOME}/.cortexinsight/fleet.json"
 CI_EFFORT=""
+# BACKGROUND DEPTH. A pass the console runs by itself (a leverage loop, a
+# Duo-Drive pass, the reckoning) opens with a marker line and takes the seat's
+# background depth, so an unattended pass cannot outrun the relay's timeout.
+# A turn the operator starts carries no marker and keeps the full depth.
+CI_BG=""
+case "${MSG:-}" in "/LEVERAGE LOOP"*|"/DUO-DRIVE"*|"/RECKONING"*) CI_BG=1 ;; esac
 if [ -f "$CI_FLEET" ] && command -v python3 >/dev/null 2>&1; then
   CI_RESOLVED="$(python3 -c '
 import json, re, sys
 try:
     d = json.load(open(sys.argv[1]))
     a = (d.get("agents") or {}).get(sys.argv[2]) or {}
+    bg = len(sys.argv) > 3 and sys.argv[3] == "1"
     m = str(a.get("model") or "")
-    e = str(a.get("effort") or "")
-    t = str(a.get("turns") or "")
+    e = str((bg and a.get("bgEffort")) or a.get("effort") or "")
+    t = str((bg and a.get("bgTurns")) or a.get("turns") or "")
     # A vendor-prefixed OpenRouter id ("deepseek/deepseek-v4-pro")
     # carries a slash. Without it here the gear silently fell back to
     # the default and SEEKDEPTH did nothing at all. Still strict: no
@@ -85,7 +92,7 @@ try:
     print(m + "|" + e + "|" + h + "|" + t)
 except Exception:
     print("CORRUPT|||")
-' "$CI_FLEET" "$AGENT" 2>/dev/null || true)"
+' "$CI_FLEET" "$AGENT" "$CI_BG" 2>/dev/null || true)"
   CI_M="$(printf '%s' "${CI_RESOLVED:-}" | cut -d"|" -f1)"
   CI_E="$(printf '%s' "${CI_RESOLVED:-}" | cut -d"|" -f2)"
   CI_H="$(printf '%s' "${CI_RESOLVED:-}" | cut -d"|" -f3)"
@@ -118,7 +125,7 @@ except Exception:
   # starts oriented instead of blind. Hard-capped, and skipped if absent.
   CI_BRIEF="${HOME}/.cortexinsight/brief.md"
   if [ -f "$CI_BRIEF" ] && [ -n "${MSG:-}" ]; then
-    CI_BRIEF_TEXT="$(head -c 2000 "$CI_BRIEF" 2>/dev/null || true)"
+    CI_BRIEF_TEXT="$(head -c 3600 "$CI_BRIEF" 2>/dev/null || true)"
     # RETRACTION. A learning on the board is append-only and has no supersede,
     # so a fact that has since become false keeps arriving at the top of every
     # turn for every seat. (Measured 2026-09-19: the brief was still telling the

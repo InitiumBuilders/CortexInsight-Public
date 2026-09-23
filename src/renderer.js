@@ -959,8 +959,7 @@ function renderOverview(o) {
   const dotc = h.level === 'nominal' ? 'good' : h.level === 'degraded' ? 'bad' : 'warn';
   setHTML($('#tbStatus'),
     `<span class="pill"><span class="dot ${dotc}"></span> Cortex ${h.level || '—'}</span>
-     <span class="pill"><span class="dot ${o.uptime ? 'good' : 'bad'}"></span> relay ${o.uptime ? 'up ' + fmtDur(o.uptime) : 'offline'}</span>
-     <span class="pill">${o.stats.totalTurns} turns · ${compact(o.stats.totalTokens)} tok</span>`);
+     <span class="pill"><span class="dot ${o.uptime ? 'good' : 'bad'}"></span> relay ${o.uptime ? 'up ' + fmtDur(o.uptime) : 'offline'} · ${o.stats.totalTurns} turns · ${compact(o.stats.totalTokens)} tok</span>`);
   // rail orb + meta
   const orb = $('#cortexOrb'); orb.className = 'cortex-orb' + (h.level === 'degraded' ? ' bad' : h.level === 'watch' ? ' warn' : '');
   $('#cmUptime').textContent = o.uptime ? fmtDur(o.uptime) : 'offline';
@@ -1818,6 +1817,9 @@ async function loadSettings() {
     <div id="vaultStatsRow" class="set-row"><div><div class="sl">Vault size</div><div class="sd" id="vaultStatsDesc">measuring…</div></div><span id="vaultGauge" class="masked-tag">—</span></div>
     ${setNum('cleanupThreshold', 'Cleanup nudge at (items)', 'When the stored vault grows past this many items, the Cortex recommends a compaction.', SETTINGS.cleanupThreshold)}
     <div class="set-row"><div><div class="sl">Compact now</div><div class="sd">Trim every log &amp; ledger to a healthy cap. Same as /compact — keeps your data, drops the overflow.</div></div><button class="ghost-btn" id="compactNowBtn">◇ Compact vault</button></div>
+    <div class="set-row"><div><div class="sl">Clear what we moved past</div><div class="sd" id="clearPastDesc">Keeps what teaches (titles, what was done, verdicts, falsifiers, the reckoning) and moves the rest to compressed archives in the vault folder. Nothing is destroyed.</div>
+      <label class="rf-chk" style="margin-top:8px"><input type="checkbox" id="clearPastLogs"/> also archive fleet logs older than 60 days</label></div>
+      <button class="ghost-btn" id="clearPastBtn">◌ Preview</button></div>
     <div class="set-row"><div><div class="sl">Clear all logs &amp; data</div><div class="sd" style="color:var(--bad)">Wipes this app's private vault — learnings, next-steps, notifications, security &amp; Arden logs. Keeps your settings &amp; goal. Never touches the Cortex's own logs. Not reversible.</div></div><button class="ghost-btn" id="fullResetBtn" style="border-color:rgba(255,90,90,.4)">🧹 Clear everything</button></div>
 
     <div class="panel-head" style="margin-top:22px"><h3>Alert email</h3><span class="panel-sub">private channel</span></div>
@@ -1873,6 +1875,31 @@ async function loadSettings() {
     cnb.disabled = false; cnb.textContent = '◇ Compact vault';
     toast(r && r.ok ? 'Vault compacted ◇' : 'Could not compact', r && r.ok ? 'good' : 'bad');
     refreshVaultStats();
+  };
+  // THE CLEAR: preview first, then the same press archives it
+  const cpb = $('#clearPastBtn');
+  if (cpb) cpb.onclick = async () => {
+    const logs = !!($('#clearPastLogs') || {}).checked;
+    const apply = cpb.dataset.ready === '1';
+    cpb.disabled = true;
+    const r = await C.clean({ apply, logs }).catch(() => null);
+    cpb.disabled = false;
+    if (!r || !r.ok) { toast('Could not read the vault', 'bad'); return; }
+    const c = r.vault.counts || {};
+    const parts = [c.duoBodies && c.duoBodies + ' old Duo reports', c.doneTasks && c.doneTasks + ' tasks done a month ago', c.notes && c.notes + ' spent notifications',
+      c.ardenBodies && c.ardenBodies + ' old Arden reflections', (c.omniLog || 0) + (c.omniPast || 0) ? ((c.omniLog || 0) + (c.omniPast || 0)) + ' Motus Max log lines' : '',
+      c.critBodies && c.critBodies + ' old critique texts', c.steps && c.steps + ' finished next-steps'].filter(Boolean);
+    const logLine = logs ? ' · ' + r.fleet.files + ' fleet log file(s) older than 60 days (' + r.fleet.mb + ' MB)' : '';
+    const inboxLine = r.inbox && r.inbox.ready ? ' · the drained agent queue (' + r.inbox.kb + ' KB)' : '';
+    if (!apply) {
+      $('#clearPastDesc').textContent = (parts.length || logs || (r.inbox && r.inbox.ready)) ? 'It would archive: ' + (parts.join(', ') || 'nothing in the vault') + logLine + inboxLine + '. The vault is ' + r.vault.before + ' KB now.' : 'Nothing to clear: the vault holds only what still teaches.';
+      if (parts.length || logs || (r.inbox && r.inbox.ready)) { cpb.dataset.ready = '1'; cpb.textContent = '◌ Archive it'; }
+    } else {
+      cpb.dataset.ready = ''; cpb.textContent = '◌ Preview';
+      $('#clearPastDesc').textContent = 'Done. The vault went from ' + r.vault.before + ' KB to ' + r.vault.after + ' KB' + (logs ? '; ' + r.fleet.moved + ' log file(s) archived' + (r.fleet.failed ? ', ' + r.fleet.failed + ' left in place' : '') : '') + (r.inbox && r.inbox.rotated ? '; the agent queue was rotated' : '') + '. Archives: ' + r.archiveDir;
+      toast('Cleared what we moved past', 'good');
+      refreshVaultStats();
+    }
   };
   const frb = $('#fullResetBtn');
   if (frb) frb.onclick = async () => {

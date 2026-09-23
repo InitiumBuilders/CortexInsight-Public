@@ -75,6 +75,7 @@ contextBridge.exposeInMainWorld('cortex', {
   critique: (p) => ipcRenderer.invoke('cortex:critique', p || {}),
   signal: (p) => ipcRenderer.invoke('cortex:signal', p || {}),
   reckon: (p) => ipcRenderer.invoke('cortex:reckon', p || {}),
+  clean: (p) => ipcRenderer.invoke('cortex:clean', p || {}),
   breaker: () => ipcRenderer.invoke('cortex:breaker'),
   gearSet: (mode, ttlMin) => ipcRenderer.invoke('cortex:gearSet', { mode, ttlMin }),
   setAgentConfig: (p) => ipcRenderer.invoke('cortex:setAgentConfig', p),

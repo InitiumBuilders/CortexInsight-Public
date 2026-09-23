@@ -308,11 +308,27 @@ The console was designed from meaning outward. Before a room got its panels it g
 
 ## Greta
 
-**What.** The fleet's critic, a seat of her own that reads and never writes. A Duo-Drive pass that ships two or more files or any design, every Motus Max move that changes files, and anything a seat hands her with `ci.sh hand greta` comes to her. She returns a verdict (PASS, REVISE or BLOCK), four scores, the strongest flaw, the smallest fix, what must survive the fix, and a lesson. Her room shows every verdict and what she taught the fleet, and asks her anything by hand.
+**What.** The fleet's critic, a seat of her own that reads and never writes. A Duo-Drive pass that ships two or more files or any design, every Motus Max move that changes files, and anything a seat hands her with `ci.sh hand greta` comes to her. She returns a verdict (PASS, REVISE or BLOCK), five scores (craft, meaning, clarity, flow and truth), one line on what the work felt like to use, the strongest flaw, the smallest fix, what must survive the fix, and a lesson. Given a live URL on the desktop, she looks at it herself at desktop and phone width before she judges. Each evening she writes a journal entry, and its standard for tomorrow rides in every seat's brief and every loop pass. Her room leads with that standard, then her verdicts, her journal, and a place to ask her anything by hand.
 
 **Why.** The author of a thing has already convinced itself. Only a fresh context sees the work cold, so critique lives in a different head. What she says is acted on: a revision lands on the author's board, a block lands on the phone, and a lesson she is sure of rides in every seat's brief.
 
-**Module.** `gretaQueue`, `gretaJudge` and her soul in main.js; the room in `src/renderer-v4.js`; her seat in both relays.
+**Module.** `gretaQueue`, `gretaJudge`, `gretaEyes`, `gretaJournalWrite` and her soul in main.js; the room in `src/renderer-v4.js`; her seat in both relays. Her journal is also written to `agents/greta/journal/<day>.md` in the fleet tree.
+
+## The Clear
+
+**What.** Settings, Data & Maintenance, "Clear what we moved past". Preview shows what would go: long bodies of old Duo-Drive receipts, done tasks older than thirty days, notifications older than three weeks, old sent and strategic-read history, and, with the box ticked, fleet logs older than sixty days. Archive it writes all of it into gzip files under the app's `archive` folder and checks each one reads back before removing anything.
+
+**Why.** The vault and the fleet logs grow with every turn, and most of what they hold has been acted on. Nothing is deleted: an archived entry can be read back from its file.
+
+**Module.** `vaultDiet`, `fleetLogArchive`, `inboxRotate`, `theClear` in main.js.
+
+## Background depth and the ghost turn
+
+**What.** Passes the app starts by itself (loops, Duo-Drive, the reckoning) run at high effort with at most 48 turns, set per seat in fleet.json, so they finish inside the relay's thirty minutes. The operator's own turns stay at max. A turn a relay restart cut off, inflight for more than thirty-two minutes with a transcript quiet for twelve, is cleared by the watchdog with a backup kept.
+
+**Why.** An unattended pass that runs out of time loses all its work, and a checkpoint left inflight makes a seat look busy for hours.
+
+**Module.** `publishFleetConfig`, the bridge block, `readCheckpoint`, `healStaleCheckpoints` in main.js; `linux/relay/cortex-run.sh`.
 
 ## The signal: decisions on the phone
 

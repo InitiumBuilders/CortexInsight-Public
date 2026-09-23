@@ -466,11 +466,17 @@ async function rfSend() {
 /* The critic, as a room. What she judged, what she found, the smallest fix she
    named, what she said must survive, and what she taught every seat. Asking her
    by hand is one form away. */
-const GV = { verdict: { PASS: 'pass', REVISE: 'revise', BLOCK: 'block' } };
+const GV = { verdict: { PASS: 'pass', REVISE: 'revise', BLOCK: 'block' }, writing: 0 };
+// her five scores, in her order; flow is first among equals
+const GR_SCORES = ['craft', 'meaning', 'clarity', 'flow', 'truth'];
 function gretaCard(c) {
   const v = GV.verdict[c.verdict] || 'unread';
   const who = c.subject && c.subject.agent ? aname(c.subject.agent) : (c.manual ? 'asked by you' : '');
-  const body = [c.flaw && 'FLAW: ' + c.flaw, c.fix && 'FIX: ' + c.fix, c.keep && 'KEEP: ' + c.keep, c.lesson && 'LESSON: ' + c.lesson].filter(Boolean).join('\n\n') + (c.body ? '\n\n' + c.body : '');
+  const sc = c.scores || {};
+  const scored = GR_SCORES.filter((k) => Number.isFinite(sc[k]));
+  const shots = Array.isArray(c.shots) ? c.shots : [];
+  const body = [scored.length && scored.map((k) => k + ' ' + sc[k]).join(' · '), c.experience && 'FELT LIKE: ' + c.experience,
+    c.flaw && 'FLAW: ' + c.flaw, c.fix && 'FIX: ' + c.fix, c.keep && 'KEEP: ' + c.keep, c.lesson && 'LESSON: ' + c.lesson].filter(Boolean).join('\n\n') + (c.body ? '\n\n' + c.body : '');
   return `
     <div class="gc v-${v} expandable" data-body="${escAttr(body)}" data-rtitle="${escAttr('Greta on “' + ((c.subject || {}).title || '') + '”')}" data-rsub="${escAttr(c.ts)}">
       <div class="gc-top">
@@ -479,6 +485,9 @@ function gretaCard(c) {
         <span class="gc-t">${esc((c.subject || {}).title || '')}</span>
         <span class="gc-w mono">${esc(who)}${who ? ' · ' : ''}${esc(ago(c.ts))} ago</span>
       </div>
+      ${scored.length ? `<div class="gc-sc">${scored.map((k) => `<span class="gcs${k === 'flow' ? ' flow' : ''}"><span class="gcs-k">${k}</span><b class="mono">${sc[k]}</b></span>`).join('')}</div>` : ''}
+      ${c.experience ? `<div class="gc-l felt"><b>felt like</b> ${esc(c.experience)}</div>` : ''}
+      ${shots.length ? `<div class="gc-eyes">she saw it on screen at ${esc(shots.join(' and '))} width</div>` : ''}
       ${c.error ? `<div class="gc-l"><b>could not judge</b> ${esc(c.error)}</div>` : ''}
       ${c.flaw ? `<div class="gc-l"><b>flaw</b> ${esc(c.flaw)}</div>` : ''}
       ${c.fix ? `<div class="gc-l"><b>fix</b> ${esc(c.fix)}</div>` : ''}
@@ -489,40 +498,82 @@ function gretaCard(c) {
 }
 async function loadGreta() {
   const host = $('#gretaBody'); if (!host) return;
-  const g = await C.greta();
+  const [g, st] = await Promise.all([C.greta(), C.settings ? C.settings().catch(() => null) : null]);
   if (!g || g.error) return viewFail('greta', g || null);
+  // the evening journal runs unless it was switched off (main reads it the same way)
+  const journalOn = ((st && st.settings) || {}).gretaJournal !== false;
+  const jr = g.journal || [];
+  const jHint = 'one real turn, and it can take a few minutes';
   setHTML(host, `
     <div class="view-head"><h2>Greta</h2>
+      ${g.standard ? `<div class="gr-standard"><span class="grs-k">Her standard today</span><div class="grs-t">${esc(g.standard)}</div></div>` : ''}
       <p class="view-desc">The critic. Big moves pass through her before they count: a Duo-Drive pass that changed two or more files or any design, every Motus Max move that changed files, and anything a seat hands her. She never builds. She says what fails, the smallest change that would make it great, and what must survive the fix. A revision lands on the board for its author, a block lands on your phone, and a lesson she is sure of rides in every seat's brief.</p></div>
-    <div class="st-strip n5">
+    ${g.judged ? `<div class="st-strip n5">
       ${siCell(g.on ? 'live' : 'zero', g.on ? 'JUDGING' : 'OFF', g.on ? 'big moves pass through her' : 'nothing is judged automatically')}
       ${siCell('', g.judged || 0, 'judged')}
       ${siCell(g.avg != null && g.avg >= 7 ? 'go' : '', g.avg != null ? g.avg : '—', 'average score, last 60')}
       ${siCell('', (g.pass || 0) + ' · ' + (g.revise || 0) + ' · ' + (g.block || 0), 'pass · revise · block')}
       ${siCell('', (g.lessons || []).length, 'lessons she taught the fleet')}
-    </div>
+    </div>` : `<div class="rf-reading gr-reading">${g.on ? 'Nothing judged yet. She is on, so the next big move that ships comes to her.' : 'Nothing judged yet. She is off and judges only what you ask her to.'}</div>`}
+    ${!g.judged ? '' : `<div class="rf-2">
+      <div class="panel glass">
+        <div class="panel-head"><h3>Her verdicts</h3><span class="panel-sub">newest first${g.queued ? ' · ' + g.queued + ' waiting' : ''}${g.busy ? ' · judging now' : ''}</span></div>
+        ${(g.critiques || []).length ? g.critiques.map(gretaCard).join('') : '<div class="empty">Her first verdict lands here.</div>'}
+      </div>
+      <div class="panel glass">
+        <div class="panel-head"><h3>What she taught the fleet</h3><span class="panel-sub">each rides in every seat's brief</span></div>
+        ${(g.lessons || []).length ? g.lessons.map((l) => `<div class="gl"><span class="gl-t">${esc(l.title)}</span><span class="gl-m mono">${esc(ago(l.ts))} ago${l.uses > 1 ? ' · confirmed ' + l.uses + '×' : ''}</span></div>`).join('') : '<div class="empty">No lesson yet. She banks one only when she is sure it holds for every seat.</div>'}
+      </div>
+    </div>`}
     <div class="panel glass greta-ask">
-      <div class="panel-head"><h3>Ask her</h3><span class="panel-sub">one real turn on her seat · never capped when you ask</span>
-        <label class="rf-chk"><input type="checkbox" id="grOn" ${g.on ? 'checked' : ''}/> judge big moves on her own</label>
-        <select id="grPer" class="sel sm">${[4, 8, 12, 20, 30].map((n) => `<option value="${n}" ${g.perDay === n ? 'selected' : ''}>up to ${n} a day</option>`).join('')}</select></div>
+      <div class="panel-head"><h3>Ask her</h3><span class="panel-sub">one real turn on her seat · never capped when you ask</span></div>
       <input id="grTitle" class="txt big" placeholder="what to judge, in one line" spellcheck="true"/>
       <textarea id="grBody" class="txt" rows="3" placeholder="what was done, or paste the thing itself" spellcheck="true"></textarea>
       <input id="grFiles" class="txt" placeholder="files or a live URL (optional, comma separated)" spellcheck="false"/>
       <div class="focus-actions"><button class="prime-btn" id="grGo">◎ Judge it</button><span class="focus-hint" id="grHint">she opens what you name before she judges</span></div>
       <div id="grOut"></div>
     </div>
-    <div class="rf-2">
-      <div class="panel glass">
-        <div class="panel-head"><h3>Her verdicts</h3><span class="panel-sub">newest first${g.queued ? ' · ' + g.queued + ' waiting' : ''}${g.busy ? ' · judging now' : ''}</span></div>
-        ${(g.critiques || []).length ? g.critiques.map(gretaCard).join('') : '<div class="empty">Nothing judged yet. The first big move that ships will come to her, or ask her above.</div>'}
-      </div>
-      <div class="panel glass">
-        <div class="panel-head"><h3>What she taught the fleet</h3><span class="panel-sub">each rides in every seat's brief</span></div>
-        ${(g.lessons || []).length ? g.lessons.map((l) => `<div class="gl"><span class="gl-t">${esc(l.title)}</span><span class="gl-m mono">${esc(ago(l.ts))} ago${l.uses > 1 ? ' · confirmed ' + l.uses + '×' : ''}</span></div>`).join('') : '<div class="empty">No lesson yet. She banks one only when she is sure it holds for every seat.</div>'}
-      </div>
+    <div class="panel glass gr-journal">
+      <div class="panel-head"><h3>Her journal</h3><span class="panel-sub">one entry an evening, looking back over what shipped</span></div>
+      ${jr.length ? jr.map((e) => `
+        <div class="gj expandable" data-body="${escAttr(e.entry || '')}" data-rtitle="${escAttr('Greta · ' + (e.day || ''))}" data-rsub="${escAttr(e.ts || '')}">
+          <div class="gj-day mono">${esc(e.day || '')}</div>
+          ${e.standard ? `<div class="gj-std">${esc(e.standard)}</div>` : ''}
+          ${e.beautiful ? `<div class="gj-l"><b>beautiful</b> ${esc(e.beautiful)}</div>` : ''}
+          ${e.short ? `<div class="gj-l"><b>fell short</b> ${esc(e.short)}</div>` : ''}
+          ${e.flow ? `<div class="gj-l flow"><b>flow</b> ${esc(e.flow)}</div>` : ''}
+          ${e.builders ? `<div class="gj-l"><b>for the builders</b> ${esc(e.builders)}</div>` : ''}
+          ${e.entry ? '<div class="dl-act"><button class="mini read" data-read="1">⤢ read the whole entry</button></div>' : ''}
+        </div>`).join('') : '<div class="empty">She writes one entry an evening, once there is work to look back on.</div>'}
+      <div class="focus-actions"><button class="ghost-btn" id="grWrite" ${GV.writing ? 'disabled' : ''}>Write today's entry</button><span class="focus-hint" id="grJHint">${GV.writing ? 'she is writing · ' + Math.round((Date.now() - GV.writing) / 1000) + 's' : jHint}</span></div>
+    </div>
+    ${g.phone || g.eyes ? `<div class="gr-reach">
+      ${g.phone ? `<div class="gr-line"><span>Decisions reach your phone through ${esc(g.phone)}.</span><button class="mini" id="grPhoneTest">send a test</button></div>` : ''}
+      ${g.eyes ? '<div class="gr-line"><span>She looks at a live URL on screen, at desktop and phone width, before she judges it.</span></div>' : ''}
+    </div>` : ''}
+    <div class="gr-settings">
+      <label class="rf-chk"><input type="checkbox" id="grOn" ${g.on ? 'checked' : ''}/> judge big moves on her own</label>
+      <select id="grPer" class="sel sm">${[4, 8, 12, 20, 30].map((n) => `<option value="${n}" ${g.perDay === n ? 'selected' : ''}>up to ${n} a day</option>`).join('')}</select>
+      <label class="rf-chk"><input type="checkbox" id="grJournal" ${journalOn ? 'checked' : ''}/> journal each evening</label>
     </div>`);
   $('#grOn').onchange = async () => { await C.greta({ on: $('#grOn').checked }); toast($('#grOn').checked ? 'Greta judges big moves' : 'Greta only judges when asked', 'good'); };
   $('#grPer').onchange = () => C.greta({ perDay: +$('#grPer').value });
+  $('#grJournal').onchange = async () => { await C.greta({ journal: $('#grJournal').checked }); toast($('#grJournal').checked ? 'She journals each evening' : 'Evening journal off', 'good'); };
+  wirePhoneTest($('#grPhoneTest'));
+  $('#grWrite').onclick = async () => {
+    if (GV.writing) return;
+    const btn = $('#grWrite'); btn.disabled = true; GV.writing = Date.now();
+    const t0 = GV.writing;
+    // queried each second, so the counter survives a repaint of the room
+    const tick = setInterval(() => { const h = $('#grJHint'); if (h) h.textContent = 'she is writing · ' + Math.round((Date.now() - t0) / 1000) + 's'; }, 1000);
+    const r = await C.greta({ writeJournal: true }).catch(() => null);
+    clearInterval(tick); GV.writing = 0;
+    const w = r && r.wrote;
+    toast(w && w.ok ? 'She wrote today\'s entry' : 'No entry yet: ' + ((w && w.error) || (r && r.error) || 'she did not answer'), w && w.ok ? 'good' : 'bad');
+    const h = $('#grJHint'); if (h) h.textContent = jHint;
+    const b = $('#grWrite'); if (b) b.disabled = false;
+    loadGreta();
+  };
   $('#grGo').onclick = async () => {
     const title = $('#grTitle').value.trim(), body = $('#grBody').value.trim(), f = $('#grFiles').value.trim();
     if (!title && !body) { toast('Tell her what to judge', 'warn'); return; }
@@ -543,19 +594,20 @@ async function loadGreta() {
 function decisionsStrip(b) {
   const s = b.signal || {};
   const open = s.open || [];
-  if (!open.length && !s.path) return '';
+  // only when something waits; the phone test lives in the Greta room
+  if (!open.length) return '';
   return `<div class="bd-dec">
-    <div class="bd-dec-h"><b>Waiting on you</b><span>${open.length ? open.length + ' decision' + (open.length === 1 ? '' : 's') + (s.path ? ', also on your phone' : '') : 'nothing waits on you'}${s.path ? ' · by ' + esc(s.path) : ' · no phone path on this machine'}</span>
-      <button class="mini" id="decTest" ${s.path ? '' : 'disabled'}>send a test</button></div>
+    <div class="bd-dec-h"><b>Waiting on you</b><span>${open.length} decision${open.length === 1 ? '' : 's'}${s.path ? ', also on your phone · by ' + esc(s.path) : ' · no phone path on this machine'}</span></div>
     ${open.map((d) => `<div class="bd-dc">
       <div class="bdc-t"><span class="mono">${esc(d.id)}</span> ${esc(d.title)}${d.body ? `<div class="bdc-b">${esc(d.body)}</div>` : ''}</div>
       <div class="bdc-a"><button class="mini go" data-dec="${escAttr(d.id)}" data-ans="yes">yes</button><button class="mini" data-dec="${escAttr(d.id)}" data-ans="no">no</button><input class="txt sm" data-dec-text="${escAttr(d.id)}" placeholder="or say it" spellcheck="true"/></div>
     </div>`).join('')}
   </div>`;
 }
-function wireDecisions() {
-  const t = $('#decTest');
+function wirePhoneTest(t) {
   if (t) t.onclick = async () => { t.disabled = true; const r = await C.signal({ test: true }); t.disabled = false; toast(r && r.test && r.test.ok ? 'Sent. Check your phone.' : 'It did not go: ' + ((r && r.test && (r.test.error || r.test.skipped)) || 'no path'), r && r.test && r.test.ok ? 'good' : 'bad'); };
+}
+function wireDecisions() {
   const answer = async (id, text) => { const r = await C.signal({ answer: { id, text } }); toast(r && r.ok ? 'Answered ' + id : ((r && r.error) || 'could not answer'), r && r.ok ? 'good' : 'bad'); if (typeof loadBoard === 'function') loadBoard(); };
   $$('[data-dec][data-ans]').forEach((b) => b.onclick = () => answer(b.dataset.dec, b.dataset.ans));
   $$('[data-dec-text]').forEach((i) => i.onkeydown = (e) => { if (e.key === 'Enter' && i.value.trim()) answer(i.dataset.decText, i.value.trim()); });
@@ -575,13 +627,13 @@ async function paintReckonPanel(sel) {
     <div class="panel glass reckon">
       <div class="panel-head"><h3>The reckoning</h3><span class="panel-sub">every shipped move is checked against its own falsifier on the day it named</span>
         <button class="ghost-btn" id="rkRun" ${r.due ? '' : 'disabled title="nothing is due yet"'}>check what is due${r.due ? ' (' + r.due + ')' : ''}</button></div>
-      <div class="st-strip n5">
+      ${c.judged > 0 ? `<div class="st-strip n5">
         ${siCell('', c.judged || 0, 'moves checked')}
         ${siCell(c.judged && c.held / c.judged >= 0.6 ? 'go' : '', pct(c.held || 0, c.judged || 0), 'held')}
         ${siCell('', pct(c.hiHeld || 0, c.hi || 0), 'of the ones called 8+/10')}
         ${siCell('', r.due || 0, 'due now')}
         ${siCell('', r.last ? ago(r.last.ts) + ' ago' : 'never', 'last reckoning')}
-      </div>
+      </div>` : ''}
       ${r.line ? '<div class="rk-line">' + esc(r.line) + '</div>' : '<div class="rk-line dim">The record starts once four shipped moves have reached the day they named. Until then, confidence is a claim.</div>'}
       ${(r.recent || []).map((x) => '<div class="rk-row r-' + esc(String(x.verdict).toLowerCase()) + '"><span class="rk-v">' + (x.verdict === 'HELD' ? '✓ held' : x.verdict === 'BROKE' ? '✕ broke' : '? unknown') + '</span><span class="rk-t">' + esc(x.title) + '</span><span class="rk-e">' + esc(x.evidence || '') + '</span><span class="rk-m mono">' + (x.confidence ? x.confidence + '/10 · ' : '') + esc(ago(x.ts)) + '</span></div>').join('')}
     </div>`);

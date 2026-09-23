@@ -243,6 +243,10 @@ const BOARD_COLS = [
    move, run, dispatch, delete) behind one press. And it finally surfaces the
    thing that changed underneath it: a task can now be worked by the compute
    commons, so the card shows that state where the work actually is. */
+// main phrases the tidy as "lower N the fleet filed as urgent"; name what N counts
+function tidySaid(said) {
+  return String(said || '').replace(/lower (\d+) the fleet filed as urgent/, (m, n) => 'lower ' + n + ' task' + (n === '1' ? '' : 's') + ' the fleet filed as urgent');
+}
 async function loadBoard() {
   const b = await C.board();
   if (!b || b.error) return viewFail('tasks', b || null);
@@ -349,6 +353,8 @@ async function loadBoard() {
       if (!w || !w.idle) return '';
       const aw = (b.autoWork || {});
       if (!aw.on) return '';
+      // the title bar already says the fleet is stopped; say it once
+      if (CONTROL.stopped || /fleet is stopped/i.test(w.why || '')) return '';
       return '<div class="aw-why"><span class="awk">⚑ AUTO-WORK IS ON BUT IDLE</span>'
         + '<span class="awt">' + esc(w.why) + '</span>'
         + (w.fix ? '<span class="awf">→ ' + esc(w.fix) + '</span>' : '') + '</div>';
@@ -379,20 +385,6 @@ async function loadBoard() {
     })()}
     ${typeof decisionsStrip === 'function' ? decisionsStrip(b) : ''}
     ${(() => {
-      // THE TIDY — what it would do right now, and the undo for what it last did
-      const t = b.tidy;
-      if (!t || (!t.total && !t.canUndo)) return '';
-      const last = t.last ? 'last tidy ' + ago(t.last.ts) + ' ago, ' + t.last.reason : '';
-      return '<div class="bd-sweep bd-tidy"><span><b>The tidy</b> · ' + (t.total ? 'it would ' + esc(t.said) : 'the board is tidy') + (last ? ' · ' + esc(last) : '') + '. Nothing is ever deleted.</span>'
-        + (t.total ? '<button class="mini go" id="bdTidy">tidy now</button>' : '') + (t.canUndo ? '<button class="mini" id="bdTidyUndo">undo the last tidy</button>' : '') + '</div>';
-    })()}
-    ${(() => {
-      const s = b.sweep;
-      if (!s || !s.count || (b.tidy && b.tidy.total)) return '';
-      return '<div class="bd-sweep"><span>' + s.count + ' task' + (s.count === 1 ? '' : 's') + ' untouched for ' + s.days + '+ days. Parking folds them under the board at low priority; nothing is deleted.</span>'
-        + '<button class="mini" id="bdSweep">park ' + s.count + '</button></div>';
-    })()}
-    ${(() => {
       // THE CLOSE — the hand on the lever the reading named. Three decisions,
       // chosen from what the ledger already knows, one press each.
       const cl = b.close || [];
@@ -402,6 +394,21 @@ async function loadBoard() {
         + cl.map((c) => '<div class="bd-cl"><div><div class="bcl-t">' + esc(c.title) + '</div><span class="bcl-w">' + esc(kindWord[c.kind] || c.kind) + ' · ' + esc(c.why) + '</span></div>'
           + '<div class="bcl-a"><button class="mini go" data-closeact="done" data-close="' + c.id + '">✓ done</button><button class="mini" data-closeact="park" data-close="' + c.id + '">park</button><button class="mini" data-closeact="keep" data-close="' + c.id + '">keep</button></div></div>').join('')
         + '</div>';
+    })()}
+    ${(() => {
+      // THE TIDY — what it would do right now, and the undo for what it last did.
+      // Upkeep, so it sits after the decisions that need his hand.
+      const t = b.tidy;
+      if (!t || (!t.total && !t.canUndo)) return '';
+      const last = t.last ? 'last tidy ' + ago(t.last.ts) + ' ago, ' + t.last.reason : '';
+      return '<div class="bd-sweep bd-tidy"><span><b>The tidy</b> · ' + (t.total ? 'it would ' + esc(tidySaid(t.said)) : 'the board is tidy') + (last ? ' · ' + esc(last) : '') + '. Nothing is ever deleted.</span>'
+        + (t.total ? '<button class="mini go" id="bdTidy">tidy now</button>' : '') + (t.canUndo ? '<button class="mini" id="bdTidyUndo">undo the last tidy</button>' : '') + '</div>';
+    })()}
+    ${(() => {
+      const s = b.sweep;
+      if (!s || !s.count || (b.tidy && b.tidy.total)) return '';
+      return '<div class="bd-sweep"><span>' + s.count + ' task' + (s.count === 1 ? '' : 's') + ' untouched for ' + s.days + '+ days. Parking folds them under the board at low priority; nothing is deleted.</span>'
+        + '<button class="mini" id="bdSweep">park ' + s.count + '</button></div>';
     })()}
     ${(() => {
       const nx = b.nexts || [];
@@ -513,7 +520,7 @@ async function loadBoard() {
   const td = $('#bdTidy');
   if (td) td.onclick = async () => {
     const r = await C.boardTidy({ apply: true });
-    toast(r && r.ok ? (r.applied ? 'Tidied: ' + r.said : 'Already tidy') : 'could not tidy', r && r.ok ? 'good' : 'bad'); loadBoard();
+    toast(r && r.ok ? (r.applied ? 'Tidied: ' + tidySaid(r.said) : 'Already tidy') : 'could not tidy', r && r.ok ? 'good' : 'bad'); loadBoard();
   };
   const tu = $('#bdTidyUndo');
   if (tu) tu.onclick = async () => {
@@ -1685,26 +1692,6 @@ async function loadDuo() {
     <div class="view-head"><h2>Duo-Drive <span class="h2-sub">MotusAgent One</span></h2>
       <p class="view-desc">She works alongside you on <b>Leverage Loops</b> — small, repeatable, high-confidence moves on your real projects. She can design new loops for herself; none of them run until you approve them.</p></div>
 
-    <div class="st-strip n5">
-      ${siCell(d.active ? 'live' : 'zero', d.active ? 'DRIVING' : 'IDLE', d.active ? 'a loop is compounding right now' : 'progress stops when you stop')}
-      ${siCell(runningLoops ? 'go' : 'zero', runningLoops, 'of ' + approved.length + ' loop(s) enabled')}
-      ${siCell(pending.length ? 'zero' : '', pending.length, pending.length ? 'she designed these and cannot run them' : 'nothing waiting on your approval')}
-      ${siCell((W.shipped || 0) ? 'go' : '', W.shipped || 0, 'change(s) shipped · ' + (W.files || 0) + ' file(s) touched')}
-      ${siCell(!sinceP || (Date.now() - Date.parse(lastPass)) > 3 * 864e5 ? 'zero' : '', sinceP || '—',
-        sinceP ? 'since her last pass' : 'she has never taken a pass')}
-    </div>
-    ${(() => {
-      // her stated NEXT from the newest pass that has one — the plan the next
-      // pass must answer to, standing on screen between passes
-      const li = (W.items || []).find((x) => x.next);
-      return li ? '<div class="duo-intent"><span class="di-k">◈ HER STANDING INTENTION</span>'
-        + '<span class="di-t">' + esc(String(li.next).replace(/\*\*|__|`/g, '').slice(0, 220)) + '</span>'
-        + '<span class="di-m">from “' + esc(String(li.loopName || 'a pass').slice(0, 40)) + '” — the next pass honors it, or says why not</span></div>' : '';
-    })()}
-    <div class="creed">
-      <span class="cr-flow"><b>Mantra</b> → <b>Mindset</b> → <b>Model</b> → <b>Motus</b></span>
-      <span class="cr-test">every pass answers one question: <b>did something actually move?</b></span>
-    </div>
     <div class="duo-hero glass-deep ${d.active ? 'on' : ''}">
       <div class="dh-orb ${d.active ? 'live' : ''}"><span></span></div>
       <div class="dh-mid">
@@ -1719,7 +1706,30 @@ async function loadDuo() {
         <button class="prime-btn ${d.active ? 'danger' : ''}" id="duoToggle">${d.active ? '■ Stop now' : '▶ Start'}</button>
       </div>
     </div>
-    ${duoFlightStrip(r)}
+    <!-- the hero says driving or off; the strip carries only what it does not -->
+    <div class="st-strip n4">
+      ${siCell(runningLoops ? 'go' : 'zero', runningLoops, 'of ' + approved.length + ' loop(s) enabled')}
+      ${siCell(pending.length ? 'zero' : '', pending.length, pending.length ? 'she designed these and cannot run them' : 'nothing waiting on your approval')}
+      ${siCell((W.shipped || 0) ? 'go' : '', W.shipped || 0, 'change(s) shipped · ' + (W.files || 0) + ' file(s) touched')}
+      ${siCell(!sinceP || (Date.now() - Date.parse(lastPass)) > 3 * 864e5 ? 'zero' : '', sinceP || '—',
+        sinceP ? 'since her last pass' : 'she has never taken a pass')}
+    </div>
+    ${(() => {
+      // her stated NEXT from the newest pass that has one — the plan the next
+      // pass must answer to, standing on screen between passes. Full text,
+      // clamped to two lines in CSS and opened by a click.
+      const li = (W.items || []).find((x) => x.next);
+      if (!li) return '';
+      const next = String(li.next).replace(/\*\*|__|`/g, '');
+      return '<div class="duo-intent expandable" data-body="' + escAttr(next) + '" data-rtitle="Her standing intention"><span class="di-k">◈ HER STANDING INTENTION</span>'
+        + '<span class="di-t">' + esc(next) + '</span>'
+        + '<span class="di-m">from “' + esc(String(li.loopName || 'a pass').slice(0, 40)) + '” — the next pass honors it, or says why not</span></div>';
+    })()}
+    <div class="creed">
+      <span class="cr-flow"><b>Mantra</b> → <b>Mindset</b> → <b>Model</b> → <b>Motus</b></span>
+      <span class="cr-test">every pass answers one question: <b>did something actually move?</b></span>
+    </div>
+    ${(r.flights || []).length || d.active ? duoFlightStrip(r) : ''}
     <div class="panel glass duo-brief">
       <label class="fr-lbl">Standing brief <span class="fr-hint">held in mind on every pass</span></label>
       <textarea id="duoBrief" rows="2" spellcheck="true" placeholder="e.g. We are pre-launch on MotusMoves. Prefer polish over new surface. Never touch the relay or payments.">${esc(d.brief || '')}</textarea>
@@ -3754,18 +3764,20 @@ function paintOmni() {
      ARMED and HANDS are deliberately the two loudest cells: whether she may
      act, and whether her hands are real. Confusing dry-run for live is the one
      mistake on this page that cannot be undone. ═══ */
-  const omArmMin = o.remainingMs ? Math.max(0, Math.round(o.remainingMs / 60000)) : 0;
   const mmss = (x) => x >= 60 ? Math.floor(x / 60) + 'm' + String(Math.round(x % 60)).padStart(2, '0') + 's' : Math.round(x) + 's';
   const clock = o.seatClock && o.seatClock.n ? o.seatClock : null;
-  const omMoves = (s && (s.cycles || (s.moves || []).length)) || 0;
-  const omSteps = (s && (s.steps || []).length) || 0;
+  // Three cells. Armed or not, and the fuse, are the arm panel's to say; the
+  // move and step count is the session card's. Labels sit on one line, so the
+  // whole sentence rides in a tooltip and nothing is lost to the ellipsis.
+  const omCell = (cls, big, sub) => {
+    const t = document.createElement('i'); t.innerHTML = sub;
+    return siCell(cls, big, sub).replace('<i>', () => '<i title="' + escAttr(t.textContent) + '">');
+  };
   setHTML($('#omniBody'), `
     <div class="view-head"><h2>Motus Max</h2>
       <p class="view-desc">OmniDrive. She sees your actual screen, moves your actual mouse and keyboard, and works across whatever app the work really lives in — with you steering by voice or text. This is the deepest permission in the app, so it is the loudest one on the page.</p></div>
 
-    <div class="st-strip n5">
-      ${siCell(o.armed ? 'live' : '', o.armed ? 'ARMED' : 'DISARMED',
-        o.armed ? (omArmMin ? 'she may act — ' + omArmMin + ' min left' : 'she may act') : 'she cannot touch your machine')}
+    <div class="st-strip n3">
       ${(() => {
         // ⚠ CAUGHT IN REVIEW: this read "REAL — her hands are live on your
         // machine" while the cell beside it said DISARMED. Both facts were
@@ -3774,37 +3786,36 @@ function paintOmni() {
         // ARMED *and* not dry, and on this page overstating that is the one
         // mistake that cannot be undone.
         const canTouch = o.armed && !o.dry;
-        if (canTouch) return siCell('live', 'REAL', 'her hands are live on your machine');
-        if (o.armed) return siCell('zero', 'DRY', 'armed, but hands off — every step shown as “would…”');
-        if (o.dry) return siCell('', 'DRY', 'dry run set, and she is disarmed');
-        return siCell('', 'REAL', 'hands are real — but disarmed, so she cannot act');
+        if (canTouch) return omCell('live', 'REAL', 'her hands are live on your machine');
+        if (o.armed) return omCell('zero', 'DRY', 'armed, but hands off — every step shown as “would…”');
+        if (o.dry) return omCell('', 'DRY', 'dry run set, and she is disarmed');
+        return omCell('', 'REAL', 'hands are real — but disarmed, so she cannot act');
       })()}
       ${(() => {
-        if (live) return siCell('live', esc(s.status).toUpperCase(), o.turnInFlight
+        if (live) return omCell('live', esc(s.status).toUpperCase(), o.turnInFlight
           ? esc(o.turnInFlight.kind) + ' · ' + mmss(o.turnInFlight.secs) + (clock ? ' of a typical ' + mmss(clock.median) : ' in flight') + (clock && o.turnInFlight.secs > clock.p90 ? ' · past her p90, still moving' : '')
           : 'between turns — next one is queuing');
         // armed and idle: the arm-time read is the state that matters
         const pr = o.armed && o.preRead ? o.preRead : null;
-        if (pr && pr.status === 'ready') return siCell('go', 'READY', 'move chosen at arm: ' + esc(String(pr.firstStep || '')) + (pr.confidence != null ? ' · confidence ' + pr.confidence + '/10' : '') + ' · press Drive');
-        if (pr && pr.status === 'reading') return siCell('', 'READING', 'choosing the move now · ' + mmss(pr.secs) + (clock ? ' of a typical ' + mmss(clock.median) : ''));
+        if (pr && pr.status === 'ready') return omCell('go', 'READY', 'move chosen at arm: ' + esc(String(pr.firstStep || '')) + (pr.confidence != null ? ' · confidence ' + pr.confidence + '/10' : '') + ' · press Drive');
+        if (pr && pr.status === 'reading') return omCell('', 'READING', 'choosing the move now · ' + mmss(pr.secs) + (clock ? ' of a typical ' + mmss(clock.median) : ''));
         if (pr && pr.status === 'failed') {
           // the way out of a failed read is one press: the fastest seat with hands
           const f = o.fastestHands;
           const retry = f && f.id !== o.agent ? ' <button class="mini go" data-preread-retry="' + esc(f.id) + '">read again with ' + esc(f.name) + '</button>' : ' <button class="mini" data-preread-retry="">read again</button>';
-          return siCell('zero', 'NO READ', esc(String(pr.error || '')) + ' · Drive reads on press' + retry);
+          return omCell('zero', 'NO READ', esc(String(pr.error || '')) + ' · Drive reads on press' + retry);
         }
         // the full reason, never a slice: a cut sentence cannot be recovered by clicking
-        return siCell('', s ? esc(s.status) : 'none', s ? 'last session · ' + esc(String(s.why || 'ended')) : 'no session yet');
+        return omCell('', s ? esc(s.status) : 'none', s ? 'last session · ' + esc(String(s.why || 'ended')) : 'no session yet');
       })()}
-      ${siCell(omMoves ? 'go' : '', omMoves, 'move(s) this session · ' + omSteps + ' step(s)')}
       ${(() => {
-        // the fifth cell is the wait, as a number — and the way out of it
-        if (!clock) return siCell('', '—', 'no completed turns on this seat yet, so the first one sets the clock');
+        // the third cell is the wait, as a number — and the way out of it
+        if (!clock) return omCell('', '—', 'no completed turns on this seat yet, so the first one sets the clock');
         const slow = clock.median > 300;
         const f = o.fastestHands;
         const alt = slow && f && f.id !== clock.agent && f.median < clock.median * 0.7 ? ' · ' + esc(f.name) + ' has hands and answers in ~' + mmss(f.median) : '';
         const why = o.depth ? ' · max depth is on, so the choice takes longer (your setting)' : '';
-        return siCell(slow ? 'zero' : 'go', mmss(clock.median), 'typical turn on this seat · p90 ' + mmss(clock.p90) + ' · ' + clock.n + ' turns in 7 days' + alt + why);
+        return omCell(slow ? 'zero' : 'go', mmss(clock.median), 'typical turn on this seat · p90 ' + mmss(clock.p90) + ' · ' + clock.n + ' turns in 7 days' + alt + why);
       })()}
     </div>
 
@@ -3822,6 +3833,27 @@ function paintOmni() {
         + (hw.fix === 'mode' ? '<button class="mini hw-go" id="hwMode">switch to ▶ Drive my screen</button>' : '')
         + '</div>';
     })()}
+    <!-- THE ARM — the single most important state in this build, so it comes
+         before the paths it would drive -->
+    <div class="om-arm glass-deep ${o.armed ? 'on' : ''} ${o.armed && !live ? 'idle' : ''}">
+      <div class="om-arm-core">
+        <button class="om-hold ${o.armed ? 'on' : ''}" id="omHold">
+          <span class="om-hold-fill"></span>
+          <span class="om-hold-lab">${o.armed ? 'ARMED' : 'HOLD TO ARM'}</span>
+        </button>
+        <div class="om-arm-meta">
+          <div class="om-arm-state">${o.armed ? (live ? 'She is driving' : 'Armed — but she is not driving yet') : 'She cannot touch your machine'}</div>
+          <div class="om-arm-sub">${o.armed
+            ? (live
+              ? `Disarms by itself in <b id="omLeft">${omniFmtLeft(o.remainingMs)}</b> — and instantly on <b>Ctrl + Alt + Shift + X</b>, from anywhere, even while another app has focus.`
+              : `Arming grants permission. It does <b>not</b> start the work — press <b>Drive Now</b>, or just say <b>“Motus Max”</b> out loud. Fuse: <b id="omLeft">${omniFmtLeft(o.remainingMs)}</b> · panic key <b>Ctrl + Alt + Shift + X</b>.`)
+            : 'Arming is a press-and-hold, never a stray click, and never something she can do for herself. She can ask; only you grant it.'}</div>
+        </div>
+        ${!live ? `<button class="om-flow" id="omFlow">∞ Enter the Flow</button>` : ''}
+        ${o.armed && !live ? `<button class="om-drivenow" id="omDriveNow">▶ One move</button>` : ''}
+        ${o.armed ? '<button class="om-disarm" id="omDisarm">Disarm now</button>' : ''}
+      </div>
+    </div>
     ${(() => {
       // ★ "show me some next paths or next steps to take" — her strategic
       // reads ALREADY contain them: the lever, the divergent frame, and the
@@ -3842,26 +3874,6 @@ function paintOmni() {
           + '<button class="mini go" data-drivepath="' + i + '">▷ drive this</button></div>').join('')
         + '</div>';
     })()}
-    <!-- THE ARM — the single most important state in this build -->
-    <div class="om-arm glass-deep ${o.armed ? 'on' : ''} ${o.armed && !live ? 'idle' : ''}">
-      <div class="om-arm-core">
-        <button class="om-hold ${o.armed ? 'on' : ''}" id="omHold">
-          <span class="om-hold-fill"></span>
-          <span class="om-hold-lab">${o.armed ? 'ARMED' : 'HOLD TO ARM'}</span>
-        </button>
-        <div class="om-arm-meta">
-          <div class="om-arm-state">${o.armed ? (live ? 'She is driving' : 'Armed — but she is not driving yet') : 'She cannot touch your machine'}</div>
-          <div class="om-arm-sub">${o.armed
-            ? (live
-              ? `Disarms by itself in <b id="omLeft">${omniFmtLeft(o.remainingMs)}</b> — and instantly on <b>Ctrl + Alt + Shift + X</b>, from anywhere, even while another app has focus.`
-              : `Arming grants permission. It does <b>not</b> start the work — press <b>Drive Now</b>, or just say <b>“Motus Max”</b> out loud. Fuse: <b id="omLeft">${omniFmtLeft(o.remainingMs)}</b> · panic key <b>Ctrl + Alt + Shift + X</b>.`)
-            : 'Arming is a press-and-hold, never a stray click, and never something she can do for herself. She can ask; only you grant it.'}</div>
-        </div>
-        ${!live ? `<button class="om-flow" id="omFlow">∞ Enter the Flow</button>` : ''}
-        ${o.armed && !live ? `<button class="om-drivenow" id="omDriveNow">▶ One move</button>` : ''}
-        ${o.armed ? '<button class="om-disarm" id="omDisarm">Disarm now</button>' : ''}
-      </div>
-    </div>
 
     <!-- how she is allowed to move -->
     <div class="om-grid">
