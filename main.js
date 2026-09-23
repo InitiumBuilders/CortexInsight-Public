@@ -16966,16 +16966,19 @@ if (!_ISOLATED && !_SMOKE && !_FRESH && !_FLEET && !app.requestSingleInstanceLoc
   app.whenReady().then(async () => {
     STATE = loadState();
     safe(() => applyAliases());   // a seat's chosen name, before anything prints one
-    publishFleetConfig();       // the runner reads this per turn — make it current at boot
-    ensureAgentBridgeFiles();   // (re)write the agent CLI + README so the fleet can reach the board
-    safe(() => ensureGretaSoul());   // the critic's identity, once, never over his edits
-    // The bridge is this app's own additive block. When a release changes it,
-    // upgrade it in place (backup kept, syntax-checked, rolled back on failure)
-    // rather than waiting for a click nobody knows to make.
-    safe(() => { const b = bridgeStatus(); if (b.installed && b.outdated) installBridge().then((r) => pushNotification(r && r.ok ? 'good' : 'warn', r && r.ok ? 'Fleet bridge upgraded' : 'Fleet bridge upgrade did not land', r && r.ok ? 'Background passes (loops, the reckoning) now run at a bounded depth that finishes inside the relay limit; your own turns keep max.' : String((r && r.error) || 'unknown') + ' The previous bridge is still in place.', 'settings', 'bridge-up:' + app.getVersion(), { native: false })).catch(() => {}); });
-    safe(() => writeAgentBrief());    // orient the fleet before it takes its next turn
-    safe(() => ingestAgentInbox());   // apply anything the fleet queued while the app was closed
-    safe(() => sweepZombieRuns());    // runs killed by an app restart become resumable, not stuck
+    // the smoke's vault copy points at the LIVE tree: every write below is skipped for it
+    if (!_SMOKE) {
+      publishFleetConfig();       // the runner reads this per turn — make it current at boot
+      ensureAgentBridgeFiles();   // (re)write the agent CLI + README so the fleet can reach the board
+      safe(() => ensureGretaSoul());   // the critic's identity, once, never over his edits
+      // The bridge is this app's own additive block. When a release changes it,
+      // upgrade it in place (backup kept, syntax-checked, rolled back on failure)
+      // rather than waiting for a click nobody knows to make.
+      safe(() => { const b = bridgeStatus(); if (b.installed && b.outdated) installBridge().then((r) => pushNotification(r && r.ok ? 'good' : 'warn', r && r.ok ? 'Fleet bridge upgraded' : 'Fleet bridge upgrade did not land', r && r.ok ? 'Background passes (loops, the reckoning) now run at a bounded depth that finishes inside the relay limit; your own turns keep max.' : String((r && r.error) || 'unknown') + ' The previous bridge is still in place.', 'settings', 'bridge-up:' + app.getVersion(), { native: false })).catch(() => {}); });
+      safe(() => writeAgentBrief());    // orient the fleet before it takes its next turn
+      safe(() => ingestAgentInbox());   // apply anything the fleet queued while the app was closed
+      safe(() => sweepZombieRuns());    // runs killed by an app restart become resumable, not stuck
+    }
     safe(() => reportUpdateOutcome()); // say plainly whether the last update landed — silence was the bug
     // Find the broadcast back end before anything tries to use it. Quiet on
     // boot: it only speaks up if the host actually MOVED.
@@ -17067,7 +17070,11 @@ if (!_ISOLATED && !_SMOKE && !_FRESH && !_FLEET && !app.requestSingleInstanceLoc
       createWindow();
       startPulse();
       buildTray();
-      startWatchdog();
+      // ⚠ The smoke renders from a COPY of his vault that points at his LIVE
+      // tree. Its watchdog could fire a Duo-Drive pass, a loop or a phone
+      // message from the copy, and its boot wrote the live bridge (2026-09-23).
+      // A smoke looks; it never acts.
+      if (!_SMOKE) startWatchdog();
     }
     integrityBaseline(false);   // capture baseline on first run; no-op thereafter
     // Headless harnesses start here — no window ever exists, so nothing can
