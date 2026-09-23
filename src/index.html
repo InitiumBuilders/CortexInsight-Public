@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="styles-v2.css" />
   <link rel="stylesheet" href="styles-v3.css" />
+  <link rel="stylesheet" href="styles-v4.css" />
   <!-- OmniDrive (Motus Max) + the MotusModels studio -->
   <link rel="stylesheet" href="styles-omni.css" />
   <!-- view control: zoom + density. Loaded last so its density rules win. -->
@@ -31,6 +32,7 @@
     <div class="tb-status" id="tbStatus"></div>
     <!-- fleet control plane — always reachable, whatever screen you're on -->
     <div class="tb-control" id="tbControl">
+      <button class="gear-chip" id="tbGear" title="The gear: cruise is Opus 5.5 at max · click for Motus Motivus (ultracode)">CRUISE</button>
       <button class="tb-duo" id="tbDuo" title="Duo-Drive">◈◈</button>
       <button class="tb-stop" id="tbStop" title="Stop the fleet">■ Stop</button>
     </div>
@@ -161,7 +163,7 @@
       <section class="view" data-view="voice"><div id="voiceBody"></div></section>
 
       <!-- OMNIDRIVE · MOTUS MAX -->
-      <section class="view" data-view="omni"><div id="omniBody"></div></section>
+      <section class="view" data-view="omni"><div id="omniBody"></div><div id="omniReckon"></div></section>
 
       <!-- THE MIND — Davara's baseline, read live -->
       <section class="view" data-view="mind"><div id="mindBody"></div></section>
@@ -325,6 +327,7 @@
 
       <!-- REMOTE — a console that runs somewhere else -->
       <section class="view" data-view="remote"><div id="remoteBody"></div></section>
+      <section class="view" data-view="greta"><div id="gretaBody"></div></section>
     </main>
 
     <!-- command palette (Ctrl+K) -->
@@ -352,6 +355,7 @@
   <!-- v2 command-center layer: supersedes the v1 view functions it redefines -->
   <script src="renderer-v2.js"></script>
   <script src="renderer-v3.js"></script>
+  <script src="renderer-v4.js"></script>
   <!-- view control: self-contained; owns its own markup, state and persistence -->
   <script src="view-control.js"></script>
 </body>

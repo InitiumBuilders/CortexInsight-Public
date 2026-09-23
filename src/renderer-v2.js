@@ -377,9 +377,18 @@ async function loadBoard() {
       const lever = f.clearDays != null && f.clearDays > 30 ? ' · <b>closing is the lever</b>' : '';
       return '<div class="bd-flow">' + clears + ' · ' + f.done7 + ' closed this week · median lead ' + (f.leadMedDays ? f.leadMedDays + ' d' : '—') + lever + '</div>';
     })()}
+    ${typeof decisionsStrip === 'function' ? decisionsStrip(b) : ''}
+    ${(() => {
+      // THE TIDY — what it would do right now, and the undo for what it last did
+      const t = b.tidy;
+      if (!t || (!t.total && !t.canUndo)) return '';
+      const last = t.last ? 'last tidy ' + ago(t.last.ts) + ' ago, ' + t.last.reason : '';
+      return '<div class="bd-sweep bd-tidy"><span><b>The tidy</b> · ' + (t.total ? 'it would ' + esc(t.said) : 'the board is tidy') + (last ? ' · ' + esc(last) : '') + '. Nothing is ever deleted.</span>'
+        + (t.total ? '<button class="mini go" id="bdTidy">tidy now</button>' : '') + (t.canUndo ? '<button class="mini" id="bdTidyUndo">undo the last tidy</button>' : '') + '</div>';
+    })()}
     ${(() => {
       const s = b.sweep;
-      if (!s || !s.count) return '';
+      if (!s || !s.count || (b.tidy && b.tidy.total)) return '';
       return '<div class="bd-sweep"><span>' + s.count + ' task' + (s.count === 1 ? '' : 's') + ' untouched for ' + s.days + '+ days. Parking folds them under the board at low priority; nothing is deleted.</span>'
         + '<button class="mini" id="bdSweep">park ' + s.count + '</button></div>';
     })()}
@@ -499,6 +508,17 @@ async function loadBoard() {
     const v = Math.max(1, Math.min(20, parseInt(wipIn.value, 10) || 5));
     await C.saveSettings({ wipLimit: v });
     toast('WIP limit is ' + v + ' now', 'good'); loadBoard();
+  };
+  if (typeof wireDecisions === 'function') wireDecisions();
+  const td = $('#bdTidy');
+  if (td) td.onclick = async () => {
+    const r = await C.boardTidy({ apply: true });
+    toast(r && r.ok ? (r.applied ? 'Tidied: ' + r.said : 'Already tidy') : 'could not tidy', r && r.ok ? 'good' : 'bad'); loadBoard();
+  };
+  const tu = $('#bdTidyUndo');
+  if (tu) tu.onclick = async () => {
+    const r = await C.boardTidy({ undo: true });
+    toast(r && r.ok ? r.said : ((r && r.error) || 'could not undo'), r && r.ok ? 'good' : 'bad'); loadBoard();
   };
   const sw = $('#bdSweep');
   if (sw) sw.onclick = async () => {
@@ -1593,6 +1613,8 @@ async function loadDuo() {
                 ? `<a class="proj-chip" href="${escAttr(w.projectUrl)}" target="_blank" rel="noopener" title="${escAttr(w.projectUrl)}">◈ ${esc(w.project)} ↗</a>`
                 : `<span class="proj-chip still">◈ ${esc(w.project)}</span>`) : ''}
               ${w.confidence ? `<span class="wk-conf mono">${w.confidence}/10</span>` : ''}
+              ${w.greta ? `<span class="wk-greta g-${esc(String(w.greta.verdict).toLowerCase())}" title="Greta's verdict">◎ ${esc(w.greta.verdict)}${w.greta.score != null ? ' ' + w.greta.score : ''}</span>` : ''}
+              ${w.reckon ? `<span class="wk-reckon r-${esc(String(w.reckon.verdict).toLowerCase())}" title="${escAttr('checked against its own falsifier: ' + (w.reckon.evidence || ''))}">${w.reckon.verdict === 'HELD' ? '✓ held' : w.reckon.verdict === 'BROKE' ? '✕ broke' : '? unknown'}</span>` : ''}
               <span class="wk-when mono" title="${esc(ago(w.ts))} ago">${esc(fmtDT2(w.ts))}</span>
             </div>
             <div class="wk-title">${esc(w.title)}</div>
@@ -1676,7 +1698,7 @@ async function loadDuo() {
       // pass must answer to, standing on screen between passes
       const li = (W.items || []).find((x) => x.next);
       return li ? '<div class="duo-intent"><span class="di-k">◈ HER STANDING INTENTION</span>'
-        + '<span class="di-t">' + esc(String(li.next).slice(0, 220)) + '</span>'
+        + '<span class="di-t">' + esc(String(li.next).replace(/\*\*|__|`/g, '').slice(0, 220)) + '</span>'
         + '<span class="di-m">from “' + esc(String(li.loopName || 'a pass').slice(0, 40)) + '” — the next pass honors it, or says why not</span></div>' : '';
     })()}
     <div class="creed">
@@ -1693,9 +1715,11 @@ async function loadDuo() {
       </div>
       <div class="dh-act">
         <select id="duoAgent" class="sel">${(r.fleet || []).map((f) => `<option value="${f.id}" ${d.agent === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select>
-        <button class="prime-btn ${d.active ? 'danger' : ''}" id="duoToggle">${d.active ? '■ Stop' : '▶ Start'}</button>
+        ${d.active ? `<button class="ghost-btn" id="duoWrap" title="let the pass in flight finish and land in the ledger, then stop" ${d.wrapUp ? 'disabled' : ''}>${d.wrapUp ? '◌ wrapping up…' : '◐ Wrap up'}</button>` : ''}
+        <button class="prime-btn ${d.active ? 'danger' : ''}" id="duoToggle">${d.active ? '■ Stop now' : '▶ Start'}</button>
       </div>
     </div>
+    ${duoFlightStrip(r)}
     <div class="panel glass duo-brief">
       <label class="fr-lbl">Standing brief <span class="fr-hint">held in mind on every pass</span></label>
       <textarea id="duoBrief" rows="2" spellcheck="true" placeholder="e.g. We are pre-launch on MotusMoves. Prefer polish over new surface. Never touch the relay or payments.">${esc(d.brief || '')}</textarea>
@@ -1705,6 +1729,25 @@ async function loadDuo() {
     ${body}`);
 
   wireDuo(r, L, projects);
+}
+
+// What is running this second, per lane, and the optional second pair of hands.
+function duoFlightStrip(r) {
+  const d = r.duo || {};
+  const fl = r.flights || [];
+  const s2 = d.second || {};
+  const fleet = (r.fleet || []).filter((f) => f.id !== d.agent);
+  const line = (f) => `<div class="df-row"><span class="df-dot"></span><span class="df-who">${esc(aname(f.agent))}</span><span class="df-what">${f.loop ? 'on “' + esc(f.loop) + '”' : 'reading the system'}</span><span class="df-t mono">${f.mins} min in</span>${f.lane === 'second' ? '<span class="df-lane">second lane</span>' : ''}</div>`;
+  return `<div class="panel glass duo-flights">
+    <div class="df-head"><span class="df-k">IN FLIGHT</span>${fl.length ? '' : '<span class="df-none">nothing is running right now</span>'}${d.wrapUp ? '<span class="df-wrap">wrapping up: it stops when this pass lands</span>' : ''}</div>
+    ${fl.map(line).join('')}
+    <div class="df-second">
+      <label class="df-sl"><input type="checkbox" id="duo2On" ${s2.active ? 'checked' : ''} ${d.active ? '' : 'disabled'}/> a second pair of hands</label>
+      <select id="duo2Agent" class="sel sm">${fleet.map((f) => `<option value="${f.id}" ${(s2.agent || 'davaris') === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select>
+      <select id="duo2Cad" class="sel sm">${[20, 30, 40, 60, 90, 120].map((n) => `<option value="${n}" ${(s2.cadenceMin || 40) === n ? 'selected' : ''}>every ${n}m</option>`).join('')}</select>
+      <span class="df-hint">takes only loops on projects the first lane is not touching</span>
+    </div>
+  </div>`;
 }
 
 function loopEditor(L) {
@@ -1763,6 +1806,16 @@ function wireDuo(r, L, projects) {
   };
   const sv = $('#duoSave');
   if (sv) sv.onclick = async () => { await C.duo({ agent: $('#duoAgent').value, brief: $('#duoBrief').value }); toast('Saved ✓', 'good'); };
+  const wr = $('#duoWrap');
+  if (wr) wr.onclick = async () => {
+    const res = await C.duo({ wrapUp: true });
+    toast((res && res.said) || 'Wrapping up', 'good');
+    await refreshControl(); loadDuo();
+  };
+  const s2Save = async () => C.duo({ second: { active: !!($('#duo2On') || {}).checked, agent: ($('#duo2Agent') || {}).value, cadenceMin: ($('#duo2Cad') || {}).value } });
+  if ($('#duo2On')) $('#duo2On').onchange = async () => { await s2Save(); toast($('#duo2On').checked ? 'Second lane on' : 'Second lane off', 'good'); loadDuo(); };
+  if ($('#duo2Agent')) $('#duo2Agent').onchange = s2Save;
+  if ($('#duo2Cad')) $('#duo2Cad').onchange = s2Save;
   const nowBtn = $('#duoNow');
   if (nowBtn) nowBtn.onclick = async () => {
     nowBtn.disabled = true; nowBtn.textContent = '… working';
@@ -2094,8 +2147,11 @@ async function loadSystems() {
   if (burn > 0 && !(u.budget.fiveHour)) acts.push({ rung: 6, sev: 'medium', t: `Burning ~${compact(burn)} output tokens/hour with no cap set`,
     why: 'Rung 6 is information flow: you cannot steer what you cannot see. Depth costs tokens, and the 5-hour window is your real constraint — not turn count.',
     do: 'Set a soft cap', act: 'goto:usage' });
-  if (deepAgents.length >= 4 && burn > 60000) acts.push({ rung: 5, sev: 'medium', t: `${deepAgents.length} agents are at max depth while burn is high`,
-    why: 'Depth is compute. Running the whole fleet at ULTRACODE is the fastest way to hit your window — spend depth where thinking is hard, not everywhere.',
+  // Max is the fleet's floor by the operator's choice (2026-09-23), so depth
+  // alone is not a finding. It becomes one only when the window says so.
+  const winPct = (u && u.budget && +u.budget.fiveHour && u.fiveH) ? (u.fiveH.out || 0) / u.budget.fiveHour : 0;
+  if (deepAgents.length >= 4 && burn > 60000 && winPct >= 0.75) acts.push({ rung: 5, sev: 'medium', t: `${Math.round(winPct * 100)}% of your 5-hour window is gone with ${deepAgents.length} seats at max`,
+    why: 'Max is your chosen floor, and it is the right one. The window is the constraint: lower the seats doing mechanical work for the rest of this window, not the ones doing the thinking.',
     do: 'Rebalance quality', act: 'goto:models' });
   if ((ov.openNext || 0) > 40) acts.push({ rung: 11, sev: 'low', t: `${ov.openNext} next-steps are open`,
     why: 'Unclosed loops are a stock that drains attention while it sits. Past a point the ledger stops being a plan and becomes noise.',
@@ -3660,6 +3716,7 @@ async function loadOmni() {
   omniLoadFrame();
   omniLoadMap();
   omniLoadReplay();          // list the recorded drives; frames load on pick
+  if (typeof paintReckonPanel === 'function') paintReckonPanel('#omniReckon');   // what held, beneath the drive
 }
 async function omniLoadMap() {
   const m = await C.map(OMNI.mapZoom, OMNI.mapFocus || '').catch(() => null);

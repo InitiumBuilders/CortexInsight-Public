@@ -90,9 +90,11 @@ cortex_invoke_with_retry() {
 
 # One generation of rotation for anything over 5 MB. Logs that grow without a
 # ceiling are the quietest way to fill a small server's disk.
+# Every subdirectory, not a named list: logs/safestep/watcher.log grew for days
+# outside the two globs this used to carry, because nobody remembered to add it.
 cortex_rotate_logs() {
   local f sz
-  for f in "$ROOT"/logs/*.log "$ROOT"/logs/runner-stderr/*.log; do
+  for f in "$ROOT"/logs/*.log "$ROOT"/logs/*/*.log; do
     [ -f "$f" ] || continue
     sz="$(stat -c %s "$f" 2>/dev/null || echo 0)"
     if [ "$sz" -gt 5242880 ]; then

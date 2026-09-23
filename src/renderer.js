@@ -12,8 +12,8 @@ const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 // 2026-09-02: sympath-sei moved rose -> spring. Rose was serving two agents at once, and
 // colour is the only disambiguator Davari has in the constellation (davara/davaris/davari
 // all render the letter 'D'). Davari keeps rose; the external agent took the new tone.
-const TONE = { davara: 'violet', davaris: 'cyan', davari: 'rose', 'sympath-cortex': 'emerald', arden: 'gold', august: 'amber', 'august-v3': 'slate', 'sympath-sei': 'spring' };
-const ANAME = { davara: 'Davara', davaris: 'Davaris', davari: 'Davari', 'sympath-cortex': 'Sympath-Cortex', arden: 'Arden AI', august: 'August', 'august-v3': 'August-V3', 'sympath-sei': 'Sympath SEI' };
+const TONE = { davara: 'violet', davaris: 'cyan', davari: 'rose', 'sympath-cortex': 'emerald', arden: 'gold', august: 'amber', greta: 'ember', 'sympath-sei': 'spring' };
+const ANAME = { davara: 'Davara', davaris: 'Davaris', davari: 'Davari', 'sympath-cortex': 'Sympath-Cortex', arden: 'Arden AI', august: 'August', greta: 'Greta', 'sympath-sei': 'Sympath SEI' };
 const aname = (id) => ANAME[id] || cap(id);
 // The live fleet, fetched once at boot and refreshed on config changes. Every
 // agent picker in the app reads from HERE, so no screen can miss an agent.
@@ -23,7 +23,7 @@ let MODELS_LIVE = [];
 let CONTROL = { stopped: false, hard: false };
 const relayFleet = () => FLEET_LIVE.filter((f) => f.lane === 'relay');
 const fleetIds = () => FLEET_LIVE.map((f) => f.id);
-const QLABEL = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-High', max: 'ULTRACODE' };
+const QLABEL = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-High', max: 'Max' };
 const mlabel = (id) => (MODELS_LIVE.find((m) => m.id === id) || {}).label || id || '—';
 let CUR = { view: 'overview', chatAgent: 'davara', workAgent: 'davara', taskAgent: 'all', taskStatus: 'all',
   subAgent: 'all', boardFilter: 'open', wfEdit: null, usageWin: 'fiveH' };
@@ -305,6 +305,8 @@ const NAV = [
   ['agents', 'Agents', 'M9 7a3 3 0 1 0-.01 0M15 7a3 3 0 1 0-.01 0M4 19c0-3 2.5-4 5-4M15 15c2.5 0 5 1 5 4', 210, 'FLEET'],
   ['subagents', 'Subagents', 'M12 4a2 2 0 1 0 .01 0M6 12a2 2 0 1 0 .01 0M18 12a2 2 0 1 0 .01 0M9 19a2 2 0 1 0 .01 0M15 19a2 2 0 1 0 .01 0M12 6v4M11 11L7.5 11M12.5 11L17 11M6.5 14l2 3M17.5 14l-2 3', 230, 'FLEET'],
   ['sympath', 'Sympath', 'M12 21C7 17 4 14 4 10a4 4 0 0 1 8-1 4 4 0 0 1 8 1c0 4-3 7-8 11zM8.5 11h2l1-2 1.5 4 1-2h1.5', 160, 'FLEET'],
+  // Greta: an eye over a level line. She looks, and she holds the line.
+  ['greta', 'Greta', 'M3 11s3.5-5.5 9-5.5S21 11 21 11s-3.5 5.5-9 5.5S3 11 3 11zM12 9a2 2 0 1 0 .01 0M5 20h14', 22, 'FLEET'],
   ['motusmodels', 'MotusModels', 'M12 3l7.5 4.3v8.6L12 20.2 4.5 15.9V7.3zM12 3v8.6M12 11.6l7.5-4.3M12 11.6L4.5 7.3M12 11.6v8.6', 260, 'FLEET'],
 
   ['stream', 'MotusLive', 'M12 12a1 1 0 1 0 .01 0M12 12v9M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.7 5.7a9 9 0 0 0 0 12.6M18.3 5.7a9 9 0 0 1 0 12.6', 10, 'SIGNAL'],
@@ -931,6 +933,7 @@ function _loadView(view, quiet) {
     case 'security': return loadSecurity();
     case 'settings': return loadSettings();
     case 'remote': return (typeof loadRemote === 'function' ? loadRemote() : null);
+    case 'greta': return (typeof loadGreta === 'function' ? loadGreta() : null);
   }
 }
 
@@ -1189,8 +1192,8 @@ async function runRitual(kind) {
 $('#lockinBtn').onclick = () => runRitual('lockin');
 $('#compactBtn').onclick = () => runRitual('compact');
 $('#wrapupBtn').onclick = () => runRitual('wrapup');
-const NODE_POS = { davara: [22, 24], davaris: [78, 24], davari: [50, 26], 'sympath-cortex': [9, 58], arden: [91, 58], august: [32, 84], 'august-v3': [68, 84] };
-const NODE_LETTER = { davara: 'D', davaris: 'D', davari: 'D', 'sympath-cortex': 'S', arden: 'A', august: 'A', 'august-v3': 'V' };
+const NODE_POS = { davara: [22, 24], davaris: [78, 24], davari: [50, 26], 'sympath-cortex': [9, 58], arden: [91, 58], august: [50, 84] };
+const NODE_LETTER = { davara: 'D', davaris: 'D', davari: 'D', 'sympath-cortex': 'S', arden: 'A', august: 'A' };
 function renderConstellation(pulse) {
   const agents = (pulse && pulse.agents) || {};
   const lines = Object.keys(NODE_POS).map((a) => {
@@ -1232,7 +1235,7 @@ async function loadAgents() {
 
 /* ============================ TASKS ============================ */
 async function loadTasks() {
-  const agents = ['all', ...(FLEET_LIVE.length ? fleetIds() : ['davara', 'davaris', 'august', 'august-v3'])];
+  const agents = ['all', ...(FLEET_LIVE.length ? fleetIds() : ['august', 'davara', 'davaris'])];
   setHTML($('#taskFilters'),
     agents.map((a) => `<button class="chip ${CUR.taskAgent === a ? 'on' : ''}" data-ta="${a}">${a === 'all' ? 'All agents' : cap(a)}</button>`).join('') +
     `<span style="width:14px"></span>` +
@@ -1263,7 +1266,7 @@ function loadChatBar() {
   // is shown as observed-only (it answers on its own gateway, not the relay).
   const list = FLEET_LIVE.length ? FLEET_LIVE : [{ id: 'davara', lane: 'relay' }];
   const tagOf = (f) => f.lane !== 'relay' ? ' · openrouter'
-    : f.id === 'august-v3' ? ' · observer' : f.id === 'sympath-cortex' ? ' · healer'
+    : f.id === 'sympath-cortex' ? ' · healer'
     : f.id === 'arden' ? ' · guardian' : f.id === 'davaris' ? ' · builder'
     : f.id === 'davari' ? ' · fast lane' : '';
   $('#chatAgentBar').innerHTML = list.map((f) => {
@@ -1360,7 +1363,7 @@ $('#chatForm').addEventListener('submit', async (e) => {
 
 /* ============================ WORK PREVIEW ============================ */
 function loadWork() {
-  const agents = (FLEET_LIVE.length ? fleetIds() : ['davara', 'davaris', 'august', 'august-v3']);
+  const agents = (FLEET_LIVE.length ? fleetIds() : ['august', 'davara', 'davaris']);
   $('#workTabs').innerHTML = agents.map((a) => `<button class="chip ${CUR.workAgent === a ? 'on' : ''}" data-wa="${a}">${aname(a)}</button>`).join('');
   $$('#workTabs [data-wa]').forEach((b) => b.onclick = () => { CUR.workAgent = b.dataset.wa; loadWork(); });
   renderWorkBody();

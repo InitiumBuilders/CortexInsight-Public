@@ -29,6 +29,8 @@ flowchart LR
 | [`FIRST-HOUR.md`](FIRST-HOUR.md) | You want to see a whole first session, told as a story, before you start your own. |
 | [`FEATURES.md`](FEATURES.md) | You want to know what a room is for, why it exists, and which module makes it work. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | You are about to change something and need to know where it lives. |
+| [`AUGUST.md`](AUGUST.md) | You want to know who the primary seat is, why his thread is continuous, what his hands reach, and how the gear lever moves him between Opus 5 and Fable 5.1. |
+| [`SAFESTEP.md`](SAFESTEP.md) | You want the seat's steps spoken to you while it works, only when something moved: the one law, the five marks, and whose voice it uses. |
 | [`GLOSSARY.md`](GLOSSARY.md) | A word in the app or the docs is new to you. |
 | [`INTEGRATIONS.md`](INTEGRATIONS.md) | You are wiring a key, a relay, a voice, or the broadcast. |
 | [`EVOLUTIONS.md`](EVOLUTIONS.md) | You want to know how it got this way, and what each version taught. |

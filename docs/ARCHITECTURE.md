@@ -156,3 +156,46 @@ Secrets in the vault (`smtpAppPasswordEnc`, `elevenKeyEnc`, `openaiKeyEnc`) are 
 3. One canvas, capped, stopped when hidden. No blur filter behind it.
 4. Render only when the data changed; pulse the change once.
 5. Poll at seven seconds; the eye cannot tell it from four, and the bridge can.
+
+## The relay, and the seat that remembers
+
+The console is one door into the house. The relay is another, and it is one mouth. The console, a messaging gateway, a cron and a script all speak to a seat the same way, through an OpenAI-shaped endpoint on loopback that turns each request into one Claude Code turn on the operator's own subscription. One auth path, one log shape, one place for a turn to go missing.
+
+**Continuity, checked.** A request carries no identity, so the relay derives one. Per seat it keeps `agents/<seat>/sessions.json`, a map from the caller's conversation to the Claude session that is that conversation. The key is the thread's opening line. The tail is the identity: the caller's last assistant message must contain the tail of what the relay last returned. If it does, the session is resumed, and the seat still holds the files it read and the work it did. If it does not, because the history was rewritten, the session was lost, or a different thread opened with the same words, the turn starts a fresh session rehydrated from the caller's thread, which is what every turn was before continuity existed. Nothing regresses. When compaction rewrites the opening line, the relay looks for the thread whose tail the caller still carries and re-files it under the new key, so continuity survives the moment a long thread needs it most.
+
+**The heartbeat.** Hermes drops a stream after 900 s without a chunk, and a deep turn spends far longer than that inside tools, where no text flows. So the relay sends an empty delta every 30 s of quiet: liveness without text, so the caller neither hangs up nor decides the reply already landed. The gateway's ceilings were raised to the relay's deep ceiling, 5400 s, for the same reason; a heartbeat cannot carry a turn past a ceiling the caller keeps lower. This is proven at the relay, where 35 pulses carried a 1036 s turn through 1000 s of tool silence and the next turn resumed the same session. That Hermes reads an empty delta as liveness is verified from its source, not yet by a long Telegram turn.
+
+**Stopped, not re-run.** A turn that runs out its clock is a slow failure, and re-running it is the one thing guaranteed not to help: a 90-minute deep turn retried twice is four and a half hours of a seat that answers no one. The relay kills the runner's whole process group, marks the checkpoint `incomplete`, and says so in a sentence.
+
+**A bounded wait.** A stateful seat runs one turn at a time. A caller arriving mid-turn waits up to `LOCK_WAIT`, 600 s, and is then told the seat is busy, instead of queueing until its own timeout re-sends the message into the same queue.
+
+**The runner's precedence.** `cortex-run.sh` decides how a seat answers, in this order. A hard pause in `fleet.json` wins over everything; if that file exists but cannot be read, the switch fails closed and no turn runs. Then the active gear in `modes.json`, expiry honoured. Then `fleet.json`, the console's per-seat model, effort and turns. Then the seat's own defaults. A new session mints a fresh id on every attempt, because a `--session-id` can be created only once; the relay reads the id actually used back from `checkpoint.state`. August answers from his workspace, a stable cwd, so `--resume` finds the transcript every turn. Read-only seats carry a deny list, `READONLY_DENY`, because `--allowedTools` only pre-approves and `--disallowedTools` is the wall. The wall has a measured gap: it cannot refuse `SendMessage`, so that arm stays instructional. Every seat gets `--strict-mcp-config`, or it silently inherits every MCP server in the operator's personal config.
+
+**The gear file.** `~/.cortexinsight/modes.json` has one writer, `motus-mode.sh`, the one definition of what a mode is, and two hands on it: the operator from a shell, and the relay, which hears "motus max" on the message being answered now and calls that CLI before the turn runs. Four things read it. The runner applies the model, effort and turns. The relay takes the turn's ceiling from it, 5400 s in a deep gear and 1800 s otherwise. The console draws the badge and never writes it. The watcher reads it to decide whether to wake. One definition, honoured by all, so the badge cannot claim a depth the seat is not in.
+
+**The watcher.** SafeStep reads the same tree the console reads and never talks to the seat. `checkpoint.state` tells it which session is in flight. The transcript under `~/.claude/projects` tells it what moved. It wakes at once for a deep gear, and for any turn past 90 s. The seat adds what only it knows, one line through `safestep.sh` to `agents/<seat>/safestep.jsonl`, and the watcher forwards it at once. Every signal it sends lands in `logs/safestep/<seat>-<date>.jsonl`, where the console can draw the day as steps.
+
+```mermaid
+flowchart LR
+  H[Hermes gateway] -- one turn --> M[cortex-mouth.py<br/>the relay]
+  M -- reads and writes --> S[(sessions.json)]
+  M -- calls, before the turn --> ML[motus-mode.sh]
+  ML -- writes --> MD[(modes.json)]
+  M -- seat on argv, message on stdin --> R[cortex-run.sh<br/>the runner]
+  CI[the console] -- writes --> F[(fleet.json)]
+  R -- reads, hard pause first --> F
+  R -- reads --> MD
+  M -. reads, for the ceiling .-> MD
+  CI -. reads .-> MD
+  R -- writes SID and STATUS --> C[(checkpoint.state)]
+  M -- reads the id used, marks a kill incomplete --> C
+  R -- claude -p --> T[(the transcript<br/>~/.claude/projects)]
+  R -- the seat speaks, safestep.sh --> X[(safestep.jsonl)]
+  W[safestep.py<br/>the watcher] -- reads --> C
+  W -- reads --> T
+  W -- reads --> X
+  W -- reads --> MD
+  W -- appends --> L[(logs/safestep)]
+  CI -. reads .-> C
+  CI -. reads .-> L
+```

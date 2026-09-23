@@ -292,8 +292,48 @@ The console was designed from meaning outward. Before a room got its panels it g
 
 ## Remote: driving a console that runs somewhere else
 
-**What.** A room in the desktop app that reaches a server over SSH and drives the console on it: its reading, its board, its fleet, a box to talk to it, and the switch that turns its agents off. The server's host key is pinned on first contact, with its fingerprint shown beside the command that prints the same thing on the server.
+**What.** A room in the desktop app that reaches a server over SSH and drives the console on it. Once linked it becomes that machine's fleet, in six tabs. Agents shows each seat with what it is doing this minute, what it said it is doing (its SafeStep lines), and what it last delivered. Board lets you add, assign, run and close work over there. Live is the working seat's own transcript as it happens. Work is what shipped. Duo-Drive has start, stop, wrap up, the steer, the cadence, the loops and a second lane. Settings holds the gear, each seat's model and depth, the name a seat wears here, and the off switch. A box at the bottom talks to any seat, the server's August seat first. The server's host key is pinned on first contact, with its fingerprint shown beside the command that prints the same thing on the server.
 
 **Why.** Two locks, because they are different claims. SSH proves you have an account on that machine; the vault passphrase proves you are the operator of the console running on it. An account can be shared and a key can be borrowed, so both are required, and a host key that changes without you changing it stops everything rather than connecting.
 
-**Module.** `remote.js` in the main process; `cortex rpc` (`linux/rpc.js`) at the far end; the Remote room in `src/renderer-v3.js`.
+**Module.** `remote.js` in the main process; `cortex rpc` (`linux/rpc.js`) at the far end; `cortex:fleetDigest` in main.js answers the whole picture in one round trip; the room in `src/renderer-v3.js` and `src/renderer-v4.js`.
+
+## The gear: cruise and Motus Motivus
+
+**What.** Two gears for the whole fleet. Cruise is the default: Opus 5.5 at max. Motus Motivus adds the ultracode discipline: plan, build, verify, attack your own work, fan out to subagents on dimensions, send big work to Greta, and report in three buckets. It lifts the turn budget and cools back to cruise after two hours unless told otherwise. Say "enter Motus Motivus mode" or "back to cruise" in Command or to DASH-OPS, press the chip in the title bar, or let a seat pass it on with `ci.sh gear` when you said it to them.
+
+**Why.** Depth has a price. Max is the floor; the deeper discipline is for the hours that call for it, and it ends by itself so it never quietly becomes the new cost of every turn.
+
+**Module.** `setGear`, `gearTick`, `gearPhrase` in main.js; on a server the relay's own `motus-mode.sh` writes the same `~/.cortexinsight/modes.json`.
+
+## Greta
+
+**What.** The fleet's critic, a seat of her own that reads and never writes. A Duo-Drive pass that ships two or more files or any design, every Motus Max move that changes files, and anything a seat hands her with `ci.sh hand greta` comes to her. She returns a verdict (PASS, REVISE or BLOCK), four scores, the strongest flaw, the smallest fix, what must survive the fix, and a lesson. Her room shows every verdict and what she taught the fleet, and asks her anything by hand.
+
+**Why.** The author of a thing has already convinced itself. Only a fresh context sees the work cold, so critique lives in a different head. What she says is acted on: a revision lands on the author's board, a block lands on the phone, and a lesson she is sure of rides in every seat's brief.
+
+**Module.** `gretaQueue`, `gretaJudge` and her soul in main.js; the room in `src/renderer-v4.js`; her seat in both relays.
+
+## The signal: decisions on the phone
+
+**What.** The phone gets decisions and one daily digest, five messages a day at most. A seat blocked on your word, Greta blocking a move, a loop a seat designed, Motus Max at a wall only you can move, and the relay down for fifteen minutes each arrive with an id. Reply to the seat you already talk to, for example `d7f3a yes`, and the answer goes back to whoever asked. The same decisions wait on the Board, answerable there too.
+
+**Why.** Reports were read and never acted on. A decision with an id and a one-line answer is the smallest thing that closes the loop from a phone.
+
+**Module.** `signal`, `decisionAnswer`, `signalDigestText` in main.js. It goes out through the Telegram path the machine already has: a send script on the desktop, or `hermes send` on a server. No token is read here.
+
+## The reckoning
+
+**What.** Every shipped move names how it could be proven wrong, and by when. On that day Greta checks it against the world as it is: HELD, BROKE or UNKNOWN, with what she saw. The Motus Max room shows the record and the fleet's calibration, meaning how often moves it called 8 out of 10 or better actually held.
+
+**Why.** Predictions nobody checks cannot teach anything. What held and what broke now feeds Motus Max's next choice, how often a loop runs, and a line in every seat's brief. A loop that breaks its own predictions three times running asks the operator whether to pause it.
+
+**Module.** `reckonTick`, `parseDue`, `calibration` in main.js; the panel in `src/renderer-v4.js`.
+
+## The tidy and the breaker
+
+**What.** The board keeps itself. The fleet files at normal priority, because urgent is the operator's word. A near-duplicate reinforces the open task instead of adding a row, and past eight a day a seat's ideas go to the tray. A daily tidy parks what went cold, returns stalled work to the queue, and expires questions nobody answered for a week. Nothing is deleted, and one click undoes the last tidy. The breaker lives where every turn passes: the same ask that failed twice is not sent a third time, the same ask four times in twenty minutes is treated as a loop, and five failures in a row pause autonomous work for twenty minutes.
+
+**Why.** A backlog the fleet can fill faster than anyone can close stops being a plan. A loop that keeps failing costs tokens and teaches nothing.
+
+**Module.** `fleetIntake`, `boardTidy`, `tidyUndo`, `breakerRecord` in main.js.

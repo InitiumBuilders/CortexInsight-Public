@@ -635,6 +635,11 @@ async function doctor(cl, live) {
   line(!!ov.proxyStart, 'the relay is up on 127.0.0.1:8788', 'cortex relay start');
   line(ctl.bridgeInstalled, 'the fleet bridge is in the runner', 'cortex bridge install');
   line(!ctl.stopped, 'the agents are on', 'cortex on');
+  // Opus 5.5 is the fleet's model, and a CLI older than 2.1.280 refuses the id
+  // as unrecognized (measured: 2.1.258 refused it, 2.1.280 answered). An old
+  // CLI fails every turn while everything else here reads green.
+  const cv = await claudeVersion();
+  line(cv.ok, 'Claude Code is new enough for Opus 5.5' + (cv.version ? ' (' + cv.version + ')' : ''), cv.version ? 'claude update  (or: cortex update)' : 'install Claude Code: see linux/README.md');
   // ⚠ THE CHECK THAT ANSWERS "why won't Remote connect". The desktop app reaches
   // this machine by running one command over SSH, and that command lands in a
   // non-interactive, non-login shell which reads neither file that puts
@@ -712,6 +717,24 @@ async function doctor(cl, live) {
   OUT();
 }
 
+// The CLI version the fleet's model needs, and a reader for the one installed.
+// Several claude binaries can sit on one server (an old one in /usr/local/bin
+// answered 400 to Fable while the relay used ~/.local/bin); the relay's own PATH
+// puts ~/.local/bin first, so that is the one asked.
+const CLAUDE_FLOOR = '2.1.280';
+async function claudeVersion() {
+  const cands = [path.join(os.homedir(), '.local', 'bin', 'claude'), 'claude'];
+  for (const bin of cands) {
+    const r = await sh(bin, ['--version']);
+    const m = /(\d+)\.(\d+)\.(\d+)/.exec(r.out || '');
+    if (!m) continue;
+    const have = m.slice(1).map(Number), want = CLAUDE_FLOOR.split('.').map(Number);
+    let ok = true;
+    for (let i = 0; i < 3; i++) { if (have[i] !== want[i]) { ok = have[i] > want[i]; break; } }
+    return { ok, version: m[0], bin };
+  }
+  return { ok: false, version: '', bin: '' };
+}
 // A server updates by pulling, not by swapping a packaged build under a service
 // manager that is trying to restart it. Every step is checked, and a pull that
 // would throw away local edits stops rather than discarding them.
@@ -743,6 +766,15 @@ async function update() {
   if (!check.ok) { OUT(rose('  the new main.js does not parse, so nothing was restarted')); return; }
 
   const after = JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8')).version;
+  // The fleet's model moves with the app. A CLI below the floor would refuse it
+  // on every turn, so the update lifts the CLI too, and says what it did.
+  const cv = await claudeVersion();
+  if (cv.version && !cv.ok) {
+    OUT(dim('  Claude Code ' + cv.version + ' is older than ' + CLAUDE_FLOOR + '; updating it…'));
+    const up = await sh(cv.bin || 'claude', ['update'], { timeout: 300000 });
+    const cv2 = await claudeVersion();
+    OUT('  ' + (cv2.ok ? green('Claude Code ' + cv2.version) : rose('Claude Code is still ' + (cv2.version || 'missing') + '. Run: claude update')) + (up.ok ? '' : dim('  (' + String(up.err || up.out || '').trim().split('\n').slice(-1)[0] + ')')));
+  }
   OUT(dim('  restarting…'));
   await stopService();
   await new Promise((r) => setTimeout(r, 700));

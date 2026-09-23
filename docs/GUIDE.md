@@ -215,8 +215,37 @@ Two locks, on purpose: SSH proves you have an account on that machine, the
 passphrase proves you are the operator of the console running on it. Both
 secrets are sealed by your machine's keystore and are never shown again.
 
-You should see: the server's reading, its board and its fleet, and a box that
-talks to it. Turning its agents off from that page turns them off there.
+You should see: the server's fleet, seat by seat, with what each is doing and
+what it last delivered, and tabs for its board, its live feed, what shipped,
+its Duo-Drive and its settings. The box at the bottom talks to the server's
+August seat first. Turning its agents off from that page turns them off there.
+
+## 17. Change gear
+
+Say "enter Motus Motivus mode" in Command, or press the gear chip in the title
+bar. Every seat moves into deep-build discipline for two hours, then comes back
+to cruise by itself. "Back to cruise" ends it early.
+
+You should see: the chip turn from CRUISE to MOTUS MOTIVUS with the minutes left.
+
+## 18. Let Greta judge
+
+Open Greta in the rail under FLEET. Name what to judge, paste what was done or
+point at the files or a live URL, and press Judge it. She opens what you named
+before she answers. Big moves also come to her on their own.
+
+You should see: a verdict with four scores, the strongest flaw, the smallest
+fix, and what must survive it.
+
+## 19. Answer from your phone
+
+When a decision reaches your phone it carries an id, like d7f3a. Reply to the
+same seat you already talk to with the id and your answer: `d7f3a yes`,
+`d7f3a no`, or the id and a few words. The Board shows the same decisions under
+Waiting on you, with a test button that sends one message to prove the path.
+
+You should see: the decision close on the Board, and the answer go back to the
+seat that asked.
 
 ## Troubleshooting
 

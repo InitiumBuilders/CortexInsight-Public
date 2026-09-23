@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 // every text file at the root ships (source, docs, helper scripts, lockfile), plus these trees
-const SHIP_EXT = /\.(js|json|md|ps1|sh|yml|yaml|txt|html|css)$/i;
+const SHIP_EXT = /\.(js|json|md|ps1|sh|py|yml|yaml|txt|html|css|service)$/i;
 const SHIP_DIRS = ['src', 'docs', 'scripts', 'assets', '.github', 'linux'];
 const SKIP = /node_modules|^release|\.bak|\.asar|\.png$|\.ico$|\.jpg$|\.woff/;
 
@@ -30,7 +30,19 @@ const HARD = [
   // assembled from the two public words so the token itself is not in this file.
   ['private relay name', new RegExp(['semble', 'cortex'].join(''), 'gi')],
   ['tunnel hostname', /\.ts\.net\b|trycloudflare\.com|cfargotunnel\.com/gi],
+  // a chat id is a person's address; the example form "telegram:<your chat id>" passes
+  ['a Telegram chat id', /\btelegram:-?\d{6,}\b/g],
 ];
+// PRIVATE TERMS the operator names himself: his server's hostname and address,
+// his chat id, anything a shape cannot know is his. They live in .oss-private
+// at the root, one per line, which is gitignored, so the gate that guards them
+// never publishes them. A stranger's clone has no such file and loses nothing.
+const PRIVATE_FILE = path.join(ROOT, '.oss-private');
+if (fs.existsSync(PRIVATE_FILE)) {
+  for (const t of fs.readFileSync(PRIVATE_FILE, 'utf8').split(/\r?\n/).map((x) => x.trim()).filter((x) => x && !x.startsWith('#'))) {
+    HARD.push(['a private term from .oss-private', new RegExp(t.replace(/[.*+?^$(){}|[\]\\]/g, '\\$&'), 'gi')]);
+  }
+}
 // a line that is a detector or a harness fixture holds a secret SHAPE on
 // purpose; it is reported as information, never as a block
 const FIXTURE = /new RegExp\(|\bok\('|omniSecretish\(|omniApi\(|omniParse\(|omniCompile\(|looksLike\w+Key\(|SECRET internal|\bid: 'tsk|oss:fixture/;

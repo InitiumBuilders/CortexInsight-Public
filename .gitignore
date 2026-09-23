@@ -29,3 +29,5 @@ ci-*.txt
 # python leaves these behind whenever a script is compile-checked
 __pycache__/
 *.pyc
+# the public gate's private terms (read by scripts/oss-check.js, never shipped)
+.oss-private

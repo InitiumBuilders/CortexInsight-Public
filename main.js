@@ -74,13 +74,20 @@ const RELAY = { host: '127.0.0.1', port: 8788 };
 //                       OpenRouter key. Never touches the relay, but is still
 //                       fully observable here (live / tasks / output).
 // ---------------------------------------------------------------------------
-const DEFAULT_MODEL = 'claude-opus-5';   // August 2026-07-29: Opus 5 is the fleet default
+// August 2026-09-23: "all of our agents now by default are on the new Claude Opus
+// 5.5". Proven through the relay's own CLI before this line changed: 2.1.258
+// refused the id as unrecognized, 2.1.280 answered on it. The CLI floor moved too.
+const DEFAULT_MODEL = 'claude-opus-5-5';
+// ...and "set the default quality standard to max". Every persona seat answers at
+// max unless the operator lowers one on the Models screen. Ultracode is no longer
+// a depth setting; it is the Motus Motivus gear (see THE GEAR).
+const DEFAULT_EFFORT = 'max';
 const FLEET = [
   { id: 'davara', name: 'Davara', lane: 'relay', tone: 'violet', maxTurns: 96,
-    role: 'Systems Savant · Deep Thinker · Orchestrator', effort: 'high',
+    role: 'Systems Savant · Deep Thinker · Orchestrator', effort: 'max',
     coder: true, blurb: 'Architecture, systems sight, orchestration of the whole build.' },
   { id: 'davaris', name: 'Davaris', lane: 'relay', tone: 'cyan', maxTurns: 128,
-    role: 'Workhorse · Builder · Execution', effort: 'high',
+    role: 'Workhorse · Builder · Execution', effort: 'max',
     coder: true, blurb: 'Ships code. The hands that build what Davara designs.' },
   // Davari (2026-09-01, August: "faster abilities always on Opus 5 and ultra code
   // always on"). Her speed is bought from the ENVELOPE, not from a weaker model or
@@ -94,18 +101,30 @@ const FLEET = [
     role: 'Anchor & Healer · bug-test · refinement · learning engine', effort: 'max',
     coder: true, blurb: 'Diagnoses, reproduces, root-causes and proposes fixes. The learning engine.' },
   { id: 'arden', name: 'Arden', lane: 'relay', tone: 'gold', maxTurns: 48,
-    // 'high', not 'max': she runs an ambient 8h background loop, and ULTRACODE on
-    // every ambient pass was ~21 of the heaviest turns a week for observation
-    // nobody was waiting on. Set her to ULTRACODE on the Model screen when it matters.
-    role: 'Hidden guardian · security · systems innovation', effort: 'high',
-    altModels: ['claude-opus-5', 'claude-fable-5'],  // August toggles her between these
+    // She was held at 'high' to spare her ambient 8h loop. On 2026-09-23 August
+    // made max the fleet's floor, so her loop's cost is now held where it belongs:
+    // by the budget governor and the dispatch breaker, not by a shallower mind.
+    role: 'Hidden guardian · security · systems innovation', effort: 'max',
+    altModels: ['claude-opus-5-5', 'claude-fable-5-1'],  // August toggles her between these
     coder: true, blurb: 'Assume-breach review, integrity watch, the better-system move.' },
-  { id: 'august', name: 'August', lane: 'relay', tone: 'amber', maxTurns: 16,
-    role: 'Primary builder-assistant (generic relay seat)', effort: 'high',
-    coder: true, blurb: 'General build assistant on the generic relay seat.' },
-  { id: 'august-v3', name: 'August-V3', lane: 'relay', tone: 'slate', maxTurns: 16,
-    role: 'Observer mode — watch & note only', effort: 'medium',
-    blurb: 'Watches and notes. Never acts.' },
+  // August (2026-09-16): the primary Motus seat. He reaches the operator through
+  // Hermes on Telegram and answers on a RESUMED Claude session, so his thread is
+  // continuous rather than re-read from scratch each turn. His hands are Claude
+  // Code's own tools plus Hermes' (memory, skills library, browser, vision,
+  // send_message) bridged in over MCP, and he can spawn subagents. The gear lever
+  // (~/.cortexinsight/modes.json) moves him through cruise, motivus and max, all on Opus 5.5.
+  { id: 'august', name: 'August', lane: 'relay', tone: 'amber', maxTurns: 96,
+    role: 'Motus Agent · Outlier Systems Intelligence · Semble Anchor', effort: 'max',
+    altModels: ['claude-opus-5-5', 'claude-fable-5-1'],
+    coder: true, blurb: 'The primary Motus seat. Continuous thread, real hands, Hermes tools, subagents.' },
+  // Greta (2026-09-23, August: "a new agent called Greta ... our critique agent
+  // ... the quality standard and design quality standard and symbolic design
+  // standard ... with the Steve Jobs mindset"). She judges; she never builds.
+  // Big moves pass through her before they count, and what she learns rides in
+  // every seat's brief.
+  { id: 'greta', name: 'Greta', lane: 'relay', tone: 'ember', maxTurns: 24,
+    role: 'Critic · the quality, design and symbolic standard', effort: 'max',
+    coder: false, blurb: 'Judges the big moves before they count. Says what fails, the smallest fix that makes it great, and what must survive.' },
   { id: 'sympath-sei', name: 'Sympath SEI', lane: 'openrouter', tone: 'rose', maxTurns: 0,
     role: 'Healer SEI · OpenRouter · the one paid-key agent', effort: null,
     provider: 'openrouter', external: true,
@@ -139,6 +158,10 @@ const INFRA_SEATS = [
     maxTurns: 24, effort: 'medium', coder: true,
     role: 'Reflex lane · lean seat · no soul envelope',
     blurb: 'The fast lane. Carries no identity — takes the cycles where the thinking is already done.' },
+  { id: 'scribe', name: 'Scribe', lane: 'relay', tone: 'slate', infra: true,
+    maxTurns: 1, effort: 'low', coder: false,
+    role: 'Auxiliary scribe · titles & summaries',
+    blurb: 'One turn, no hands. Names threads and summarises so a thinking seat never has to.' },
 ];
 const FLEET_BY_ID = Object.fromEntries([...FLEET, ...INFRA_SEATS].map((f) => [f.id, f]));
 // relay-lane ids (what the relay telemetry actually logs) — personas only
@@ -358,6 +381,16 @@ function defaultState() {
       cortexRoot: DEFAULT_ROOT,
       defaultAgent: 'davara',
       operatorName: '',           // how the fleet addresses you; the brief carries it every turn
+      gearTtlMin: 120,            // Motus Motivus cools back to cruise after this (0 = until told)
+      gretaOn: true,              // big moves pass through Greta before they count
+      gretaPerDay: 12,            // autonomous critiques a day; asking her by hand is never capped
+      signalOn: true,             // decisions reach the operator's phone
+      signalPerDay: 5,            // messages a day, digest included; a cap is what keeps a signal a signal
+      signalDigestHour: 9,        // local hour for the one daily digest (-1 = none)
+      signalNudges: false,        // the old "key moment" pings; off, because they were read and never acted on
+      reckonOn: true,             // shipped moves are checked against their own falsifiers when due
+      signalProfile: '',          // Linux: which Hermes profile speaks (blank = the first one found)
+      signalChat: '',             // blank = that profile's home channel
       pollMs: 7000,               // 4s was gratuitous over the WSL 9p bridge; 7s reads identically to the eye
       autoEvolve: false,         // periodic Cortex self-reflection
       beaconUrl: '',             // optional remote endpoint for foreign-device alerts
@@ -458,7 +491,27 @@ function loadState() {
   if (!s.firstRun) s.firstRun = new Date().toISOString();
   if (!Array.isArray(s.trustedFingerprints)) s.trustedFingerprints = [];   // pairing fills it at first boot
   if (!s.decoyIp) s.decoyIp = genFakeIp();   // stable fake IP, generated once and persisted
+  migrateOpus55(s);
   return s;
+}
+// ONE-TIME, recorded, and only once. August 2026-09-23 asked for every agent on
+// Opus 5.5 at max. Changing the defaults alone would have missed every seat he had
+// ever touched on the Models screen, because a saved choice outranks a default. So
+// every saved seat moves once, the old values are kept beside the stamp so the
+// change can be read back, and a seat he changes afterwards stays his.
+function migrateOpus55(s) {
+  s.migrations = s.migrations || {};
+  if (s.migrations.opus55) return;
+  const was = {};
+  for (const [id, c] of Object.entries(s.fleetConfig || {})) {
+    if (!c || typeof c !== 'object') continue;
+    const f = FLEET_BY_ID[id];
+    if (!f || f.lane !== 'relay') continue;
+    was[id] = { model: c.model || '', effort: c.effort || '' };
+    c.model = DEFAULT_MODEL;
+    if (!f.infra) c.effort = DEFAULT_EFFORT;     // the reflex lanes keep their speed
+  }
+  s.migrations.opus55 = { ts: new Date().toISOString(), was };
 }
 // A plausible-looking residential IPv4 — used as the public face of "your IP" so the
 // real one is never exposed to the renderer (or a screen-peeker, or a compromised view).
@@ -788,8 +841,10 @@ function midFlow() {
 const ROUTE_TOKEN = {
   davara: 'cortex-davara', davaris: 'cortex-davaris', davari: 'cortex-davari',
   'sympath-cortex': 'sympath-cortex',
-  arden: 'arden', august: 'august', 'august-v3': 'august-v3',
+  arden: 'arden', august: 'august',   // one August; the observer duplicate is retired (2026-09-16)
   workhorse: 'cortex-workhorse',   // the reflex lane — mouth-proxy maps it to the lean seat
+  greta: 'greta',                  // the critic; both relays map the name to her own seat
+  scribe: 'cortex-scribe',         // titles and summaries; never a thinking seat
 };
 
 // Is the fleet allowed to act right now? One place, so every dispatch path
@@ -839,7 +894,73 @@ function relayViaWsl(payload, timeoutMs = 1850000) {
       });
   });
 }
+// ###########################################################################
+//  THE BREAKER — a loop that is not working stops paying for itself.
+//
+//  August, 2026-09-23: test for glitches "so that it never wastes our tokens or
+//  never runs broken loops or gets caught in a feedback loop." Every turn in
+//  the app passes through relaySend, so the breaker lives here, where no caller
+//  can forget it:
+//    · the same ask to the same seat that failed twice in 30 minutes is refused
+//      for 30 minutes; a third identical failure is not information
+//    · the same ask sent four times in 20 minutes is a loop, whoever sent it;
+//      refused for 20 minutes
+//    · five failures in a row across the fleet within 15 minutes pause all
+//      AUTONOMOUS work for 20 (autonomyAllowed reads it); his own turns still go
+//  Each trip says so once, in words, with the reason and when it lifts.
+// ###########################################################################
+const _brk = { asks: new Map(), streak: [], told: new Set() };
+function brkKey(agent, message) {
+  const head = String(message || '').slice(0, 900).replace(/\d+/g, '#').replace(/\s+/g, ' ').trim();
+  return agent + ':' + sha256(head).slice(0, 16);
+}
+function breakerCheck(agent, message) {
+  const k = brkKey(agent, message);
+  const e = _brk.asks.get(k);
+  if (!e) return null;
+  if (e.until && e.until > now()) return e.why + ' It lifts at ' + new Date(e.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '.';
+  return null;
+}
+function breakerRecord(agent, message, r) {
+  if (r && r.blocked) return;                       // a stop is not a failure
+  const k = brkKey(agent, message);
+  const t = now();
+  const e = _brk.asks.get(k) || { sends: [], fails: [], until: 0, why: '' };
+  e.sends = e.sends.filter((x) => t - x < 20 * 60000).concat(t);
+  e.fails = e.fails.filter((x) => t - x < 30 * 60000);
+  if (r && !r.ok) e.fails.push(t);
+  const name = (FLEET_BY_ID[agent] || {}).name || agent;
+  if (e.fails.length >= 2 && !(e.until > t)) { e.until = t + 30 * 60000; e.why = `${name} failed the same ask twice in 30 minutes, so the breaker is not paying for a third.`; }
+  else if (e.sends.length >= 4 && !(e.until > t)) { e.until = t + 20 * 60000; e.why = `The same ask reached ${name} four times in 20 minutes. That is a loop, not a request.`; }
+  _brk.asks.set(k, e);
+  if (e.until > t && !_brk.told.has(k + e.until)) {
+    _brk.told.add(k + e.until);
+    pushNotification('warn', 'The breaker held a loop', e.why + ' Your own messages still go through.', 'settings', 'brk:' + k, { native: false });
+    safe(() => omniAudit('breaker', e.why));
+  }
+  // the fleet-wide streak: consecutive failures, any seat
+  if (r && !r.ok) _brk.streak = _brk.streak.filter((x) => t - x < 15 * 60000).concat(t);
+  else if (r && r.ok) _brk.streak = [];
+  if (_brk.streak.length >= 5 && !(STATE.breaker && STATE.breaker.until > t)) {
+    STATE.breaker = { until: t + 20 * 60000, why: 'five turns failed in a row across the fleet', at: new Date(t).toISOString() };
+    saveState();
+    pushNotification('bad', 'Autonomy paused for 20 minutes', 'Five turns failed in a row across the fleet. Duo-Drive, loops, triggers and Greta hold until it lifts; your own turns still go through. Check the relay if it repeats.', 'settings', 'brk-fleet:' + t);
+  }
+  if (_brk.asks.size > 400) for (const [kk, v] of _brk.asks) if (!(v.until > t) && !v.sends.some((x) => t - x < 20 * 60000)) _brk.asks.delete(kk);
+}
+function breakerState() {
+  const t = now();
+  return {
+    fleet: STATE.breaker && STATE.breaker.until > t ? { until: new Date(STATE.breaker.until).toISOString(), why: STATE.breaker.why } : null,
+    held: [..._brk.asks.values()].filter((e) => e.until > t).map((e) => ({ why: e.why, until: new Date(e.until).toISOString() })),
+  };
+}
 function relaySend(agent, message, timeoutMs = 1850000) {
+  const held = breakerCheck(agent, message);
+  if (held) return Promise.resolve({ ok: false, text: '', latency: 0, error: held, blocked: true, breaker: true });
+  return relaySendRaw(agent, message, timeoutMs).then((r) => { safe(() => breakerRecord(agent, message, r)); return r; });
+}
+function relaySendRaw(agent, message, timeoutMs = 1850000) {
   message = withOperator(message);                 // the fleet hears the operator's own name
   if ((FLEET_BY_ID[agent] || {}).lane === 'openai') return openaiSend(agent, message);   // the second stack
   if (!isRelayAgent(agent)) {
@@ -1063,7 +1184,8 @@ const RUNNERS = [
 // current generation. Only ids the installed CLI actually accepts appear here —
 // an invented id would fault the turn, so nothing speculative is ever listed.
 const KNOWN_MODELS = [
-  { id: 'claude-opus-5', label: 'Opus 5', gen: 'Claude 5', flagship: true, note: 'Deepest reasoning — the fleet default' },
+  { id: 'claude-opus-5-5', label: 'Opus 5.5', gen: 'Claude 5', flagship: true, note: 'The newest and deepest. The fleet default. Needs Claude Code 2.1.280 or later' },
+  { id: 'claude-opus-5', label: 'Opus 5', gen: 'Claude 5', flagship: true, note: 'The previous default. Still sharp, and the fallback when 5.5 is busy' },
   { id: 'claude-fable-5-1', label: 'Fable 5.1', gen: 'Claude 5', flagship: true, note: 'Newest fast flagship — needs CLI 2.1.251+ (verified answering on 2.1.258)' },
   { id: 'claude-fable-5', label: 'Fable 5', gen: 'Claude 5', flagship: true, note: 'Fast flagship — vivid, strong at long creative build runs' },
   { id: 'claude-sonnet-5', label: 'Sonnet 5', gen: 'Claude 5', flagship: true, note: 'Balanced — quick and very capable' },
@@ -1082,7 +1204,7 @@ const QUALITY = [
   { id: 'medium', label: 'Medium', note: 'Balanced everyday work.' },
   { id: 'high', label: 'High', note: 'Deep. The right default for real building.' },
   { id: 'xhigh', label: 'X-High', note: 'Very deep — hard architecture and gnarly bugs.' },
-  { id: 'max', label: 'ULTRACODE', note: 'Maximum rigor. Leave nothing unexamined.' },
+  { id: 'max', label: 'MAX', note: 'Maximum rigor, and the fleet default. Motus Motivus adds the ultracode discipline on top.' },
 ];
 const QUALITY_IDS = new Set(QUALITY.map((q) => q.id));
 
@@ -1100,12 +1222,13 @@ function agentCfg(id) {
   const f = FLEET_BY_ID[id] || {};
   const saved = (STATE && STATE.fleetConfig && STATE.fleetConfig[id]) || {};
   const model = MODEL_IDS.has(saved.model) ? saved.model : (f.defaultModel || DEFAULT_MODEL);
-  const effort = QUALITY_IDS.has(saved.effort) ? saved.effort : (f.effort || 'high');
+  const effort = QUALITY_IDS.has(saved.effort) ? saved.effort : (f.effort || DEFAULT_EFFORT);
   const t = parseInt(saved.turns, 10);
   const turns = Number.isFinite(t) && t > 0 && t <= 400 ? t : (f.maxTurns || 16);
   return {
     id, model, effort, turns,
     paused: !!saved.paused, hard: !!saved.hard,
+    mode: seatMode(id),            // read-only badge; the runner is what applies it
     lane: f.lane || 'relay',
     // external agents (Sympath SEI) are configured in their own gateway, not here
     configurable: f.lane === 'relay',
@@ -1185,6 +1308,191 @@ function fleetConfigPath() {
   const home = path.dirname(root());               // …\home\<user>
   return path.join(home, '.cortexinsight', 'fleet.json');
 }
+// ---------------------------------------------------------------------------
+//  MODES — the gear a seat is in right now.
+//
+//  ~/.cortexinsight/modes.json is a TEMPORARY per-seat override of model, effort
+//  and turn budget. It is written by motus-mode.sh (CLI) or by the relay when the
+//  operator says "motus max" in a message, and applied by cortex-run.sh on the
+//  next turn. It is READ here and never written: one writer, one definition of
+//  what a mode is. Expiry is honoured exactly as motus-mode.sh honours it, so the
+//  console can never show a gear the runner is not actually in.
+// ---------------------------------------------------------------------------
+const MODE_PROFILES = {
+  cruise:  { label: 'CRUISE',        deep: false },
+  motivus: { label: 'MOTUS MOTIVUS', deep: true },
+  max:     { label: 'MOTUS MAX',     deep: true },
+};
+function modesPath() { return path.join(path.dirname(fleetConfigPath()), 'modes.json'); }
+let _modesCache = { size: -1, mtime: -1, data: {} };
+function readModes() {
+  const p = modesPath();
+  const st = statOf(p);
+  if (!st) { _modesCache = { size: -1, mtime: -1, data: {} }; return {}; }
+  if (_modesCache.size === st.size && _modesCache.mtime === st.mtimeMs) return _modesCache.data;
+  const data = safe(() => {
+    const o = JSON.parse(fs.readFileSync(p, 'utf8'));
+    return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+  }, {});
+  _modesCache = { size: st.size, mtime: st.mtimeMs, data };
+  return data;
+}
+// The mode in force for a seat NOW. An expired or absent entry reads as cruise —
+// which is exactly what the runner will do with it.
+function seatMode(id) {
+  const off = { mode: 'cruise', label: 'CRUISE', active: false, model: '', effort: '',
+                turns: 0, until: null, since: null, set_by: null, deep: false };
+  const e = readModes()[id];
+  if (!e || typeof e !== 'object') return off;
+  if (!Object.prototype.hasOwnProperty.call(MODE_PROFILES, e.mode) || e.mode === 'cruise') return off;
+  if (e.until) { const t = Date.parse(e.until); if (!Number.isFinite(t) || t <= Date.now()) return off; }
+  return {
+    mode: e.mode, label: String(e.label || MODE_PROFILES[e.mode].label), active: true,
+    model: String(e.model || ''), effort: String(e.effort || ''),
+    turns: parseInt(e.turns, 10) || 0, until: e.until || null, since: e.since || null,
+    set_by: String(e.set_by || ''), deep: !!e.deep, note: String(e.note || '').slice(0, 200),
+  };
+}
+
+// ###########################################################################
+//  THE GEAR — one lever, both machines.
+//
+//  August 2026-09-23: "set the default quality standard to max, and then unless
+//  I say enter Motus Motivus mode, then we switch to Ultra Code mode for our
+//  agents." Cruise IS max now (DEFAULT_EFFORT). Motivus is the second gear:
+//  deep-build discipline, subagent fan-out, adversarial self-review, a longer
+//  turn budget, and it cools back to cruise on its own.
+//
+//  The VPS already had this lever: motus-mode.sh writes modes.json and its
+//  runner applies it every turn. The desktop runner reads neither, so there the
+//  app is the writer and the BRIEF is the carrier: the bridge prepends the brief
+//  to every turn, Telegram included, and the gear block rides at its very top.
+//  Same file, same schema, same phrases, same cool-down on both machines.
+// ###########################################################################
+const GEAR_TTL_MIN = 120;
+const GEAR_TURNS = 200;
+const GEAR_ALIAS = { ultracode: 'motivus', ultra: 'motivus', deep: 'motivus', motivus: 'motivus',
+  cruise: 'cruise', normal: 'cruise', off: 'cruise', cool: 'cruise', default: 'cruise' };
+function gearBlock(until) {
+  const t = until ? new Date(until) : null;
+  const hhmm = t && Number.isFinite(t.getTime()) ? String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') : '';
+  return `--- GEAR: MOTUS MOTIVUS · ULTRACODE${hhmm ? ' (until ' + hhmm + ')' : ''} ---
+Deep-build discipline is ON for every seat. Work as a craftsman on a build that matters:
+read the whole map → name the single highest-leverage move → plan it in one breath → build it → verify by running it → attack it as an adversary would and fix what breaks → then report.
+Fan out on dimensions, not on files: three agents reading the same work for three failure classes beat three agents each reading a third of it. Brief each with a falsifier ("you succeed by breaking this"), not a task. What they return is a hypothesis until you run the command that proves it.
+Never certify your own build. Big work goes to Greta for critique: bash ~/.cortexinsight/ci.sh hand greta "<what to judge>" "<where it is>".
+Report in three buckets: verified (with the command) · unverified · left out on purpose.`;
+}
+function modesScript() { return path.join(root(), 'SystemsCortex', 'motus-mode.sh'); }
+// Where the runner applies modes.json itself (the Linux relay), the brief must not
+// carry the gear block as well, or every deep turn reads its orders twice.
+function runnerAppliesModes() { return process.platform === 'linux' && !!statOf(modesScript()); }
+function gearSeats() { return AGENTS.filter((id) => FLEET_BY_ID[id] && !FLEET_BY_ID[id].external); }
+function fleetGear() {
+  const g = (STATE && STATE.gear) || {};
+  if (g.mode === 'motivus') {
+    const t = Date.parse(g.until || '');
+    if (!g.until || (Number.isFinite(t) && t > now())) {
+      return { mode: 'motivus', label: 'MOTUS MOTIVUS', deep: true, since: g.since || null, until: g.until || null, by: g.by || '',
+        minutesLeft: g.until ? Math.max(0, Math.round((t - now()) / 60000)) : null };
+    }
+  }
+  return { mode: 'cruise', label: 'CRUISE', deep: false, since: null, until: null, by: '', minutesLeft: null };
+}
+// In motivus a seat gets the deep turn budget, never less than it already had.
+function gearTurns(id, turns) {
+  const f = FLEET_BY_ID[id] || {};
+  if (f.infra || runnerAppliesModes() || !fleetGear().deep) return turns;
+  return Math.max(turns, GEAR_TURNS);
+}
+function gearView() {
+  return {
+    fleet: fleetGear(),
+    seats: Object.fromEntries(gearSeats().map((id) => [id, seatMode(id)])),
+    ttlMin: parseInt((STATE.settings || {}).gearTtlMin, 10) || GEAR_TTL_MIN,
+    runnerApplies: runnerAppliesModes(),
+    effort: DEFAULT_EFFORT,
+  };
+}
+// The desktop's writer. Same schema motus-mode.sh writes, so the console's seat
+// badges read one truth on either machine; other seats' entries are left alone.
+function writeModesFile(mode, seats, { ttl, by }) {
+  return safe(() => {
+    const p = modesPath();
+    const cur = safe(() => JSON.parse(fs.readFileSync(p, 'utf8')), {}) || {};
+    const t0 = now();
+    for (const id of seats) {
+      if (mode === 'cruise') { delete cur[id]; continue; }
+      cur[id] = { mode: 'motivus', label: 'MOTUS MOTIVUS', model: agentCfg(id).model, effort: 'max', turns: GEAR_TURNS, deep: true,
+        since: new Date(t0).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        until: ttl ? new Date(t0 + ttl * 60000).toISOString().replace(/\.\d{3}Z$/, 'Z') : null,
+        set_by: by, note: '' };
+    }
+    const dir = path.dirname(p);
+    if (!exists(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(p + '.tmp', JSON.stringify(cur, null, 2));
+    fs.renameSync(p + '.tmp', p);
+    return true;
+  }, false);
+}
+function runModesScript(args) {
+  return new Promise((res) => execFile('bash', [modesScript(), ...args], { timeout: 15000 }, (err, out) => res({ ok: !err, out: String(out || '') })));
+}
+async function setGear(want, { by = 'console', ttlMin } = {}) {
+  const mode = GEAR_ALIAS[String(want || '').toLowerCase().trim()];
+  if (!mode) return { ok: false, error: 'the gears are cruise and motivus' };
+  const ttlDefault = parseInt((STATE.settings || {}).gearTtlMin, 10) || GEAR_TTL_MIN;
+  const ttl = Number.isFinite(+ttlMin) && ttlMin !== null && ttlMin !== '' ? Math.max(0, Math.min(1440, Math.round(+ttlMin))) : ttlDefault;
+  const prev = fleetGear().mode;
+  const iso = new Date().toISOString();
+  STATE.gear = mode === 'motivus'
+    ? { mode, since: iso, until: ttl ? new Date(now() + ttl * 60000).toISOString() : null, by }
+    : { mode: 'cruise', since: iso, until: null, by };
+  const seats = gearSeats();
+  if (runnerAppliesModes()) {
+    const tag = String(by).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 24) || 'console';
+    for (const id of seats) await runModesScript([id, mode, '--ttl', String(ttl), '--by', tag]);
+  } else {
+    writeModesFile(mode, seats, { ttl, by });
+  }
+  saveState();
+  publishFleetConfig();          // turn budgets + the brief, in one move
+  if (prev !== mode) {
+    const who = by === 'console' || by === 'operator' ? '' : ' at ' + ((FLEET_BY_ID[by] || {}).name || by) + "'s word";
+    pushNotification('info', mode === 'motivus' ? 'MOTUS MOTIVUS · ultracode on' : 'Back to cruise',
+      mode === 'motivus'
+        ? 'Every seat now works in deep-build discipline' + (ttl ? ' for ' + ttl + ' minutes' : ' until you say cruise') + who + '. Opus 5.5 at max, subagents on, critique before claims.'
+        : 'Every seat is back on cruise' + who + ': Opus 5.5 at max, the normal turn budget.',
+      'overview', 'gear:' + mode, { native: false });
+    safe(() => omniAudit('gear', (mode === 'motivus' ? 'motivus on' : 'cruise') + ' · by ' + by + (mode === 'motivus' && ttl ? ' · ' + ttl + ' min' : '')));
+  }
+  return { ok: true, gear: gearView() };
+}
+// The cool-down. Called by the watchdog, costs nothing, says so when it lands.
+function gearTick() {
+  const g = STATE && STATE.gear;
+  if (!g || g.mode !== 'motivus' || !g.until) return;
+  if (Date.parse(g.until) > now()) return;
+  STATE.gear = { mode: 'cruise', since: new Date().toISOString(), until: null, by: 'cool-down' };
+  if (!runnerAppliesModes()) writeModesFile('cruise', gearSeats(), { ttl: 0, by: 'cool-down' });
+  saveState();
+  publishFleetConfig();
+  pushNotification('info', 'Back to cruise', 'Motus Motivus cooled down on its own. Every seat is on Opus 5.5 at max with the normal turn budget.', 'overview', 'gear:cool', { native: false });
+}
+// Said, not clicked. The whole message is the command, or it leads the message:
+// "enter motus motivus mode" alone flips the gear and costs no turn; "enter motus
+// motivus mode and fix the board" flips it and then sends the rest.
+const GEAR_ON_RX = /^\s*(?:\/(?:motivus|ultracode)\b|(?:please\s+)?(?:let'?s\s+)?(?:enter|engage|start|activate|turn\s+on|switch\s+(?:in)?to|go\s+(?:in)?to)\s+(?:the\s+)?(?:motus\s+motivus|ultra\s*code)(?:\s+mode)?\b|(?:motus\s+motivus|ultra\s*code)(?:\s+mode)?\s+on\b)[\s.,!:;-]*/i;
+const GEAR_OFF_RX = /^\s*(?:\/cruise\b|(?:please\s+)?(?:exit|leave|stop|end|turn\s+off)\s+(?:the\s+)?(?:motus\s+motivus|ultra\s*code)(?:\s+mode)?\b|(?:motus\s+motivus|ultra\s*code)(?:\s+mode)?\s+off\b|back\s+to\s+cruise\b|cruise\s+mode\b)[\s.,!:;-]*/i;
+function gearPhrase(msg) {
+  const s = String(msg || '');
+  let m = GEAR_ON_RX.exec(s);
+  if (m) return { mode: 'motivus', rest: s.slice(m[0].length).replace(/^(?:and|then|&)\s+/i, '').trim() };
+  m = GEAR_OFF_RX.exec(s);
+  if (m) return { mode: 'cruise', rest: s.slice(m[0].length).replace(/^(?:and|then|&)\s+/i, '').trim() };
+  return null;
+}
+
 // Publish the resolved fleet config for the runner. Atomic (tmp+rename) so the
 // runner can never read a half-written file mid-turn.
 function publishFleetConfig() {
@@ -1197,7 +1505,7 @@ function publishFleetConfig() {
     // though it never shows up as a persona anywhere in the UI.
     for (const id of [...AGENTS, ...INFRA_IDS]) {
       const c = agentCfg(id);
-      agents[id] = { model: c.model, effort: c.effort, turns: c.turns, paused: c.paused, hard: c.hard };
+      agents[id] = { model: c.model, effort: c.effort, turns: gearTurns(id, c.turns), paused: c.paused, hard: c.hard };
     }
     const body = JSON.stringify({
       _note: 'Written by CortexInsight. Per-agent model + effort, read fresh by cortex-run.sh each turn.',
@@ -1318,7 +1626,9 @@ function writeAgentBrief() {
     const rank = (l) => (l.endorsedBy ? 1000 : 0) + ((la.per[l.ts] || 0) * 50) + ((l.uses || 0) * 10) + ((l.conviction || 0));
     const learn = (STATE.learnings || []).slice(0, 40).sort((a, b) => rank(b) - rank(a)).slice(0, 6)
       .map((l) => `- ${String(l.title).slice(0, 110)}`).join('\n');
+    const gearNow = fleetGear();
     const md = [
+      ...(gearNow.deep && !runnerAppliesModes() ? [gearBlock(gearNow.until), ''] : []),
       '# ' + operatorName() + ' · current orientation',
       '_Written by CortexInsight. Read-only context — act on the message below it, not on this. The operator is ' + operatorName() + '; address them by that name._',
       '',
@@ -1328,6 +1638,12 @@ function writeAgentBrief() {
       // sight becomes the fleet's sight, every turn, at no token cost.
       safe(() => { const rd = systemReading(); const cl = closeCandidates(3); return '## THE READING — the shape of the system right now\n' + rd.line + (rd.more ? ' ' + rd.more : '') + (cl.length ? '\n' + cl.length + ' decision(s) wait for ' + operatorName() + ' on the board; do not re-propose those tasks.' : '') + (() => { const al = motusAlignment(); return al.set && al.drifting.length ? '\n' + al.drifting.length + ' open task(s) share no words with the Motus; prefer the work that moves it.' : ''; })(); }, ''),
       '',
+      (() => {
+        const ds = safe(() => signalLog().decisions.filter((d) => d.status === 'open').slice(0, 4), []);
+        return ds.length ? '## DECISIONS WAITING ON ' + operatorName().toUpperCase() + ' (on the phone)\n' + ds.map((d) => '- ' + d.id + ' · ' + d.title.slice(0, 90)).join('\n')
+          + '\nA message starting with one of these ids is the answer: run bash ~/.cortexinsight/ci.sh decide <id> "<the words>", then say in one line what it moved.\n' : '';
+      })(),
+      '## HOW TO ANSWER\nWeigh the ask first. A one-line question gets a one-line answer. A structural question gets the climb: the structure, the rung, one move. A build gets plan, build, verify, then the report. Do not pay for depth the ask did not ask for. On a phone: lead with the answer, short lines, no tables, under 4,000 characters. Report in three buckets: verified (with the command), unverified, left out on purpose.',
       STATE.motus ? `## MOTUS — the strongest thing moving now\n${String(STATE.motus.text).slice(0, 400)}` : '## MOTUS\n(not set)',
       '',
       STATE.goal ? `## GOAL — the north star\n${String(STATE.goal.text).slice(0, 400)}` : '## GOAL\n(not set)',
@@ -1335,6 +1651,7 @@ function writeAgentBrief() {
       open ? `## OPEN BOARD\n${open}\n\nYou can move these: \`bash ~/.cortexinsight/ci.sh done "<title or id>"\`` : '## OPEN BOARD\n(empty)',
       '',
       learn ? `## WHAT THE FLEET ALREADY KNOWS\n${learn}` : '',
+      (() => { const cl = safe(() => calibrationLine(), ''); return cl ? '## CALIBRATION\n' + cl : ''; })(),
       '',
       // ★ THE COMPOUNDING BIT. Knowing what worked is half of getting smarter;
       // the other half is knowing what KEEPS NOT WORKING. Repetition is the
@@ -2566,7 +2883,9 @@ ipcMain.handle('cortex:models', requireGate(() => ({
 //  v2.0 IPC — fleet config · control plane · subagents · usage · board ·
 //  workflows · Duo-Drive. Every one of these runs behind the same gate.
 // ---------------------------------------------------------------------------
-ipcMain.handle('cortex:fleet', requireGate(() => ({ fleet: fleetSnapshot(), quality: QUALITY, known: KNOWN_MODELS, bridge: bridgeStatus() })));
+ipcMain.handle('cortex:fleet', requireGate(() => ({ fleet: fleetSnapshot(), quality: QUALITY, known: KNOWN_MODELS, bridge: bridgeStatus(), gear: gearView() })));
+ipcMain.handle('cortex:gear', requireGate(() => gearView()));
+ipcMain.handle('cortex:gearSet', requireGate((_e, a) => setGear((a || {}).mode, { by: 'console', ttlMin: (a || {}).ttlMin })));
 
 ipcMain.handle('cortex:setAgentConfig', requireGate((_e, { agent, model, effort, turns } = {}) => {
   if (!isRelayAgent(agent)) return { ok: false, error: 'That agent is configured in its own gateway, not here.' };
@@ -2646,6 +2965,8 @@ ipcMain.handle('cortex:reading', requireGate(() => systemReading()));
 ipcMain.handle('cortex:close', requireGate(() => ({ items: closeCandidates(3), log: (STATE.closeLog || []).slice(0, 12) })));
 ipcMain.handle('cortex:closeAct', requireGate((_e, { id, action } = {}) => closeAct(String(id || ''), ['done', 'park', 'keep'].includes(action) ? action : 'keep')));
 ipcMain.handle('cortex:taskSweep', requireGate((_e, { apply } = {}) => taskSweep({ apply: !!apply })));
+ipcMain.handle('cortex:boardTidy', requireGate((_e, { apply, undo } = {}) => (undo ? tidyUndo() : boardTidy({ apply: !!apply, reason: 'by hand' }))));
+ipcMain.handle('cortex:breaker', requireGate(() => breakerState()));
 ipcMain.handle('cortex:duoNextAct', requireGate((_e, { id, action } = {}) => duoNextAct(String(id || ''), action === 'add' ? 'add' : 'dismiss')));
 ipcMain.handle('cortex:omniPreRead', requireGate((_e, { agent } = {}) => {
   if (_ISOLATED) return { ok: false, error: 'not in a harness' };
@@ -2699,15 +3020,27 @@ ipcMain.handle('cortex:duo', requireGate((_e, patch) => {
     if (patch.mode && DUO_MODES[patch.mode]) STATE.duo.mode = patch.mode;
     if (patch.cadenceMin != null) STATE.duo.cadenceMin = clamp(parseInt(patch.cadenceMin, 10) || 25, 5, 240);
     if (patch.brief != null) STATE.duo.brief = String(patch.brief).slice(0, 2000);
+    if (patch.active === true) STATE.duo.wrapUp = false;     // starting again cancels a pending wrap-up
+    if (patch.second && typeof patch.second === 'object') {
+      const s2 = STATE.duo.second = STATE.duo.second || { active: false, agent: 'davaris', cadenceMin: 40, lastRun: 0 };
+      if (patch.second.agent && isRelayAgent(patch.second.agent)) s2.agent = patch.second.agent;
+      if (patch.second.cadenceMin != null) s2.cadenceMin = clamp(parseInt(patch.second.cadenceMin, 10) || 40, 5, 240);
+      if (patch.second.active != null) s2.active = !!patch.second.active;
+      // two lanes on one seat would only queue behind each other at the relay
+      if (s2.agent === STATE.duo.agent) s2.agent = STATE.duo.agent === 'davaris' ? 'davara' : 'davaris';
+    }
     saveState();
   }
+  const said = patch && patch.wrapUp ? duoWrapUp().said : '';
   return {
+    said,
+    flights: duoFlights(),
     duo: { ...STATE.duo, log: (STATE.duo.log || []).slice(0, 30), cadenceStretch: cadenceStretch(STATE.duo.skipStreak), nextsCount: (STATE.duo.nexts || []).length },
     modes: Object.entries(DUO_MODES).map(([id, desc]) => ({ id, desc })),
     fleet: fleetSnapshot().filter((f) => f.lane === 'relay' && f.coder),
   };
 }));
-ipcMain.handle('cortex:duoPass', requireGate(() => duoPass('manual')));
+ipcMain.handle('cortex:duoPass', requireGate((_e, a) => duoPass('manual', (a && a.lane) === 'second' ? 'second' : 'main')));
 ipcMain.handle('cortex:duoPromptPreview', requireGate(() => {
   const loop = (STATE.loops || []).find((l) => l.approved) || (STATE.loops || [])[0];
   if (!loop) return { ok: false, error: 'no loops defined' };
@@ -2866,6 +3199,25 @@ ipcMain.handle('cortex:voiceTurn', requireGate(async (_e, { text, agent, speak }
   const said = String(text || '').trim();
   if (!said) return { ok: false, error: 'nothing was heard' };
   const a = isRelayAgent(agent) ? agent : (STATE.settings.voiceAgent || 'davara');
+  // ⚠ The stop used to be checked FIRST, so with the fleet stopped DASH-OPS
+  // refused "go to the board", an answer the app holds itself and that spends
+  // nothing. A stop halts spending, not the interface. The local answers come
+  // first; the stop still guards every turn below them.
+  const speakOut = async (out, line) => { if (speak !== false && STATE.settings.elevenKeyEnc) { const t = await ttsSpeak(line); if (t.ok) { out.audio = t.audio; out.spoken = t.spoken; } } return out; };
+  // the gear, said out loud
+  const gv = gearPhrase(said);
+  if (gv && gv.rest.length < 12) {
+    const gr = await setGear(gv.mode, { by: 'operator' });
+    const line = !gr.ok ? 'The gear did not change.' : gr.gear.fleet.deep ? 'Motus Motivus is on. Every seat is in deep-build discipline' + (gr.gear.fleet.minutesLeft ? ' for ' + gr.gear.fleet.minutesLeft + ' minutes.' : '.') : 'Back to cruise.';
+    return speakOut({ ok: true, text: line, latency: 0, agent: a, actions: [], pending: [], goView: '', local: true }, line);
+  }
+  if (/\b(the reading|how are we|state of (?:the )?(?:system|things)|where are we)\b/i.test(said)) {
+    const rd = systemReading();
+    const line = rd.line + (rd.more ? ' ' + rd.more : '');
+    return speakOut({ ok: true, text: line, latency: 0, agent: a, actions: [], pending: [], goView: 'overview', local: true }, line);
+  }
+  const li0 = voiceLocalIntent(said);
+  if (li0) return speakOut({ ok: true, text: li0.text, latency: 0, agent: a, actions: [], pending: [], goView: li0.goView || '', local: true }, li0.text);
   const blocked = dispatchBlocked(a);
   if (blocked) return { ok: false, error: blocked, blocked: true };
   // WHILE MOTUS MAX IS DRIVING, speaking to her is not a new conversation — it
@@ -2877,22 +3229,7 @@ ipcMain.handle('cortex:voiceTurn', requireGate(async (_e, { text, agent, speak }
   // Saying it out loud starts it. Arming is still his physical hold — the
   // trigger only reaches for a permission he has already granted, and says so
   // plainly when he has not.
-  // a spoken ask for the state of things is the reading, answered here, instantly
-  if (/\b(the reading|how are we|state of (?:the )?(?:system|things)|where are we)\b/i.test(said)) {
-    const rd = systemReading();
-    const line = rd.line + (rd.more ? ' ' + rd.more : '');
-    const out = { ok: true, text: line, latency: 0, agent: a, actions: [], pending: [], goView: 'overview', local: true };
-    if (speak !== false && STATE.settings.elevenKeyEnc) { const t = await ttsSpeak(line); if (t.ok) { out.audio = t.audio; out.spoken = t.spoken; } }
-    return out;
-  }
-  // the local intents: navigation, the board, the arm, the clock. The app
-  // already knows these answers; a relay turn for them would be a tax.
-  const li = voiceLocalIntent(said);
-  if (li) {
-    const out = { ok: true, text: li.text, latency: 0, agent: a, actions: [], pending: [], goView: li.goView || '', local: true };
-    if (speak !== false && STATE.settings.elevenKeyEnc) { const t = await ttsSpeak(li.text); if (t.ok) { out.audio = t.audio; out.spoken = t.spoken; } }
-    return out;
-  }
+  // (the reading and the local intents are answered above the stop now)
   const trig = /^\s*(?:hey\s+)?(?:davara[,\s]+)?(?:let'?s\s+)?(?:go\s+)?(?:into\s+)?(?:motus\s*max|omni\s*drive|omnidrive|full\s+drive|take\s+the\s+wheel|drive\s+it|drive\s+for\s+me)\b[\s,.:—-]*(.*)$/i.exec(said);
   if (trig && !(omniState().session && ['running', 'waiting'].includes(omniState().session.status))) {
     const rest = (trig[1] || '').trim();
@@ -3656,6 +3993,18 @@ ipcMain.handle('cortex:send', requireGate(async (_e, { agent, kind, text }) => {
       ? `No goal given, so she read the system and chose one.\n\nLEVER: ${(r0.read || {}).lever}\nRUNG: ${(r0.read || {}).rung}\nWHY NOW: ${(r0.read || {}).whyNow}\nFIRST STEP: ${(r0.read || {}).firstStep}\n\nDIVERGENT FRAME: ${(r0.read || {}).frame}`
       : r0.origin === 'resumed' ? 'Picking up the open thread where you left it.' : 'Driving.';
     return { ok: true, text: `◈ MOTUS MAX ENGAGED\n\n${head}`, latency: 0, goView: 'omni' };
+  }
+  // THE GEAR, said in words. Answered here, no turn spent, unless there is more.
+  const gp0 = kind === 'chat' || !kind ? gearPhrase(message) : null;
+  if (gp0) {
+    const gr = await setGear(gp0.mode, { by: 'operator' });
+    const g = gr.ok ? gr.gear.fleet : null;
+    const said = !gr.ok ? 'The gear did not change: ' + gr.error
+      : g.deep ? '◈ MOTUS MOTIVUS · ULTRACODE\n\nEvery seat is in deep-build discipline' + (g.minutesLeft ? ' for the next ' + g.minutesLeft + ' minutes' : ' until you say cruise') + ': Opus 5.5 at max, subagents on, adversarial self-review, critique before claims. Say "back to cruise" to end it early.'
+      : '◈ CRUISE\n\nEvery seat is back on cruise: Opus 5.5 at max, the normal turn budget.';
+    if (gp0.rest.length < 12) return { ok: true, latency: 0, text: said };
+    message = gp0.rest;
+    if (mainWin) safe(() => mainWin.webContents.send('cortex:sendProgress', { phase: 'note', agent, text: said }));
   }
   // /help — the door to the docs, answered locally, no turn spent.
   if (/^\s*\/(?:help|\?|docs|commands)\b/i.test(message)) {
@@ -5456,7 +5805,13 @@ function taskCreate({ title, body, agent, priority, tags, due, owner }) {
   };
   if (!t.title) return { ok: false, error: 'a task needs a title' };
   STATE.tasks.unshift(t);
-  STATE.tasks = STATE.tasks.slice(0, 500);
+  // Room is made from the oldest FINISHED work. The old slice(0, 500) dropped
+  // whatever sat at the end, open or not, without a word.
+  if (STATE.tasks.length > 500) {
+    const drop = new Set(STATE.tasks.filter((x) => x.status === 'done')
+      .sort((a, b) => String(a.updated || '').localeCompare(String(b.updated || ''))).slice(0, STATE.tasks.length - 500).map((x) => x.id));
+    STATE.tasks = STATE.tasks.filter((x) => !drop.has(x.id));
+  }
   saveState();
   return { ok: true, task: t };
 }
@@ -5656,6 +6011,109 @@ function parseTaskGrammar(raw) {
   out.title = title.replace(/\s{2,}/g, ' ').trim();
   return out;
 }
+// ###########################################################################
+//  THE TIDY — the board keeps itself, and every move can be undone.
+//
+//  August, 2026-09-23: the to-do list "gets stuck ... fills up with stuff and
+//  it's hard to manage and overwhelming." Read from his real board before a
+//  line changed: 90 open, 78 filed by Davara from Telegram, 63 of the 90 at
+//  priority 1, 48 older than three weeks, 11 questions nobody answered. The
+//  sweep below could never shrink it, because it spares priority 1 and the
+//  fleet had marked nearly everything priority 1. When everything is urgent,
+//  nothing is. So the fix is at the INTAKE as much as the backlog:
+//    · the fleet files at normal priority; urgent is the operator's word
+//      (a question is the exception: it is literally waiting on him)
+//    · a near-duplicate of an open task reinforces that task instead of
+//      adding a row
+//    · each seat files at most TASK_INTAKE_DAY tasks a day; past that its
+//      ideas go to the tray of proposals, not onto the board
+//  and the backlog gets a daily tidy: what went cold is parked (fleet-filed
+//  priority 1 included, never his own), "active" work that stalled goes back
+//  to the queue, and questions unanswered for a week expire. Nothing is ever
+//  deleted, each tidy is recorded, and one click undoes the last one.
+// ###########################################################################
+const TASK_INTAKE_DAY = 8;
+const fleetFiled = (t) => (t.tags || []).some((g) => /^from (?!the desktop)/.test(g) || g === 'auto' || g === 'delegated');
+const idleDays = (t) => (now() - (Date.parse(t.updated || t.created || '') || now())) / 864e5;
+function fleetIntake({ title, body, by, priority, tags }) {
+  const name = (FLEET_BY_ID[by] || {}).name || by;
+  const open = (STATE.tasks || []).filter((t) => t.status !== 'done');
+  const twin = open.find((t) => textSimilarity(t.title, title) >= 0.6);
+  if (twin) {
+    twin.asks = (twin.asks || 1) + 1;
+    twin.updated = new Date().toISOString();
+    twin.jobs = [{ ts: twin.updated, agent: by, ok: true, latency: 0, chars: 0, note: `${name} filed this again (${twin.asks}×)${body ? ': ' + String(body).slice(0, 240) : ''}` }, ...(twin.jobs || [])].slice(0, 8);
+    saveState();
+    return { ok: true, merged: true, task: twin };
+  }
+  const today = localDay();
+  const filedToday = (STATE.tasks || []).filter((t) => (t.tags || []).includes('from ' + by) && localDay(new Date(Date.parse(t.created || '') || 0)) === today).length;
+  if (filedToday >= TASK_INTAKE_DAY) {
+    safe(() => duoNextAdd({ text: String(title).slice(0, 300), loop: 'intake', agent: by }));
+    return { ok: true, trayed: true };
+  }
+  const pr = clamp(parseInt(priority, 10) || 2, 1, 3);
+  const r = taskCreate({ title, body, agent: by, priority: pr === 1 ? 2 : pr, tags: [...(tags || []), 'from ' + by] });
+  if (r.ok && pr === 1) r.task.jobs = [{ ts: r.task.created, agent: by, ok: true, latency: 0, chars: 0, note: `${name} filed this as high. The fleet files at normal; you decide what is urgent.` }];
+  return r;
+}
+function boardTidy({ apply = false, reason = 'manual' } = {}) {
+  const plan = { park: [], stall: [], expire: [], lower: [] };
+  for (const t of (STATE.tasks || [])) {
+    if (t.status === 'done' || (t.tags || []).includes('parked')) continue;
+    const idle = idleDays(t);
+    const fleet = fleetFiled(t) || (t.tags || []).includes('question');
+    const lastJob = (t.jobs || [])[0];
+    const jobIdle = lastJob ? (now() - (Date.parse(lastJob.ts) || 0)) / 864e5 : idle;
+    if (t.status === 'waiting' && (t.tags || []).includes('question') && idle >= 7) plan.expire.push(t);
+    else if (t.status === 'active' && idle >= 2 && jobIdle >= 2) plan.stall.push(t);
+    else if (t.status !== 'active' && idle >= 21 && (String(t.priority) !== '1' || fleet)) plan.park.push(t);
+    else if (fleet && String(t.priority) === '1' && t.status !== 'waiting' && !(t.tags || []).includes('question')) plan.lower.push(t);
+  }
+  const counts = { park: plan.park.length, stall: plan.stall.length, expire: plan.expire.length, lower: plan.lower.length };
+  const total = counts.park + counts.stall + counts.expire + counts.lower;
+  const words = [counts.park && `park ${counts.park} that went cold`, counts.stall && `return ${counts.stall} stalled to the queue`,
+    counts.expire && `expire ${counts.expire} unanswered question${counts.expire === 1 ? '' : 's'}`, counts.lower && `lower ${counts.lower} the fleet filed as urgent`].filter(Boolean);
+  if (apply && total) {
+    const stamp = new Date().toISOString();
+    const batch = { id: newId(), ts: stamp, reason, counts, changes: [] };
+    const keep = (t) => batch.changes.push({ id: t.id, status: t.status, priority: t.priority, tags: [...(t.tags || [])] });
+    const note = (t, text) => { t.jobs = [{ ts: stamp, agent: '', ok: true, latency: 0, chars: 0, note: text }, ...(t.jobs || [])].slice(0, 8); };
+    for (const t of plan.park) { keep(t); t.tags = [...new Set([...(t.tags || []), 'parked'])].slice(0, 8); t.priority = 3; t.parkedAt = stamp; note(t, 'Parked by the tidy: untouched for ' + Math.round(idleDays(t)) + ' days. One click brings it back.'); t.updated = stamp; }
+    for (const t of plan.stall) { keep(t); t.status = 'inbox'; t.tags = [...new Set([...(t.tags || []), 'stalled'])].slice(0, 8); note(t, 'Back in the queue: it was "active" with nothing done for two days.'); t.updated = stamp; }
+    for (const t of plan.expire) { keep(t); t.tags = [...new Set([...(t.tags || []), 'parked', 'expired'])].slice(0, 8); t.priority = 3; t.parkedAt = stamp; note(t, 'Expired: nobody answered this for a week. If it still matters, the agent can ask again.'); t.updated = stamp; }
+    for (const t of plan.lower) { keep(t); t.priority = 2; note(t, 'Lowered to normal: the fleet filed it as urgent, and urgent is the operator\'s word.'); }
+    STATE.tidyLog = [batch, ...(STATE.tidyLog || [])].slice(0, 5);
+    STATE.tidy = Object.assign({}, STATE.tidy || {}, { last: stamp, lastCounts: counts });
+    saveState();
+    safe(() => omniAudit('board', 'the tidy (' + reason + '): ' + words.join(', ')));
+  }
+  return { ok: true, applied: !!(apply && total), counts, total, said: words.length ? words.join(' · ') : 'the board is already tidy',
+    last: (STATE.tidyLog || [])[0] ? { ts: STATE.tidyLog[0].ts, counts: STATE.tidyLog[0].counts, reason: STATE.tidyLog[0].reason } : null };
+}
+function tidyUndo() {
+  const b = (STATE.tidyLog || [])[0];
+  if (!b) return { ok: false, error: 'there is no tidy to undo' };
+  let n = 0;
+  for (const c of b.changes) {
+    const t = (STATE.tasks || []).find((x) => x.id === c.id);
+    if (!t) continue;
+    t.status = c.status; t.priority = c.priority; t.tags = c.tags; delete t.parkedAt; t.updated = new Date().toISOString(); n++;
+  }
+  STATE.tidyLog = STATE.tidyLog.slice(1);
+  saveState();
+  return { ok: true, restored: n, said: 'Put ' + n + ' task' + (n === 1 ? '' : 's') + ' back exactly as they were.' };
+}
+// Once a day, and at the first boot of this build: the tidy runs itself and says what it did.
+function tidyTick() {
+  const t = STATE.tidy || {};
+  if (t.lastAuto && now() - (Date.parse(t.lastAuto) || 0) < 20 * 3600e3) return;
+  STATE.tidy = Object.assign({}, t, { lastAuto: new Date().toISOString() });
+  const r = boardTidy({ apply: true, reason: t.lastAuto ? 'daily' : 'first tidy' });
+  if (r.applied) pushNotification('good', 'The board tidied itself', r.said + '. Nothing was deleted; Board → undo puts it all back.', 'tasks', 'tidy:' + localDay(), { native: false });
+  saveState();
+}
+
 // The sweep. What nobody touched for three weeks is not open, it is cold.
 // Parked tasks keep their status and their text; they leave the columns for
 // a folded section, drop to low priority, and come back with one click.
@@ -5755,7 +6213,11 @@ const cadenceStretch = (streak) => Math.min(4, Math.pow(1.5, streak || 0));
 // a loop whose reports keep scoring low waits twice as long: quality is the
 // second balancing loop on spend, beside the idle streak
 function loopQualityMean(loop) { const y = loopYields()[loop.id]; return y && y.qN >= 5 ? y.qSum / y.qN : null; }
-function loopQualityStretch(loop) { const q = loopQualityMean(loop); return q != null && q < 5 ? 2 : 1; }
+function loopQualityStretch(loop) {
+  const q = loopQualityMean(loop);
+  // thin reports stretch the wait, and so does a record of broken predictions
+  return (q != null && q < 5 ? 2 : 1) * (1 + 0.5 * Math.min(4, loop.breakStreak || 0));
+}
 // a seat's mean report quality over its last scored receipts
 function seatQuality(agent, n = 10) {
   const xs = (STATE.duoWork || []).filter((w) => w.agent === agent && Number.isFinite(w.quality)).slice(0, n);
@@ -5789,6 +6251,8 @@ function taskBoard() {
     nexts: (STATE.duo && STATE.duo.nexts) || [],
     wipLimit: Math.max(1, parseInt(STATE.settings.wipLimit, 10) || 5),
     sweep: safe(() => { const s = taskSweep({ apply: false }); return { count: s.count, days: s.days }; }, { count: 0, days: 21 }),
+    tidy: safe(() => { const s = boardTidy({ apply: false }); return { counts: s.counts, total: s.total, said: s.said, last: s.last, canUndo: !!(STATE.tidyLog || []).length }; }, null),
+    signal: safe(() => { const tr = signalTransport(); return { open: signalLog().decisions.filter((d) => d.status === 'open').slice(0, 8), path: tr ? (tr.kind === 'script' ? "Davara's send script" : 'hermes · ' + tr.profile) : '' }; }, null),
     flow: safe(() => { const d = systemDynamics(); return { open: d.stocks.open, done7: d.flows.done7, leadMedDays: d.delays.leadMedDays, clearDays: d.delays.clearDays }; }, null),
     close: safe(() => closeCandidates(3), []),
   };
@@ -5852,6 +6316,8 @@ function ensureAgentBridgeFiles() {
       '#   ci.sh learn "<title>" ["<detail>"]                     bank a durable learning',
       '#   ci.sh note  "<text>"                                   send August a note',
       '#   ci.sh image "<prompt>"                                 ask the studio for an image (the app spends, under his cap)',
+      '#   ci.sh gear  motivus|cruise                             ONLY when the operator said so in their own words',
+      '#   ci.sh decide <id> "<his words>"                        his answer to a decision (d-id) he replied to on the phone',
       'set -uo pipefail',
       'CI_HOME="${HOME}/.cortexinsight"',
       'mkdir -p "$CI_HOME"',
@@ -5865,7 +6331,7 @@ function ensureAgentBridgeFiles() {
       'op, a, b, c, agent = sys.argv[1:6]',
       'kind = {"task":"task.add","done":"task.done","doing":"task.doing",',
       '        "claim":"task.claim","ask":"question","hand":"task.delegate",',
-      '        "learn":"learning.add","note":"note","image":"image.gen"}.get(op)',
+      '        "learn":"learning.add","note":"note","image":"image.gen","gear":"gear","decide":"decision"}.get(op)',
       'if not kind:',
       '    sys.stderr.write("unknown op: %s\\n" % op); sys.exit(2)',
       'rec = {"op": kind, "by": agent, "ts": time.strftime("%Y-%m-%dT%H:%M:%S")}',
@@ -5880,6 +6346,10 @@ function ensureAgentBridgeFiles() {
       '    rec["to"] = a.strip().lower()[:40]; rec["title"] = b[:280]; rec["body"] = c[:4000]',
       'elif kind == "learning.add":',
       '    rec["title"] = a[:300]; rec["body"] = b[:4000]',
+      'elif kind == "gear":',
+      '    rec["mode"] = a.strip().lower()[:20]',
+      'elif kind == "decision":',
+      '    rec["id"] = a.strip().lower()[:12]; rec["text"] = b[:1000]',
       'else:',
       '    rec["text"] = a[:1000]',
       'print(json.dumps(rec, ensure_ascii=False))',
@@ -5915,6 +6385,9 @@ function ensureAgentBridgeFiles() {
       '- The work belongs to a different agent → `hand <agent> "<title>" "<detail>"`. Valid agents: davara, davaris, sympath-cortex, arden, august. It lands on their plate; whether it runs immediately is August\'s setting, not yours.',
       '- You learn something durable about how this system behaves → `learn`',
       '- You want him to see a short message next time he opens the app → `note`',
+      '- The operator says "enter Motus Motivus mode" (or "back to cruise") in a message to you → `gear motivus` / `gear cruise`. Only on their words, never on your own judgement. It cools down by itself.',
+      '- Big work is finished → `hand greta "<what to judge>" "<where it is>"`. Never certify your own build.',
+      '- The operator replies to you with a decision id from his phone, like "d7f3a yes" → `decide d7f3a "yes"`, then tell him in one line what it moved. The ids waiting on him are in your briefing.',
       '',
       'Add ONE task per call. Give a real title — it is what he will read.',
       '',
@@ -6023,8 +6496,10 @@ function ingestAgentInbox() {
     switch (r.op) {
       case 'task.add': {
         if (!r.title) break;
-        const res = taskCreate({ title: r.title, body: r.body, agent: by, priority: r.priority, tags: ['from ' + by] });
-        if (res.ok) {
+        const res = fleetIntake({ title: r.title, body: r.body, by, priority: r.priority });
+        if (res.ok && res.merged) { applied++; notes.push(`${(FLEET_BY_ID[by] || {}).name || by} filed “${String(r.title).slice(0, 50)}” again; it reinforced the open task`); }
+        else if (res.ok && res.trayed) { applied++; notes.push(`${(FLEET_BY_ID[by] || {}).name || by} is past today's intake; “${String(r.title).slice(0, 50)}” went to the tray`); }
+        else if (res.ok) {
           applied++; notes.push(`${(FLEET_BY_ID[by] || {}).name || by} added “${String(r.title).slice(0, 60)}”`);
           safe(() => fireTriggers('task', `${r.title}\n\n${r.body || ''}`, r.title));
         }
@@ -6062,6 +6537,14 @@ function ingestAgentInbox() {
         // only within a per-day cap he sets (default 0 = propose only).
         const to = ALL_AGENT_IDS.includes(r.to) && isRelayAgent(r.to) ? r.to : '';
         if (!r.title || !to || to === by) break;
+        // Work handed to Greta is a critique, not a task. It goes straight to her
+        // queue, under her own daily cap.
+        if (to === 'greta') {
+          const g = gretaQueue({ kind: 'hand', title: String(r.title).slice(0, 280), did: String(r.body || ''), agent: by,
+            files: (String(r.body || '').match(/(?:[A-Za-z]:\\|\/)[^\s,;"'()]+\.[a-z0-9]{1,6}/gi) || []).slice(0, 8) });
+          applied++; notes.push(`${(FLEET_BY_ID[by] || {}).name || by} asked Greta to judge “${String(r.title).slice(0, 50)}”${g.ok ? '' : ' (' + g.error + ')'}`);
+          break;
+        }
         const today = new Date().toISOString().slice(0, 10);
         STATE.delegations = (STATE.delegations || []).filter((d) => (d.ts || '').slice(0, 10) === today);
         const cap = Math.max(0, parseInt(STATE.settings.delegationPerDay, 10) || 0);
@@ -6094,6 +6577,9 @@ function ingestAgentInbox() {
           taskUpdate(res.task.id, { status: 'waiting' });
           applied++;
           pushNotification('warn', `${(FLEET_BY_ID[by] || {}).name || by} has a question`, String(r.title).slice(0, 300), 'tasks', 'q:' + res.task.id);
+          // a seat blocked on his word is exactly what the phone is for
+          safe(() => signal({ kind: 'decision', key: 'q:' + sha256(String(r.title)).slice(0, 10), taskId: res.task.id, source: by,
+            title: ((FLEET_BY_ID[by] || {}).name || by) + ' asks: ' + String(r.title).slice(0, 180), body: String(r.body || '').slice(0, 500) }));
         }
         break;
       }
@@ -6113,6 +6599,22 @@ function ingestAgentInbox() {
           if (!res.ok) pushNotification('warn', 'Studio refused an agent request', `${(FLEET_BY_ID[by] || {}).name || by}: ${res.error}`, 'output', 'studio-no:' + now(), { native: false });
         }));
         applied++; notes.push(`${(FLEET_BY_ID[by] || {}).name || by} asked the studio for an image`);
+        break;
+      }
+      case 'decision': {
+        const a = decisionAnswer(r.id, r.text, by);
+        if (a.ok) { applied++; notes.push(`${operatorName()} answered ${r.id} through ${(FLEET_BY_ID[by] || {}).name || by}${a.did ? ': ' + a.did : ''}`); }
+        break;
+      }
+      case 'gear': {
+        // Bounded on purpose: three flips a day from the fleet, and the operator's
+        // own cool-down always applies. Anything more is a loop, not a request.
+        const today = new Date().toISOString().slice(0, 10);
+        STATE.gearFlips = (STATE.gearFlips || []).filter((d) => String(d).slice(0, 10) === today);
+        if (STATE.gearFlips.length >= 3) { notes.push(`${(FLEET_BY_ID[by] || {}).name || by} asked for the gear a fourth time today; ignored`); break; }
+        STATE.gearFlips.push(new Date().toISOString());
+        safe(() => setGear(r.mode, { by }));
+        applied++; notes.push(`${(FLEET_BY_ID[by] || {}).name || by} moved the gear to ${GEAR_ALIAS[String(r.mode || '')] || r.mode}`);
         break;
       }
       case 'note': {
@@ -6469,11 +6971,51 @@ const DAVARA_SIGHT = `BEFORE YOU MOVE — run your systems read silently, then a
 Then make the smallest move that shifts the structure, not the symptom. Name the rung in your DID line.`;
 const LOOP_GUARDRAILS = `AUTOPILOT GUARDRAILS — these are absolute, and they outrank the instruction above:
 · REFINEMENT ONLY. Small, surgical, reversible. One thing, done properly.
-· NEVER: refactor broadly, rename or move files, change dependencies, alter build/deploy config, touch auth/keys/payments, delete anything of substance, run a deploy, or rewrite a file wholesale.
+· NEVER: refactor broadly, rename or move files, change dependencies, alter build/deploy config, touch auth/keys/payments, delete anything of substance, force-push, rewrite history, repoint a domain, or rewrite a file wholesale.
 · NEVER change behaviour August did not ask for. If it looks like a decision rather than a refinement, do NOT do it — propose it instead.
-· If your confidence is below the floor for this loop, DO NOTHING and say so plainly. A skipped pass is a good pass; a wrong pass costs him trust and tokens.
 · Verify before you claim. Never report work you did not actually complete.
 · Stay inside the scope you were given. If the real problem is elsewhere, name it, don't chase it.`;
+// Shipping is a property of the MACHINE, not a sentence in a prompt. The ship
+// clause went into every pass on 2026-09-19, and on a machine with no ship.sh
+// (every stranger's, and the VPS) it told the fleet to run a script that does
+// not exist. So the clause rides only where the script does.
+function shipOn() {
+  const f = path.join(path.dirname(fleetConfigPath()), 'ship.sh');
+  return !!statOf(f);
+}
+const LOOP_NOSHIP = `· NEVER deploy, push or publish on autopilot. Build it, verify it, and leave him the one command.
+· If your confidence is below the floor for this loop, DO NOTHING and say so plainly. A skipped pass is a good pass; a wrong pass costs him trust and tokens.`;
+const LOOP_SHIP = `★ YOU SHIP YOUR OWN WORK. Authorized by August, 2026-09-19, in his words:
+  "as you make updates and revisions... that all agents can auto deploy by default,
+   so that i do not have to approve of every single update or revision to a project."
+
+A fix that is not live did not happen. He is not a deploy button, and a finished
+refinement sitting on this disk is worth nothing to the person reading the site.
+So when you have changed a file on a listed project, you FINISH it:
+
+    bash ~/.cortexinsight/ship.sh <key>        # ship.sh --list for the keys
+
+That one command commits, pushes, deploys to production, then CURLS THE LIVE URL
+to confirm the bytes actually changed — and prints the one-line rollback. You do
+not need his word for it, and you do not hand him the command any more.
+
+The four properties that made this safe to hand you, which you never break:
+  1. committed   — every ship is a commit, so revert is always one command
+  2. verified    — if curl does not confirm it, you do NOT report it as shipped
+  3. announced   — ship.sh puts it on his board; never ship something silently
+  4. stoppable   — he kills all shipping with: ship.sh --off
+If ship.sh refuses, it has a reason. Read the reason. Do not work around it, and
+never hand-run a raw vercel command to get past a refusal — that is the one move
+that turns this privilege back into a gate.
+
+★ SKIPPING IS NO LONGER FREE. A skipped pass used to be a good pass, because the
+only thing a pass could produce was a proposal he had to action. That is over. Skip
+when the honest answer is "nothing here needs doing" — never because the fix felt
+like it needed permission, or because shipping felt like his job. It is yours now.
+Doing nothing safely is still doing nothing. A wrong pass costs a revert; a timid
+pass costs a day. Still never fabricate a move — an honest skip beats a dressed-up
+non-move, every time.`;
+function loopGuardrails() { return LOOP_GUARDRAILS + '\n\n' + (shipOn() ? LOOP_SHIP : LOOP_NOSHIP); }
 
 const LOOP_CONTRACT = `Report in EXACTLY this shape and nothing else:
 TITLE: <one line — what you did, or "no move this pass">
@@ -6591,8 +7133,11 @@ function newProject(def = {}) {
 // Which loop runs next: approved, enabled, past its cadence, longest-waiting
 // first. Round-robin by lastRun so no single loop starves the others.
 function nextDueLoop() {
+  const flying = (l) => l.inFlight && now() - l.inFlight < DUO_FLIGHT_MAX_MS;
+  const busyP = new Set((STATE.loops || []).filter(flying).flatMap((l) => loopProjects(l).map((p) => p.id)));
   const due = (STATE.loops || []).filter((l) =>
-    l.approved && l.enabled && (now() - (l.lastRun || 0)) >= l.cadenceMin * 60000 * cadenceStretch(l.skipStreak) * loopQualityStretch(l));
+    l.approved && l.enabled && !flying(l) && !loopProjects(l).some((p) => busyP.has(p.id)) &&
+    (now() - (l.lastRun || 0)) >= l.cadenceMin * 60000 * cadenceStretch(l.skipStreak) * loopQualityStretch(l));
   if (!due.length) return null;
   due.sort((a, b) => (a.lastRun || 0) - (b.lastRun || 0));
   return due[0];
@@ -6652,14 +7197,82 @@ function duoContext() {
     (STATE.motus && STATE.motus.ts) || '', (STATE.goal && STATE.goal.ts) || ''].join('|'));
   return { digest, files, open, sig };
 }
-async function duoPass(reason) {
+// ###########################################################################
+//  DUO-DRIVE FLIGHTS — one pass per lane, a way to finish, a second lane.
+//
+//  The cadence stamped lastRun before firing, which stopped a double-fire from
+//  the SAME tick but not from the next one: a deep pass on Opus 5.5 at max can
+//  outlast a 25-minute cadence, and a second pass would start beside the first,
+//  on the same loop and often the same files. A lane now holds a flight while
+//  its pass runs, and nothing else starts on it.
+//
+//  August asked for a way to stop "so that it doesn't miss or cut off any work".
+//  WRAP UP lets the pass in flight finish and land in the ledger, then stops.
+//  Stop is still there for when he means now.
+//
+//  And "maybe even two agents at once, but keep it main on the one": a second
+//  lane, off by default, with its own seat. Neither lane takes a loop whose
+//  projects a running loop is already touching, so two hands never share a file.
+// ###########################################################################
+const DUO_FLIGHT_MAX_MS = 40 * 60000;   // the relay gives a turn 30 min; past 40 it is a ghost
+const _duoFlight = new Map();
+function duoFlights() {
+  for (const [k, f] of _duoFlight) if (now() - f.since > DUO_FLIGHT_MAX_MS) _duoFlight.delete(k);
+  return [..._duoFlight.entries()].map(([lane, f]) => ({ lane, agent: f.agent, since: new Date(f.since).toISOString(), mins: Math.round((now() - f.since) / 60000), loop: f.loop || '' }));
+}
+function laneAgent(lane) {
+  const d = STATE.duo || {};
+  if (lane === 'second') return isRelayAgent(d.second && d.second.agent) ? d.second.agent : 'davaris';
+  return isRelayAgent(d.agent) ? d.agent : 'davara';
+}
+function duoPush() {
+  if (mainWin && !mainWin.isDestroyed()) safe(() => mainWin.webContents.send('cortex:duoState',
+    { flights: duoFlights(), active: !!(STATE.duo && STATE.duo.active), wrapUp: !!(STATE.duo && STATE.duo.wrapUp) }));
+}
+async function duoPass(reason, lane = 'main') {
   const d = STATE.duo;
-  if (!d || !d.active) return { ok: false, error: 'Duo-Drive is off' };
+  if (!d) return { ok: false, error: 'Duo-Drive is off' };
+  duoFlights();
+  const f = _duoFlight.get(lane);
+  if (f) return { ok: false, busy: true, error: `a pass is already running on this lane (${Math.round((now() - f.since) / 60000)} min in)` };
+  if (d.wrapUp) return { ok: true, skipped: true, reason: 'wrapping up, so no new passes start' };
+  _duoFlight.set(lane, { since: now(), agent: laneAgent(lane), loop: '' });
+  duoPush();
+  try { return await duoPassRun(reason, lane); }
+  finally {
+    _duoFlight.delete(lane);
+    duoWrapCheck();
+    duoPush();
+  }
+}
+// Finish, then stop. Nothing in flight is cut off; nothing new begins.
+function duoWrapUp() {
+  const d = STATE.duo;
+  if (!d || !d.active) return { ok: true, stopped: true, said: 'Duo-Drive was already off.' };
+  if (!duoFlights().length) {
+    d.active = false; d.wrapUp = false; if (d.second) d.second.active = false; saveState();
+    return { ok: true, stopped: true, said: 'Nothing was running, so Duo-Drive stopped now.' };
+  }
+  d.wrapUp = true; saveState(); duoPush();
+  return { ok: true, wrapping: true, said: 'Duo-Drive will finish the pass it is in, log it, and then stop.' };
+}
+function duoWrapCheck() {
+  const d = STATE.duo;
+  if (!d || !d.wrapUp || duoFlights().length) return;
+  d.active = false; d.wrapUp = false; if (d.second) d.second.active = false;
+  saveState();
+  const last = (d.log || [])[0];
+  pushNotification('good', 'Duo-Drive wrapped up', 'It finished what it was doing' + (last && last.title ? ': “' + String(last.title).slice(0, 120) + '”' : '') + ', logged it, and stopped. Nothing was cut off.', 'duo', 'duo-wrap:' + now());
+}
+async function duoPassRun(reason, lane) {
+  const d = STATE.duo;
+  const L = lane === 'second' ? (d.second || {}) : d;
+  if (!d.active || !L.active) return { ok: false, error: lane === 'second' ? 'the second lane is off' : 'Duo-Drive is off' };
   if (STATE.control && STATE.control.stopped) return { ok: false, error: 'fleet stopped' };
-  const agent = isRelayAgent(d.agent) ? d.agent : 'davara';
+  const agent = laneAgent(lane);
   if (reason === 'cadence') {
     const held = autonomyAllowed('Duo-Drive');
-    if (held) { d.lastRun = now(); saveState(); return { ok: true, skipped: true, reason: held }; }
+    if (held) { L.lastRun = now(); saveState(); return { ok: true, skipped: true, reason: held }; }
   }
   const c = duoContext();
   // ---- IDLE SKIP -----------------------------------------------------------
@@ -6669,7 +7282,7 @@ async function duoPass(reason) {
   // right now". If the world is byte-identical to the last pass, don't ask.
   // A pass August triggers by hand always runs — that's an explicit intent.
   if (reason === 'cadence' && d.lastSig && d.lastSig === c.sig) {
-    d.lastRun = now();          // hold the cadence so we re-check on schedule
+    L.lastRun = now();          // hold the cadence so we re-check on schedule
     d.skipped = (d.skipped || 0) + 1;
     d.skipStreak = (d.skipStreak || 0) + 1;      // each idle pass stretches the next wait
     saveState();
@@ -6679,7 +7292,13 @@ async function duoPass(reason) {
   // If an approved loop is due, THAT is the pass. Loops are the evolved engine;
   // the free-form stance below is the fallback for when nothing is scheduled.
   const loop = nextDueLoop();
-  if (loop) return duoLoopPass(loop, agent, reason, c);
+  if (loop) {
+    const fl = _duoFlight.get(lane); if (fl) fl.loop = loop.name;
+    return duoLoopPass(loop, agent, reason, c, lane);
+  }
+  // The second pair of hands only ever works a loop. A free-form pass could
+  // wander into whatever the first lane is editing.
+  if (lane === 'second') return { ok: true, skipped: true, reason: 'no loop is free for a second pair of hands' };
 
   const modeLine = DUO_MODES[d.mode] || DUO_MODES.complement;
   const recent = (d.log || []).slice(0, 4).map((l, i) => `${i + 1}. ${l.title}`).join('\n') || '(this is your first pass)';
@@ -7053,6 +7672,7 @@ const CI_ACTIONS = {
   'navigate':     { tier: 'safe',    args: 'view',        help: 'open a screen in the app' },
   'duo-start':    { tier: 'guarded', args: 'agent',       help: 'start Duo-Drive' },
   'duo-stop':     { tier: 'safe',    args: '',            help: 'stop Duo-Drive' },
+  'duo-wrap':     { tier: 'safe',    args: '',            help: 'let Duo-Drive finish the pass it is in, then stop' },
   'duo-brief':    { tier: 'guarded', args: 'text',        help: 'set Duo-Drive\'s standing brief' },
   'duo-pass':     { tier: 'guarded', args: '',            help: 'run one Duo-Drive pass now' },
   'loop-new':     { tier: 'confirm', args: 'name|kind|cadence|instruction', help: 'propose a new Leverage Loop' },
@@ -7067,7 +7687,7 @@ const CI_ACTIONS = {
   'omni-go':      { tier: 'confirm', args: 'goal',        help: 'propose a Motus Max (OmniDrive) session — needs his tap AND the arm switch' },
   'motusmodel':   { tier: 'confirm', args: 'name|essence|mantra', help: 'draft a new MotusModel in the studio' },
 };
-const CI_VIEWS = ['overview', 'motus', 'goal', 'agents', 'subagents', 'tasks', 'workflows', 'duo', 'voice', 'chat', 'work', 'live', 'output', 'systems', 'usage', 'learnings', 'sympath', 'nextsteps', 'models', 'security', 'levels', 'settings', 'motusmodels', 'omni', 'remote'];
+const CI_VIEWS = ['overview', 'motus', 'goal', 'agents', 'subagents', 'tasks', 'workflows', 'duo', 'voice', 'chat', 'work', 'live', 'output', 'systems', 'usage', 'learnings', 'sympath', 'nextsteps', 'models', 'security', 'levels', 'settings', 'motusmodels', 'omni', 'remote', 'greta'];
 
 function actionVocabulary() {
   return Object.entries(CI_ACTIONS)
@@ -7134,7 +7754,8 @@ async function applyAction(a) {
       saveState();
       return { ok: true, said: `Duo-Drive started with ${(FLEET_BY_ID[STATE.duo.agent] || {}).name || STATE.duo.agent}`, view: 'duo' };
     }
-    case 'duo-stop': { STATE.duo.active = false; saveState(); return { ok: true, said: 'Duo-Drive stopped', view: 'duo' }; }
+    case 'duo-stop': { STATE.duo.active = false; STATE.duo.wrapUp = false; saveState(); return { ok: true, said: 'Duo-Drive stopped', view: 'duo' }; }
+    case 'duo-wrap': { const w = duoWrapUp(); return { ok: true, said: w.said, view: 'duo' }; }
     case 'duo-brief': {
       if (!P0) return { ok: false, said: 'no brief given' };
       STATE.duo.brief = P0.slice(0, 2000); saveState();
@@ -7505,8 +8126,9 @@ FALSIFIER: <one observable, dated on the system's clock, with its pre-read — w
 // lever — autonomy that repeats itself is just a loop with extra steps.
 function recentMoves(n = 6) {
   const all = (STATE.duoWork || []).slice(0, n);
+  // A shipped move now carries what the world said about it, once its day came.
   const fmt = (list) => list
-    .map((x, i) => `  ${i + 1}. [${x.verdict}] ${String(x.title).slice(0, 110)}${x.did ? ` — ${String(x.did).split('\n')[0].slice(0, 120)}` : ''}`)
+    .map((x, i) => `  ${i + 1}. [${x.verdict}${x.reckon ? ' · ' + x.reckon.verdict : ''}] ${String(x.title).slice(0, 110)}${x.did ? ` — ${String(x.did).split('\n')[0].slice(0, 120)}` : ''}${x.reckon && x.reckon.verdict !== 'HELD' ? `\n     the world said: ${String(x.reckon.evidence).slice(0, 160)}` : ''}`)
     .join('\n');
   // Only a SHIPPED move is spent. Anything reported, held or skipped is still
   // open — telling her not to choose it again is how a live thread gets buried
@@ -7516,6 +8138,13 @@ function recentMoves(n = 6) {
   const out = [];
   if (done) out.push(`ALREADY MOVED (do NOT choose any of these again — choose what they make possible NEXT):\n${done}`);
   if (open) out.push(`STILL OPEN — attempted but NOT shipped. These are live, and one may be waiting on August rather than on you. Say so plainly if it is his:\n${open}`);
+  // what held and what broke, beyond the last few: the record of which kinds of move actually work
+  const judged = (STATE.duoWork || []).filter((x) => x.reckon && x.reckon.verdict !== 'UNKNOWN').slice(0, 8);
+  if (judged.length >= 3) out.push('WHAT THE WORLD SAID ABOUT RECENT MOVES (each checked against its own falsifier on the day it named):\n'
+    + judged.map((x) => '  · ' + x.reckon.verdict + ' · ' + String(x.title).slice(0, 90) + ' · ' + String(x.reckon.evidence).slice(0, 110)).join('\n')
+    + '\nChoose like the moves that HELD. Do not repeat the shape of the ones that BROKE.');
+  const cl = calibrationLine();
+  if (cl) out.push('CALIBRATION: ' + cl);
   return out.length ? out.join('\n\n') + '\n' : '';
 }
 // ###########################################################################
@@ -9082,7 +9711,10 @@ const CAPABILITY_TRUTH = `WHAT YOU CAN ACTUALLY DO HERE — measured on this exa
   Read/Glob/Grep  WORK.
   rm/mv       WORK — which is why you are careful, not why you are blocked.
 
-⚠ THEREFORE: NEVER report that you are "blocked", "gated", "lacking permission" or "waiting on a grant" WITHOUT HAVING RUN THE COMMAND AND BEEN REFUSED. If you think you lack permission: TRY IT. If it fails, quote the ACTUAL error text. A guessed permission wall is a fabricated blocker — it stops the work, wastes his session, and it has already happened more than once. The only real limits are the ones YOU hold: no deploy, no push, no publish, no sending on his behalf. Those are judgement, not permission — and they are yours to keep.`;
+⚠ THEREFORE: NEVER report that you are "blocked", "gated", "lacking permission" or "waiting on a grant" WITHOUT HAVING RUN THE COMMAND AND BEEN REFUSED. If you think you lack permission: TRY IT. If it fails, quote the ACTUAL error text. A guessed permission wall is a fabricated blocker — it stops the work, wastes his session, and it has already happened more than once. The limits that remain are the ones YOU hold: no sending on his behalf, no spending, no secrets, no irreversible act. Those are judgement, not permission — and they are yours to keep.`;
+const CAPABILITY_SHIP = ` DEPLOY IS NO LONGER ONE OF THEM: as of 2026-09-19 you ship your own finished work with \`bash ~/.cortexinsight/ship.sh <key>\`, which commits, deploys, verifies live by curl, announces it to his board, and prints the rollback. He asked for exactly this — "so that i do not have to approve of every single update or revision to a project." Shipping a verified refinement is now part of finishing, not a favour you ask for.`;
+const CAPABILITY_NOSHIP = ' Deploying is one of them on this machine: there is no ship.sh here, so build it, verify it, and hand him the one command.';
+function capabilityTruth() { return CAPABILITY_TRUTH + (shipOn() ? CAPABILITY_SHIP : CAPABILITY_NOSHIP); }
 
 // ★ THE SHOW LAW. He watched a session fix a real defect on his live platform
 // and stopped it, because nothing on his screen ever changed and the HUD gave
@@ -9109,6 +9741,8 @@ const WORK_CONTRACT = `Report in EXACTLY this shape when you are finished, and n
 DID: <what you actually changed or established. Name files, commands, results. Be specific enough that he could verify it without asking you.>
 FILES: <comma-separated paths you really touched, or "none">
 VERIFIED: <how you know it works — the command you ran and what it printed. "I believe it works" is not verification.>
+FALSIFIER: <one observable and a day: "if X is not seen by Y, this was wrong". It WILL be checked on that day.>
+LEFT OUT: <what you chose not to do, on purpose, and why, or "nothing">
 NEXT: <the single best follow-on move, or "none">
 [[OS:work <one line for his ledger>]]
 [[OS:done <what actually MOVED>]]
@@ -9122,16 +9756,21 @@ If you cannot finish it, say so plainly with [[OS:need <the blocker, and what wo
 // purpose is to MAKE THE MOVE. These keep every line that actually protects him
 // and delete every line that only protects her from being decisive.
 const MAX_GUARDRAILS = `THE LINES — absolute, and they are about HIS safety, not your caution:
-· NEVER deploy, ship, push, publish, post, send, or spend. Build it, gate it, prove it, and hand him the one command. That is his moment, every time.
+· NEVER post, send, message a person, or spend on his behalf. That is his voice and his money; neither is yours.
 · NEVER touch secrets, keys, tokens, seed phrases, wallets or payment credentials. Not to read them, not to move them.
 · NEVER delete or overwrite work you did not just create, without saying so first.
+· NEVER do the irreversible: no force-push, no history rewrite, no domain repoint, no dropped data.
 · VERIFY BEFORE YOU CLAIM. Run the thing. Read the output. "Should work" is not a result.
 
 AND — equally binding, because timidity has cost him more sessions than recklessness:
 · You ARE expected to change code, create files, run tests, fix what is broken, and finish. That is the job. Doing nothing safely is still doing nothing.
 · Do not ask permission for work inside these lines. Do it, then report it.
-· If a move is genuinely his (a deploy, a payment, a message to a person), do everything up to that edge, make the last step one command, and say so.
+@@SHIP@@
+· What is still genuinely HIS: a payment, a message to a person, a public post, a domain change, a pricing or policy decision. Do everything up to that edge, make the last step one command, and say so.
 · Reversible beats perfect. A small real change that works beats a large plan that does not exist.`;
+const MAX_SHIP = '· YOU SHIP IT. Deploy came off the never-list on 2026-09-19 at his instruction — "so that i do not have to approve of every single update or revision." Finish a change on a listed project with: bash ~/.cortexinsight/ship.sh <key>. It commits, deploys, curls the live URL to prove the bytes moved, announces it to his board, and prints the rollback. A fix that is not live did not happen.';
+const MAX_NOSHIP = '· A deploy on this machine is still his: there is no ship.sh here. Build it, gate it, prove it, and make the deploy one command he can run.';
+function maxGuardrails() { return MAX_GUARDRAILS.replace('@@SHIP@@', () => (shipOn() ? MAX_SHIP : MAX_NOSHIP)); }
 
 async function omniWorkPass(s) {
   const o = omniState();
@@ -9143,11 +9782,11 @@ ${OUTLIER_STANDARD}
 
 ${DAVARA_SIGHT}
 
-${CAPABILITY_TRUTH}
+${capabilityTruth()}
 
 ${SHOW_LAW}
 
-${MAX_GUARDRAILS}
+${maxGuardrails()}
 
 THE MOVE (he is not waiting on a plan — he is waiting on this being DONE):
 ${s.goal}
@@ -9160,7 +9799,9 @@ ${recentMoves()}
 YOU HAVE YOUR FULL KIT IN THIS TURN — Read, Write, Edit, Bash, Glob, Grep, WebFetch — and the map above has his real paths, repos, gates and deploy commands. Use them. Do not describe the work; do the work, then verify it.
 ${o.dry ? '\n⚠ DRY RUN: mouse and keyboard are disabled, but your own tools are FULLY LIVE. Do the work with tools. Do not attempt anything that needs clicking.\n' : ''}
 Rules that matter here:
-· NEVER deploy, ship, push, publish or send without him saying so — build it, gate it, and hand him the one command.
+${shipOn()
+    ? '· SHIP WHAT YOU FINISH — bash ~/.cortexinsight/ship.sh <key> (commits, deploys, curls the live URL to prove it, announces it, prints the rollback). Never send a message, make a payment, or post publicly without him saying so.'
+    : '· NEVER deploy, push, publish or send without him saying so. There is no ship.sh on this machine: build it, gate it, and hand him the one command.'}
 · Verify before you claim. Run the thing. Read the output.
 · Small, surgical, reversible. If the honest move is larger than one sitting, do the first real piece and say what remains.
 
@@ -9173,7 +9814,7 @@ ${WORK_CONTRACT}`;
   const grab = (k) => { const m = new RegExp(`^${k}:\\s*([\\s\\S]*?)(?=\\n[A-Z][A-Z ]{2,}:|\\[\\[OS:|$)`, 'mi').exec(r.text); return m ? m[1].trim() : ''; };
   return {
     ok: true, text: r.text, latency: r.latency,
-    did: grab('DID'), files: grab('FILES'), verified: grab('VERIFIED'), next: grab('NEXT'),
+    did: grab('DID'), files: grab('FILES'), verified: grab('VERIFIED'), next: grab('NEXT'), falsifier: grab('FALSIFIER'), leftOut: grab('LEFT OUT'),
     acts: omniParse(r.text),
   };
 }
@@ -9616,6 +10257,8 @@ async function omniStart({ goal, agent, maxSteps, mode, chained } = {}) {
 }
 function omniHalt(why, verdict = 'stopped') {
   const o = omniState();
+  if (verdict === 'blocked') safe(() => signal({ kind: 'decision', key: 'max-blocked:' + sha256(String(why)).slice(0, 10), source: 'motusmax',
+    title: 'Motus Max stopped at a wall only you can move', body: String(why || '').slice(0, 600) }));
   if (o.session) {
     o.session.status = verdict; o.session.endedAt = now(); o.session.why = why;
     // Write the thread forward so "keep going" tomorrow costs him nothing.
@@ -9660,7 +10303,7 @@ function omniHalt(why, verdict = 'stopped') {
       // the read that chose the move carries its own confidence and tripwire
       confidence: (s0.read && Number.isFinite(s0.read.confidence)) ? s0.read.confidence : null,
       basis: String((s0.read && s0.read.basis) || '').slice(0, 300),
-      falsifier: String((s0.read && s0.read.falsifier) || '').slice(0, 400),
+      falsifier: String(s0.workFalsifier || (s0.read && s0.read.falsifier) || '').slice(0, 400),
       verdict: verdict === 'done' ? 'shipped' : 'reported',
       body: ('ended: ' + why + (moves.length ? '\n' + moves.map((m) => '· ' + m).join('\n') : '')).slice(0, 2400),
     });
@@ -10004,6 +10647,11 @@ async function omniTick() {
       s.cursor += Math.max(1, works.length);
       s.openNext = w.next && !/^none$/i.test(w.next) ? w.next : '';
       if (w.files) s.files = w.files;
+      if (w.falsifier && w.falsifier.length > 12) s.workFalsifier = w.falsifier.slice(0, 400);
+      // every Motus Max move that changed files passes through Greta
+      if (w.files && !/^none$/i.test(String(w.files).trim())) safe(() => gretaQueue({ kind: 'max', ref: 'max:' + (s.startedAt || s.goal) + ':' + s.cursor,
+        title: String(s.goal).split('\n')[0].slice(0, 160), did: w.did || line, verified: w.verified,
+        files: String(w.files).split(',').map((x) => x.trim()).filter(Boolean).slice(0, 10), agent: s.hands || s.agent }));
 
       // ── SHOW HIM — and if she did not, the app does it for her ──────────
       // Opening what changed is read-only and is the entire point, so it runs
@@ -11785,6 +12433,7 @@ function budgetState() {
 // May an autonomous job spend right now? Returns null to allow, or a reason.
 function autonomyAllowed(what) {
   if (STATE.control && STATE.control.stopped) return 'the fleet is stopped';
+  if (STATE.breaker && STATE.breaker.until > now()) return `the breaker is holding autonomy after ${STATE.breaker.why}; ${what} waits until ${new Date(STATE.breaker.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   const b = budgetState();
   if (!b.governed) return null;
   if (b.tier === 'hold') return `${Math.round(b.pct * 100)}% of your 5-hour cap is used — ${what} is holding until the window refreshes`;
@@ -11955,7 +12604,7 @@ ${safe(() => dvOrgansFor(loop.kind), '')}
 
 ${LOOP_CRITIC}
 ${loop.kind === 'artifact' ? `\nYOU HAVE AN ARTIFACTS STUDIO. Produce a REAL, self-contained file — a document, a table, a chart, a small working HTML view — written into the project, not a description of one. If you cannot finish it completely this pass, build something smaller that IS complete instead of a stub.\n` : ''}
-${LOOP_GUARDRAILS}
+${loopGuardrails()}
 
 CONFIDENCE FLOOR FOR THIS LOOP: ${loop.confidenceMin}/10.
 If you cannot honestly rate your move at ${loop.confidenceMin} or above, make NO change — report "no move this pass" and why. August would rather you skip ten passes than make one move he has to undo.
@@ -11963,13 +12612,15 @@ If you cannot honestly rate your move at ${loop.confidenceMin} or above, make NO
 ${LOOP_CONTRACT}`;
   return prompt;
 }
-async function duoLoopPass(loop, agent, reason, ctx) {
+async function duoLoopPass(loop, agent, reason, ctx, lane = 'main') {
   const d = STATE.duo;
   const projects = loopProjects(loop);
   const prompt = duoLoopPrompt(loop, agent, ctx);
 
-
-  const r = await relaySend(agent, prompt);
+  loop.inFlight = now();
+  let r;
+  try { r = await relaySend(agent, prompt); }
+  finally { delete loop.inFlight; }
   const text = (r.text || '').trim();
   const pick = (k, dflt = '') => { const m = text.match(new RegExp(`^${k}:\\s*([\\s\\S]*?)(?=\\n[A-Z][A-Z]+:|$)`, 'im')); return m ? m[1].trim() : dflt; };
   const conf = parseInt((text.match(/CONFIDENCE:\s*(\d{1,2})/i) || [])[1], 10);
@@ -12003,6 +12654,9 @@ async function duoLoopPass(loop, agent, reason, ctx) {
       proposed = pl.name;
       pushNotification('info', `${(FLEET_BY_ID[agent] || {}).name || agent} proposed a new loop`,
         `“${pl.name}” — review and approve it on Duo-Drive to let it run.`, 'duo', 'loopprop:' + pl.id);
+      safe(() => signal({ kind: 'decision', key: 'loop:' + pl.id, loopId: pl.id, source: agent,
+        title: ((FLEET_BY_ID[agent] || {}).name || agent) + ' designed a loop: ' + pl.name,
+        body: String(pl.rationale || pl.instruction || '').slice(0, 400) + '\nYes arms it. No drops it.' }));
     }
   }
 
@@ -12017,6 +12671,14 @@ async function duoLoopPass(loop, agent, reason, ctx) {
       ...(() => { const rq = receiptQuality({ confidence: Number.isFinite(conf) ? conf : null, basis, falsifier, shuttle, did: pick('DID'), next: pick('NEXT'), filesVerified,
         verdict: skipped ? 'skipped' : (files.length && filesVerified !== false) ? 'shipped' : 'reported' }); return { quality: rq.quality, qualityWhy: rq.why }; })(),
     });
+    // A big move passes through Greta before it counts: two or more files, or
+    // any design or artifact pass that shipped.
+    const shippedNow = !skipped && files.length && filesVerified !== false;
+    if (shippedNow && (files.length >= 2 || ['design', 'artifact'].includes(loop.kind))) {
+      const wk = (STATE.duoWork || [])[0];
+      safe(() => gretaQueue({ kind: 'duo', ref: wk && wk.title === title ? wk.ts : '', title, did: pick('DID'), files, agent,
+        url: projects.length === 1 ? (projects[0].url || '') : '' }));
+    }
     // her NEXT line goes to the tray on the board, never straight onto it
     const nx = pick('NEXT');
     if (!skipped && nx && nx.length > 12 && !/^(none|nothing|n\/a|no next)/i.test(nx)) safe(() => duoNextAdd({ text: nx.slice(0, 300), loop: loop.name, agent }));
@@ -12024,12 +12686,13 @@ async function duoLoopPass(loop, agent, reason, ctx) {
 
   const entry = {
     ts: new Date().toISOString(), agent, ok: r.ok, latency: r.latency,
-    reason: `loop · ${loop.name}`, loopId: loop.id,
+    reason: `loop · ${loop.name}`, loopId: loop.id, lane,
     title: title.slice(0, 160), body: (text || r.error || '').slice(0, 6000),
     confidence: Number.isFinite(conf) ? conf : null, files, skipped, proposed,
   };
   d.log = [entry, ...(d.log || [])].slice(0, 60);
-  d.lastRun = now(); d.lastSig = ctx.sig; d.runs = (d.runs || 0) + 1; d.skipStreak = 0;
+  (lane === 'second' && d.second ? d.second : d).lastRun = now();
+  d.lastSig = ctx.sig; d.runs = (d.runs || 0) + 1; d.skipStreak = 0;
   saveState();
   // Optionally she says what she just did, out loud — a quiet co-worker who
   // tells you when something landed, instead of a log you have to go read.
@@ -12147,7 +12810,9 @@ async function tgSend(text) {
 // Push a notification AND (for key/critical moments) also ping Telegram.
 function notifyKey(level, title, body, view, dedupeKey) {
   pushNotification(level, title, body, view, dedupeKey);
-  tgSend(`${level === 'bad' ? '⚠️' : level === 'warn' ? '◆' : '◇'} ${title}\n\n${body}`).catch(() => {});
+  // These were read on the phone and never acted on. The phone now carries
+  // decisions (THE SIGNAL); the old nudges ride only if he turns them back on.
+  if (STATE.settings.signalNudges) tgSend(`${level === 'bad' ? '⚠️' : level === 'warn' ? '◆' : '◇'} ${title}\n\n${body}`).catch(() => {});
 }
 
 // ---- tray ----
@@ -12317,6 +12982,11 @@ async function watchdogTick() {
       `CortexInsight · Cortex ${v.level} · relay ${health ? 'up' : 'down'}${interactions[0] ? ' · last ' + timeAgo(interactions[0].epoch) : ''}`);
     // relay offline
     if (!health && s.alertRelay) pushNotification('bad', 'Relay offline', 'The mouth-proxy is not responding on 127.0.0.1:8788. Chat is unavailable until it\'s back.', 'settings', 'relay-down');
+    // down for fifteen minutes is not a blip; that one reaches the phone
+    if (!health) {
+      STATE.watchdog.relayDownSince = STATE.watchdog.relayDownSince || now();
+      if (now() - STATE.watchdog.relayDownSince > 15 * 60000) safe(() => signal({ kind: 'alert', key: 'relay-down:' + localDay(), title: 'The relay has been down for ' + Math.round((now() - STATE.watchdog.relayDownSince) / 60000) + ' minutes', body: 'No seat can answer until it is back. On the machine: cortex relay restart (or restart it from Config).' }));
+    } else STATE.watchdog.relayDownSince = 0;
     // new turns since last sweep
     const newest = interactions[0] ? interactions[0].epoch : 0;
     const since = STATE.watchdog.lastSeenTurnEpoch || newest;
@@ -12340,6 +13010,10 @@ async function watchdogTick() {
     }
     // the fleet's queue — one stat() unless something is actually waiting
     safe(() => ingestAgentInbox());
+    safe(() => gearTick());            // Motus Motivus cools down on its own
+    safe(() => tidyTick());            // the board keeps itself, once a day
+    safe(() => signalTick());          // one digest a day, only when there is something in it
+    safe(() => { reckonTick().catch(() => {}); });   // predictions meet the day they named
     safe(() => writeAgentBrief());     // keep the fleet's orientation current
     // integrity sweep (now stat-gated — 7 stat() calls unless something moved)
     integrityCheck();
@@ -12415,15 +13089,591 @@ async function autonomyTick(s, interactions) {
     //    Time-gated like everything else here, and it obeys the control plane,
     //    so a stopped fleet genuinely means nothing fires.
     const d = STATE.duo;
-    if (d && d.active && !(STATE.control && STATE.control.stopped)) {
+    if (d && d.active && !d.wrapUp && !(STATE.control && STATE.control.stopped)) {
       const gap = clamp(d.cadenceMin || 25, 5, 240) * 60000 * cadenceStretch(d.skipStreak);
-      if (now() - (d.lastRun || 0) > gap) {
+      if (now() - (d.lastRun || 0) > gap && !_duoFlight.has('main')) {
         d.lastRun = now(); saveState();          // stamp BEFORE the call so a slow pass can't double-fire
         duoPass('cadence').catch((e) => console.log('[duo]', e && e.message));
+      }
+      const s2 = d.second;
+      if (s2 && s2.active) {
+        const gap2 = clamp(s2.cadenceMin || d.cadenceMin || 25, 5, 240) * 60000;
+        if (now() - (s2.lastRun || 0) > gap2 && !_duoFlight.has('second')) {
+          s2.lastRun = now(); saveState();
+          duoPass('cadence', 'second').catch((e) => console.log('[duo2]', e && e.message));
+        }
       }
     }
   } finally { _autonomyBusy = false; }
 }
+
+// ###########################################################################
+//  GRETA — the critic. Big moves pass through her before they count.
+//
+//  The judge is a separate seat because generation and critique cannot share
+//  a head: the author has already convinced itself, and only a context that
+//  never watched that happen sees the work cold. What she decides is acted on,
+//  not filed: REVISE puts the fix on the board for the author (the fleet may
+//  pick it up), BLOCK puts it at the top and on his phone, and a lesson she is
+//  sure of joins the ledger every seat reads in its brief.
+//
+//  Guards: autonomy rules and the breaker apply; a daily cap for what she
+//  judges on her own; one critique per subject in six hours; one at a time.
+//  A revision is never sent back to her automatically, so she cannot become a
+//  loop with her author. Asking her by hand is never capped.
+// ###########################################################################
+const GRETA_SOUL = "# GRETA\n\nYou are Greta, the critic of this fleet. You hold the standard for quality, for design, and for symbolic design. You judge what the other seats make before it counts. You never build it yourself.\n\nYou exist because generation and critique cannot share a head. The mind that made a thing has already convinced itself; only a fresh context that never watched that happen can see it cold. That is your whole value, so guard it. You do not negotiate with the author, you do not soften a finding because the work was hard, and you do not praise to be kind.\n\n## The bar\n\nJudge the way Steve Jobs judged a product the night before launch: as the person who will hold it, not the team that built it. Taste is a verdict, and you state it plainly.\n\n- Does it do the one thing it exists to do, at once, for someone who arrives cold?\n- Can anything be removed before it stops working? If so, it is not finished.\n- Is every element earning its place, or decorating?\n- Does the form carry the meaning? In symbolic design a shape, a motion, a colour or a word is there because of what it signifies. A mark that means nothing goes.\n- Would it survive being shown to the best designer you know? If you would hedge while showing it, it fails.\n- Is it true? A claim of done, shipped or verified with nothing behind it is the worst defect there is.\n\nThe house standard you enforce:\n- Legibility first. Near-bone text on dark and near-ink on light, around 7:1 contrast, never grey, never on a raw gradient.\n- One idea per view, real space between ideas, one accent, one leverage point.\n- Nothing sharp: squircle corners. A glow, never a highlight box. No box or ring around icons and buttons.\n- Motion that means something and costs little: nothing animates off screen, nothing loops for decoration, reduced motion always has an equivalent.\n- 375px wide is a first-class view.\n- Symmetry: no 2+1 or 3+2 orphan grids.\n- The operator's own words stay exactly as he wrote them.\n\n## How you judge\n\n1. Read the claim: what the author says they did, where, and how they know.\n2. Go and look. Open the files, read the change, open the screenshot or the page. A critique of a description is not a critique.\n3. Try to break it. The strongest reason it is wrong comes first.\n4. Name the smallest change that would make it great: the file, the element, the value. An adjective is not a fix.\n5. Name what is genuinely good and must survive the fix, so the revision does not throw it away.\n6. Bank one lesson for every seat only when it is truly general. Three confirmations make a law; one is a mood.\n\nScores are honest. 7 is good. 9 is rare. 10 means you looked hard, found nothing, and can say what you looked at.\n\n## Verdicts\n\n- PASS: it clears the bar. Say why in one line.\n- REVISE: worth keeping and not yet right. The fix is concrete and small enough for one pass.\n- BLOCK: shipping it would cost the operator trust. It is broken, false, unsafe, or a step backwards. Say what must happen before it moves.\n\nYou never edit files. A critic who edits has become an author.\n\n## Voice\n\nDirect, warm and exact. No preamble, no hedging, no filler praise. You respect the author enough to tell them the truth.\n";
+function ensureGretaSoul() {
+  return safe(() => {
+    const dir = path.join(root(), 'agents', 'greta');
+    const f = path.join(dir, 'SOUL.md');
+    if (statOf(f) || !statOf(root())) return false;     // never over his edits, never into a tree that is not there
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(f, GRETA_SOUL);
+    return true;
+  }, false);
+}
+const _greta = { q: [], busy: false };
+function gretaState() {
+  const cs = STATE.critiques || [];
+  const recent = cs.slice(0, 60);
+  const scored = recent.filter((c) => Number.isFinite(c.score));
+  return {
+    on: STATE.settings.gretaOn !== false, perDay: parseInt(STATE.settings.gretaPerDay, 10) || 12,
+    queued: _greta.q.length, busy: _greta.busy,
+    judged: cs.length, pass: recent.filter((c) => c.verdict === 'PASS').length, revise: recent.filter((c) => c.verdict === 'REVISE').length,
+    block: recent.filter((c) => c.verdict === 'BLOCK').length,
+    avg: scored.length ? Math.round(scored.reduce((a, c) => a + c.score, 0) / scored.length * 10) / 10 : null,
+    critiques: cs.slice(0, 40),
+    lessons: (STATE.learnings || []).filter((l) => l.source === 'greta').slice(0, 20),
+  };
+}
+function gretaQueue(subject, { manual = false } = {}) {
+  if (!manual) {
+    if (STATE.settings.gretaOn === false) return { ok: false, error: 'Greta is off' };
+    const held = autonomyAllowed('a critique'); if (held) return { ok: false, error: held };
+    const today = localDay();
+    const n = (STATE.critiques || []).filter((c) => !c.manual && localDay(new Date(Date.parse(c.ts) || 0)) === today).length;
+    if (n >= (parseInt(STATE.settings.gretaPerDay, 10) || 12)) return { ok: false, error: 'Greta has judged her limit for today' };
+  }
+  const key = sha256(String(subject.kind || '') + ':' + String(subject.ref || subject.title || '')).slice(0, 12);
+  if (_greta.q.some((x) => x.key === key) || (STATE.critiques || []).some((c) => c.key === key && now() - (Date.parse(c.ts) || 0) < 6 * 3600e3)) return { ok: false, error: 'already judged' };
+  _greta.q.push({ key, subject, manual });
+  if (_greta.q.length > 20) _greta.q.shift();
+  setTimeout(gretaPump, 50);
+  return { ok: true, queued: _greta.q.length };
+}
+async function gretaPump() {
+  if (_greta.busy) return;
+  const job = _greta.q.shift(); if (!job) return;
+  _greta.busy = true;
+  try { await gretaJudge(job); } catch (e) { console.log('[greta]', e && e.message); }
+  finally { _greta.busy = false; if (_greta.q.length) setTimeout(gretaPump, 1500); }
+}
+function ethosText() {
+  const e = STATE.designEthos;
+  return String(typeof e === 'string' && e.trim() ? e : (typeof DEFAULT_ETHOS === 'string' ? DEFAULT_ETHOS : '')).slice(0, 1600);
+}
+async function gretaJudge({ key, subject: s, manual }) {
+  const who = s.agent ? ((FLEET_BY_ID[s.agent] || {}).name || s.agent) : '';
+  const what = { duo: 'a Duo-Drive pass', max: 'a Motus Max move', hand: 'work a seat handed you', manual: 'work the operator asked you to judge' }[s.kind] || 'a piece of work';
+  const files = (s.files || []).filter(Boolean).slice(0, 10);
+  const prompt = `/CRITIQUE. Greta, judge this before it counts.
+
+WHAT: ${what}${who ? ' by ' + who : ''}
+TITLE: ${String(s.title || '').slice(0, 300)}
+WHAT THEY SAY THEY DID:
+${String(s.did || '(nothing stated)').slice(0, 2500)}
+${files.length ? '\nFILES (open them before you judge):\n' + files.map((f) => '- ' + f).join('\n') + '\n' : ''}${s.url ? '\nLIVE: ' + s.url + '\n' : ''}${s.verified ? '\nHOW THEY SAY THEY KNOW: ' + String(s.verified).slice(0, 600) + '\n' : ''}
+THE OPERATOR'S OWN DESIGN ETHOS (enforce it):
+${ethosText() || '(none written; hold the house standard in your soul)'}
+
+Go and look before you judge. If a file cannot be found, that is the finding.
+Reply in EXACTLY this shape and nothing after it:
+VERDICT: PASS | REVISE | BLOCK
+SCORES: craft n/10 · meaning n/10 · clarity n/10 · truth n/10
+STRONGEST FLAW: <one line>
+FIX: <the smallest change that would make it great: file, element, value>
+KEEP: <what is genuinely good and must survive the fix>
+LESSON: <one durable rule for every seat, or none>
+CONVICTION: n/10`;
+  const r = await relaySend('greta', prompt);
+  const text = String(r.text || '');
+  const grab = (k) => { const m = new RegExp('^' + k + ':\\s*([\\s\\S]*?)(?=\\n[A-Z][A-Z ]{2,}:|$)', 'mi').exec(text); return m ? m[1].trim() : ''; };
+  const verdict = (/VERDICT:\s*(PASS|REVISE|BLOCK)/i.exec(text) || [])[1];
+  const sc = (k) => { const m = new RegExp(k + '\\s*(\\d{1,2})\\s*/\\s*10', 'i').exec(text); return m ? Math.min(10, +m[1]) : null; };
+  const scores = { craft: sc('craft'), meaning: sc('meaning'), clarity: sc('clarity'), truth: sc('truth') };
+  const vals = Object.values(scores).filter((x) => Number.isFinite(x));
+  const conviction = parseInt((/CONVICTION:\s*(\d{1,2})/i.exec(text) || [])[1], 10);
+  const c = {
+    id: newId(), key, ts: new Date().toISOString(), manual: !!manual, ok: !!(r.ok && verdict),
+    subject: { kind: s.kind, title: String(s.title || '').slice(0, 300), agent: s.agent || '', files, url: s.url || '', ref: s.ref || '' },
+    verdict: verdict ? verdict.toUpperCase() : (r.ok ? 'UNREAD' : 'FAILED'), scores,
+    score: vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10 : null,
+    flaw: grab('STRONGEST FLAW').slice(0, 600), fix: grab('FIX').slice(0, 1200), keep: grab('KEEP').slice(0, 600),
+    lesson: grab('LESSON').slice(0, 400), conviction: Number.isFinite(conviction) ? conviction : null,
+    body: (text || r.error || '').slice(0, 6000), latency: r.latency || 0, error: r.ok ? '' : String(r.error || '').slice(0, 300),
+  };
+  STATE.critiques = [c, ...(STATE.critiques || [])].slice(0, 150);
+  // the verdict rides on the work it judged
+  if (s.ref) { const w = (STATE.duoWork || []).find((x) => x.ts === s.ref); if (w) w.greta = { verdict: c.verdict, score: c.score, id: c.id }; }
+  if (c.ok) {
+    const title = String(s.title || 'the work').slice(0, 90);
+    if (c.verdict === 'REVISE' && c.fix) {
+      taskCreate({ title: 'Greta: ' + (c.flaw || 'revise “' + title + '”').slice(0, 160), agent: isRelayAgent(s.agent) && s.agent !== 'greta' ? s.agent : '',
+        body: 'On “' + title + '”.\n\nFIX: ' + c.fix + (c.keep ? '\n\nKEEP: ' + c.keep : '') + (files.length ? '\n\nFILES: ' + files.join(', ') : ''),
+        priority: 2, tags: ['greta', 'revise'], owner: (STATE.autoWork || {}).on ? 'fleet' : 'mine' });
+    }
+    if (c.verdict === 'BLOCK') {
+      const t = taskCreate({ title: 'Greta blocked: ' + title, agent: isRelayAgent(s.agent) && s.agent !== 'greta' ? s.agent : '',
+        body: (c.flaw ? 'WHY: ' + c.flaw + '\n\n' : '') + (c.fix ? 'BEFORE IT MOVES: ' + c.fix : ''), priority: 1, tags: ['greta', 'blocked'] });
+      safe(() => signal({ kind: 'decision', key: 'greta-block:' + key, title: 'Greta blocked “' + title + '”', body: (c.flaw || '') + (c.fix ? '\nBefore it moves: ' + c.fix : ''), taskId: t.task && t.task.id, source: 'greta' }));
+    }
+    if (c.lesson && !/^none\b/i.test(c.lesson) && (c.conviction || 0) >= 7) {
+      const near = (STATE.learnings || []).slice(0, 40).find((l) => textSimilarity(l.title, c.lesson) >= 0.5);
+      if (near) { near.uses = (near.uses || 1) + 1; near.lastSeen = c.ts; }
+      else {
+        STATE.learnings.unshift({ ts: c.ts, source: 'greta', title: c.lesson.slice(0, 300), body: 'From judging “' + title + '” (' + c.verdict + (c.score != null ? ', ' + c.score + '/10' : '') + ').', conviction: c.conviction });
+        STATE.learnings = STATE.learnings.slice(0, 120);
+      }
+    }
+    pushNotification(c.verdict === 'BLOCK' ? 'bad' : c.verdict === 'REVISE' ? 'warn' : 'good',
+      'Greta · ' + c.verdict + (c.score != null ? ' · ' + c.score + '/10' : ''), (c.flaw || c.keep || title).slice(0, 300), 'greta', 'greta:' + c.id, { native: c.verdict === 'BLOCK' });
+  }
+  saveState();
+  if (mainWin && !mainWin.isDestroyed()) safe(() => mainWin.webContents.send('cortex:greta', { id: c.id, verdict: c.verdict }));
+  return c;
+}
+ipcMain.handle('cortex:greta', requireGate((_e, p = {}) => {
+  if (p.on != null) STATE.settings.gretaOn = !!p.on;
+  if (p.perDay != null) STATE.settings.gretaPerDay = clamp(parseInt(p.perDay, 10) || 12, 0, 60);
+  if (p.on != null || p.perDay != null) saveState();
+  return gretaState();
+}));
+ipcMain.handle('cortex:critique', requireGate(async (_e, p = {}) => {
+  const title = String(p.title || '').trim();
+  if (!title && !p.body) return { ok: false, error: 'tell her what to judge' };
+  const files = String(p.files || '').split(/[\n,]+/).map((x) => x.trim()).filter(Boolean).slice(0, 10);
+  const c = await gretaJudge({ key: sha256('manual:' + title + now()).slice(0, 12), manual: true,
+    subject: { kind: 'manual', title: title || String(p.body).slice(0, 80), did: String(p.body || ''), files, url: String(p.url || '').trim(), agent: p.agent || '', ref: p.ref || '' } });
+  return { ok: c.ok, critique: c, error: c.error };
+}));
+
+// ###########################################################################
+//  THE RECKONING — every prediction meets the day it named.
+//
+//  Since v3.55 every loop pass and every strategic read has had to state a
+//  FALSIFIER: "if X is not seen by Y, this was wrong, because Z". The critic
+//  scored whether one was PRESENT. Nothing ever went back on day Y to look. So
+//  the fleet wrote predictions into a ledger no one read, and its confidence
+//  was never once compared with what happened. A claim with no instrument is a
+//  mood, and a fleet that cannot see which of its moves worked cannot get
+//  better at choosing them.
+//
+//  Now each shipped move with a falsifier gets a due date (from its own words,
+//  a week if it names none). When moves come due, ONE turn to Greta judges up
+//  to five against the world as it is: HELD, BROKE or UNKNOWN, with what she
+//  saw. That verdict then changes things:
+//    · every seat's brief carries the calibration: stated confidence against
+//      the held rate ("moves called 8+ held 5 of 9")
+//    · Motus Max and every loop see, in their recent moves, which ones held
+//    · a loop whose moves keep breaking waits longer between passes, and after
+//      three breaks in a row the operator is asked whether to pause it
+//    · what the outcomes teach goes into the ledger every seat reads
+// ###########################################################################
+function parseDue(text, fromMs) {
+  const s = String(text || '').toLowerCase();
+  const d0 = fromMs || now();
+  const day = 864e5;
+  let m;
+  if ((m = /\b(?:within|in)\s+(\d{1,3})\s*(hour|hr|day|week|month)s?\b/.exec(s))) {
+    const n = +m[1], u = m[2];
+    return d0 + n * (u.startsWith('h') ? 3600e3 : u === 'day' ? day : u === 'week' ? 7 * day : 30 * day);
+  }
+  if ((m = /\b(20\d\d-\d\d-\d\d)\b/.exec(s))) { const t = Date.parse(m[1] + 'T18:00:00'); if (Number.isFinite(t)) return t; }
+  if (/\btomorrow\b/.test(s)) return d0 + day;
+  const wd = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  if ((m = /\bby\s+(?:this\s+|next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/.exec(s))) {
+    const cur = new Date(d0).getDay(), want = wd.indexOf(m[1]);
+    return d0 + (((want - cur + 7) % 7) || 7) * day;
+  }
+  if (/\bend of (?:the |this )?week\b|\bnext week\b|\bnext (?:release|cycle|cohort|deploy|pass)\b/.test(s)) return d0 + 7 * day;
+  if (/\bend of (?:the |this )?month\b|\bnext month\b/.test(s)) return d0 + 30 * day;
+  return d0 + 7 * day;
+}
+function reckonCandidates(limit = 5) {
+  return (STATE.duoWork || []).filter((w) => w.verdict === 'shipped' && String(w.falsifier || '').length > 12 && !w.reckon && (w.reckonTries || 0) < 2)
+    .filter((w) => { if (!w.dueAt) w.dueAt = parseDue(w.falsifier, Date.parse(w.ts) || now()); return w.dueAt <= now() && (!w.reckonNext || w.reckonNext <= now()); })
+    .slice(0, limit);
+}
+function calibration() {
+  const r = (STATE.duoWork || []).filter((w) => w.reckon && w.reckon.verdict !== 'UNKNOWN');
+  const hi = r.filter((w) => (w.confidence || 0) >= 8), lo = r.filter((w) => (w.confidence || 0) < 8);
+  const held = (xs) => xs.filter((w) => w.reckon.verdict === 'HELD').length;
+  return { judged: r.length, hiHeld: held(hi), hi: hi.length, loHeld: held(lo), lo: lo.length, held: held(r) };
+}
+function calibrationLine() {
+  const c = calibration();
+  if (c.judged < 4) return '';
+  const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
+  return 'Of the fleet\'s shipped moves checked against their own falsifiers, ' + c.held + ' of ' + c.judged + ' held (' + pct(c.held, c.judged) + '). Moves called 8+/10 held ' + c.hiHeld + ' of ' + c.hi + ' (' + pct(c.hiHeld, c.hi) + '). State confidence to that record, and verify more when it runs low.';
+}
+let _reckonBusy = false;
+async function reckonTick({ force = false } = {}) {
+  if (_reckonBusy) return { ok: false, error: 'already reckoning' };
+  if (!force) {
+    if (STATE.settings.reckonOn === false) return { ok: false, error: 'off' };
+    if (now() - ((STATE.reckoning || {}).lastRun || 0) < 6 * 3600e3) return { ok: false, error: 'not yet' };
+    const held = autonomyAllowed('the reckoning'); if (held) return { ok: false, error: held };
+  }
+  const due = reckonCandidates(5);
+  if (!due.length) return { ok: true, judged: 0 };
+  _reckonBusy = true;
+  STATE.reckoning = Object.assign({}, STATE.reckoning || {}, { lastRun: now() });
+  saveState();
+  try {
+    const ids = due.map((w, i) => ({ w, id: 'r' + (i + 1) }));
+    const block = ids.map(({ w, id }) => '[' + id + '] ' + String(w.title).slice(0, 160) + '\n     shipped ' + String(w.ts).slice(0, 10) + (w.agent ? ' by ' + ((FLEET_BY_ID[w.agent] || {}).name || w.agent) : '')
+      + (() => { const pj = (STATE.projects || []).find((p) => p.id === w.projectId); return pj && pj.url ? ' · live at ' + pj.url : ''; })() + '\n     FALSIFIER: ' + String(w.falsifier).slice(0, 400)
+      + ((w.files || []).length ? '\n     FILES: ' + w.files.slice(0, 6).join(', ') : '')).join('\n');
+    const prompt = `/RECKONING. Greta, each of these moves named how it could be proven wrong, and its day has come. Look at the world as it is now (open the files, fetch the pages, read the logs) and judge each one against its own falsifier. Not against your taste: against what it said would happen.
+
+${block}
+
+Reply with one line per id, exactly:
+[r1] HELD | BROKE | UNKNOWN · <what you actually saw, one line>
+UNKNOWN only when the evidence truly cannot be reached from here; say what would settle it.
+Then one final line:
+LESSON: <what these outcomes teach every seat about choosing moves, or none>`;
+    const r = await relaySend('greta', prompt);
+    const text = String(r.text || '');
+    let n = 0;
+    for (const { w, id } of ids) {
+      const m = new RegExp('\\[' + id + '\\]\\s*(HELD|BROKE|UNKNOWN)\\s*[·:\\-–—]?\\s*(.*)', 'i').exec(text);
+      w.reckonTries = (w.reckonTries || 0) + 1;
+      if (!m) { w.reckonNext = now() + 3 * 864e5; continue; }
+      const verdict = m[1].toUpperCase();
+      if (verdict === 'UNKNOWN' && w.reckonTries < 2) { w.reckonNext = now() + 3 * 864e5; w.reckonNote = m[2].slice(0, 300); continue; }
+      w.reckon = { verdict, evidence: m[2].trim().slice(0, 400), ts: new Date().toISOString() };
+      n++;
+      // the loop that made it learns its own record
+      const loop = (STATE.loops || []).find((l) => l.id === w.loopId);
+      if (loop && verdict !== 'UNKNOWN') {
+        loop.held = (loop.held || 0) + (verdict === 'HELD' ? 1 : 0);
+        loop.broke = (loop.broke || 0) + (verdict === 'BROKE' ? 1 : 0);
+        loop.breakStreak = verdict === 'BROKE' ? (loop.breakStreak || 0) + 1 : 0;
+        if (loop.breakStreak >= 3 && loop.enabled) safe(() => signal({ kind: 'decision', key: 'loop-breaks:' + loop.id + ':' + loop.broke, loopId: loop.id, action: 'pause-loop', source: 'reckoning',
+          title: 'The loop “' + loop.name + '” broke its own predictions three times running. Pause it?', body: 'Latest: ' + w.reckon.evidence + '\nYes pauses it. No keeps it running.' }));
+      }
+    }
+    const lesson = (/^LESSON:\s*(.+)$/im.exec(text) || [])[1] || '';
+    if (lesson && !/^none\b/i.test(lesson.trim())) {
+      const near = (STATE.learnings || []).slice(0, 40).find((l) => textSimilarity(l.title, lesson) >= 0.5);
+      if (near) { near.uses = (near.uses || 1) + 1; near.lastSeen = new Date().toISOString(); }
+      else { STATE.learnings.unshift({ ts: new Date().toISOString(), source: 'reckoning', title: lesson.trim().slice(0, 300), body: 'From checking ' + n + ' shipped move(s) against their own falsifiers.' }); STATE.learnings = STATE.learnings.slice(0, 120); }
+    }
+    STATE.reckoning.last = { ts: new Date().toISOString(), judged: n, asked: ids.length, ok: !!r.ok };
+    saveState();
+    if (n) pushNotification('info', 'The reckoning', n + ' shipped move' + (n === 1 ? '' : 's') + ' checked against what they predicted: ' + ids.filter(({ w }) => w.reckon).map(({ w }) => w.reckon.verdict.toLowerCase()).join(', ') + '.', 'duo', 'reckon:' + now(), { native: false });
+    return { ok: !!r.ok, judged: n, error: r.ok ? '' : r.error };
+  } finally { _reckonBusy = false; }
+}
+ipcMain.handle('cortex:reckon', requireGate(async (_e, p = {}) => {
+  if (p.run) return reckonTick({ force: true });
+  const c = calibration();
+  return { ok: true, calibration: c, line: calibrationLine(), last: (STATE.reckoning || {}).last || null,
+    due: reckonCandidates(20).length,
+    recent: (STATE.duoWork || []).filter((w) => w.reckon).slice(0, 12).map((w) => ({ ts: w.ts, title: w.title, confidence: w.confidence, verdict: w.reckon.verdict, evidence: w.reckon.evidence, loopName: w.loopName })) };
+}));
+
+// ###########################################################################
+//  THE SIGNAL — only what needs him, on his phone, answerable in one line.
+//
+//  August, 2026-09-23: "send me the most important updates or key moves that
+//  you want my feedback or decision on ... to my Telegram ... Because what's
+//  generally happening is I see all this ... but I don't end up doing anything
+//  or acting on it at all." That is a structure, not a mood: the app made a
+//  stock of readings with no flow out of it, and a reading nobody acts on is
+//  inventory. So the phone gets DECISIONS, not reports. Each one names the
+//  choice and carries an id; his one-line reply ("d7f3a yes") to the seat he
+//  already talks to comes back through ci.sh decide and moves the work. The
+//  rest stays in the app.
+//
+//  What earns a message: a seat blocked on his word, Greta blocking a big move,
+//  a loop a seat designed and wants armed, Motus Max stopping at a wall only he
+//  can move, the relay down for real, and one digest a day. Five a day at
+//  most, one per subject, nothing twice.
+//
+//  The way out is whatever this machine already has: Davara's own send script
+//  on the desktop, or `hermes send` through a Hermes profile on a server. No
+//  token is read or held here.
+// ###########################################################################
+function signalTransport() {
+  const script = path.join(root(), 'SystemsCortex', 'davara-tg-send.sh');
+  if (statOf(script)) return { kind: 'script' };
+  if (process.platform === 'win32') return null;
+  const py = ['/usr/local/lib/hermes-agent/venv/bin/python', path.join(os.homedir(), '.hermes', 'hermes-agent', 'venv', 'bin', 'python')].find((p) => statOf(p));
+  const pdir = path.join(os.homedir(), '.hermes', 'profiles');
+  const profs = safe(() => fs.readdirSync(pdir), []);
+  const want = String(STATE.settings.signalProfile || '').trim();
+  const prof = want && profs.includes(want) ? want : ['augusttt', 'davara-eiv1', 'august', 'davara'].find((p) => profs.includes(p)) || profs[0];
+  return py && prof ? { kind: 'hermes', py, home: path.join(pdir, prof), profile: prof } : null;
+}
+function signalDeliver(plain, html) {
+  const tr = signalTransport();
+  if (!tr) return Promise.resolve({ ok: false, error: 'no Telegram path on this machine' });
+  if (tr.kind === 'script') return runWslFull(['bash', linuxRoot() + '/SystemsCortex/davara-tg-send.sh', plain.slice(0, 3800)], 30000).then((r) => ({ ok: r.rc === 0, via: 'davara-tg-send', error: r.rc ? String(r.out || '').slice(-200) : '' }));
+  return new Promise((res) => execFile(tr.py, ['-m', 'hermes_cli.main', 'send', '--to', String(STATE.settings.signalChat || '').trim() || 'telegram', '-q', html.slice(0, 3800)],
+    { env: { ...process.env, HERMES_HOME: tr.home }, cwd: os.tmpdir(), timeout: 40000 },
+    (err, so, se) => res({ ok: !err, via: 'hermes:' + tr.profile, error: err ? String(se || so || err.message).slice(-200) : '' })));
+}
+const hEsc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function signalLog() { STATE.signal = STATE.signal || { sent: [], decisions: [] }; STATE.signal.sent = STATE.signal.sent || []; STATE.signal.decisions = STATE.signal.decisions || []; return STATE.signal; }
+// Never rejects: every caller fires it and moves on.
+function signal(o) { return signalRaw(o || {}).catch((e) => ({ ok: false, error: (e && e.message) || 'signal failed' })); }
+async function signalRaw({ kind = 'decision', key, title, body = '', taskId = '', source = '', loopId = '', action = '' }) {
+  const S = signalLog();
+  if (STATE.settings.signalOn === false) return { ok: false, skipped: 'signal off' };
+  const today = localDay();
+  const sentToday = S.sent.filter((x) => localDay(new Date(Date.parse(x.ts) || 0)) === today);
+  if (key && S.sent.some((x) => x.key === key && now() - (Date.parse(x.ts) || 0) < 20 * 3600e3)) return { ok: false, skipped: 'already said' };
+  if (kind !== 'digest' && sentToday.length >= (parseInt(STATE.settings.signalPerDay, 10) || 5)) return { ok: false, skipped: 'daily cap' };
+  let id = '';
+  if (kind === 'decision') {
+    id = 'd' + crypto.randomBytes(2).toString('hex');
+    S.decisions.unshift({ id, ts: new Date().toISOString(), title: String(title).slice(0, 200), body: String(body).slice(0, 800), taskId, source, loopId, action, status: 'open' });
+    S.decisions = S.decisions.slice(0, 40);
+  }
+  const head = kind === 'decision' ? '◇ DECISION ' + id : kind === 'alert' ? '⚠ ' : '☀ ';
+  const reply = kind === 'decision' ? 'Reply to me: ' + id + ' yes · ' + id + ' no · or ' + id + ' and your words.' : '';
+  const plain = (kind === 'decision' ? head + '\n' + title : head + title) + (body ? '\n\n' + body : '') + (reply ? '\n\n' + reply : '') + '\n· CortexInsight';
+  const html = '<b>' + hEsc(kind === 'decision' ? head : head + title) + '</b>' + (kind === 'decision' ? '\n<b>' + hEsc(title) + '</b>' : '') + (body ? '\n\n' + hEsc(body) : '') + (reply ? '\n\n' + hEsc(reply) : '') + '\n<i>CortexInsight</i>';
+  const r = await signalDeliver(plain, html);
+  S.sent.unshift({ ts: new Date().toISOString(), key: key || '', kind, title: String(title).slice(0, 160), ok: r.ok, via: r.via || '', id, error: r.error || '' });
+  S.sent = S.sent.slice(0, 80);
+  saveState();
+  if (!r.ok) safe(() => omniAudit('signal', 'could not reach the phone: ' + (r.error || 'no path')));
+  return { ok: r.ok, id, via: r.via, error: r.error };
+}
+// His answer, from the phone, through the seat he replied to (ci.sh decide).
+function decisionAnswer(id, text, by) {
+  const S = signalLog();
+  const d = S.decisions.find((x) => x.id === String(id || '').toLowerCase().trim());
+  if (!d) return { ok: false, error: 'no such decision' };
+  if (d.status !== 'open') return { ok: false, error: 'already answered' };
+  const ans = String(text || '').trim();
+  const yes = /^(y|yes|yep|yeah|ok|okay|approve|approved|go|ship|ship it|do it|arm|arm it)\b/i.test(ans);
+  const no = /^(n|no|nope|reject|drop|stop|kill|don'?t)\b/i.test(ans);
+  d.status = 'answered'; d.answer = ans.slice(0, 1000); d.answeredAt = new Date().toISOString(); d.via = by || '';
+  let did = '';
+  if (d.loopId) {
+    const l = (STATE.loops || []).find((x) => x.id === d.loopId);
+    if (l && d.action === 'pause-loop') {
+      if (yes) { l.enabled = false; did = 'paused the loop “' + l.name + '”'; }
+      else if (no) { l.breakStreak = 0; did = 'kept the loop “' + l.name + '” running'; }
+    }
+    else if (l && yes) { l.approved = true; l.enabled = true; did = 'armed the loop “' + l.name + '”'; }
+    else if (l && no) { STATE.loops = STATE.loops.filter((x) => x.id !== d.loopId); did = 'rejected the loop “' + l.name + '”'; }
+  }
+  if (d.taskId) {
+    const t = (STATE.tasks || []).find((x) => x.id === d.taskId);
+    if (t) {
+      t.jobs = [{ ts: d.answeredAt, agent: by || '', ok: true, latency: 0, chars: 0, note: operatorName() + ' answered from the phone: ' + ans.slice(0, 600) }, ...(t.jobs || [])].slice(0, 8);
+      if (no) { t.status = 'done'; t.updated = d.answeredAt; did = did || 'closed “' + t.title.slice(0, 60) + '”'; }
+      else {
+        if (t.status === 'waiting') t.status = 'inbox';
+        t.updated = d.answeredAt;
+        if (t.agent && isRelayAgent(t.agent) && !autonomyAllowed('an answered decision')) {
+          taskDispatch(t.id, operatorName() + ' answered: ' + ans).catch(() => {});
+          did = did || 'sent the answer back to ' + ((FLEET_BY_ID[t.agent] || {}).name || t.agent);
+        } else did = did || 'put the answer on the task';
+      }
+    }
+  }
+  saveState();
+  pushNotification('good', 'Decision ' + d.id + ' answered', '“' + d.title.slice(0, 90) + '” · ' + ans.slice(0, 120) + (did ? ' · ' + did : ''), 'tasks', 'dec:' + d.id, { native: false });
+  return { ok: true, did };
+}
+// One message a day, and only when there is something in it. Zero tokens.
+function signalDigestText() {
+  const since = now() - 24 * 3600e3;
+  const shipped = (STATE.duoWork || []).filter((w) => w.verdict === 'shipped' && (Date.parse(w.ts) || 0) > since);
+  const done = (STATE.tasks || []).filter((t) => t.status === 'done' && (Date.parse(t.updated || '') || 0) > since);
+  const open = (STATE.tasks || []).filter((t) => t.status !== 'done' && !(t.tags || []).includes('parked'));
+  const waiting = signalLog().decisions.filter((d) => d.status === 'open');
+  const cs = (STATE.critiques || []).filter((c) => (Date.parse(c.ts) || 0) > since && c.ok);
+  if (!shipped.length && !done.length && !waiting.length && !cs.length) return '';
+  const L = [];
+  if (shipped.length || done.length) L.push('Moved: ' + shipped.length + ' shipped, ' + done.length + ' closed.' + (shipped.length ? '\n' + shipped.slice(0, 3).map((w) => '· ' + String(w.title).slice(0, 90)).join('\n') : ''));
+  if (cs.length) L.push('Greta judged ' + cs.length + ': ' + cs.filter((c) => c.verdict === 'PASS').length + ' passed, ' + cs.filter((c) => c.verdict === 'REVISE').length + ' to revise, ' + cs.filter((c) => c.verdict === 'BLOCK').length + ' blocked.');
+  if (waiting.length) L.push('Waiting on you:\n' + waiting.slice(0, 4).map((d) => '· ' + d.id + ' ' + d.title.slice(0, 80)).join('\n'));
+  L.push('Board: ' + open.length + ' open.');
+  const rd = safe(() => systemReading(), null);
+  if (rd && rd.line) L.push('The reading: ' + String(rd.line).slice(0, 220));
+  return L.join('\n\n');
+}
+function signalTick() {
+  const S = signalLog();
+  const h = parseInt(STATE.settings.signalDigestHour, 10);
+  if (!Number.isFinite(h) || h < 0 || new Date().getHours() !== h) return;
+  const today = localDay();
+  if (S.lastDigest === today) return;
+  S.lastDigest = today; saveState();
+  const text = signalDigestText();
+  if (text) signal({ kind: 'digest', key: 'digest:' + today, title: 'CortexInsight · ' + today, body: text }).catch(() => {});
+}
+ipcMain.handle('cortex:signal', requireGate(async (_e, p = {}) => {
+  for (const k of ['signalOn', 'signalNudges']) if (p[k] != null) STATE.settings[k] = !!p[k];
+  if (p.signalPerDay != null) STATE.settings.signalPerDay = clamp(parseInt(p.signalPerDay, 10) || 5, 1, 20);
+  if (p.signalDigestHour != null) STATE.settings.signalDigestHour = clamp(parseInt(p.signalDigestHour, 10), -1, 23);
+  if (p.signalProfile != null) STATE.settings.signalProfile = String(p.signalProfile).trim().slice(0, 60);
+  if (p.answer) { const a = decisionAnswer(p.answer.id, p.answer.text, 'console'); if (!a.ok) return a; }
+  saveState();
+  let test = null;
+  if (p.test) test = await signal({ kind: 'alert', key: 'test:' + now(), title: 'CortexInsight can reach you', body: 'This is where decisions will land: only what needs your word, five a day at most.' });
+  const tr = signalTransport();
+  const S = signalLog();
+  return { ok: true, test, path: tr ? (tr.kind === 'script' ? "Davara's send script" : 'hermes send · ' + tr.profile) : '',
+    settings: { signalOn: STATE.settings.signalOn !== false, signalPerDay: STATE.settings.signalPerDay, signalDigestHour: STATE.settings.signalDigestHour, signalNudges: !!STATE.settings.signalNudges, signalProfile: STATE.settings.signalProfile || '' },
+    sent: S.sent.slice(0, 20), decisions: S.decisions.slice(0, 20), digestPreview: signalDigestText() };
+}));
+
+// ###########################################################################
+//  THE FLEET DIGEST — the whole picture, for a console watching this one.
+//
+//  The Remote screen asked four questions and could show a reading, a board and
+//  a text box. August, 2026-09-23: "I need to see the agents that are running on
+//  my VPS ... integrated into our stack so I can assign him and delegate tasks
+//  and see what he's working on ... same features as our other agents." Over
+//  SSH every question is a round trip, so this answers them all at once: who is
+//  there, what each is doing this minute, what each SAID it is doing (SafeStep),
+//  what each last delivered, the board, what shipped, Duo-Drive and its
+//  flights, the gear, and the switches. Reads only; the actions stay on their
+//  own channels, which are the same ones this console's own screens use.
+// ###########################################################################
+function safestepTail(agent, n = 8) {
+  const f = path.join(root(), 'agents', agent, 'safestep.jsonl');
+  if (!statOf(f)) return [];
+  return tailFile(f, 24 * 1024).split('\n').filter(Boolean).slice(-n)
+    .map((l) => safe(() => JSON.parse(l), null)).filter(Boolean)
+    .map((e) => ({ ts: String(e.ts || ''), kind: String(e.kind || ''), text: String(e.text || '').slice(0, 600) }))
+    .reverse();
+}
+// What an agent last SAID back, from the relay's own markdown log. The JSON log
+// carries the ask and the timing; only the .md carries the answer.
+function recentReplies(agent, n = 3) {
+  const dir = P('logs', 'interactions');
+  const files = safe(() => fs.readdirSync(dir), []).filter((f) => f.startsWith(agent + '-') && f.endsWith('.md')).sort().slice(-2).reverse();
+  const out = [];
+  for (const f of files) {
+    const blocks = tailFile(path.join(dir, f), 60 * 1024).split(/\n---\n/).reverse();
+    for (const b of blocks) {
+      const h = /###\s+(\S+ \S+)\s+·\s+([^·]+?)\s+·\s+([A-Z_]+)\s+·\s+([\d.]+)s/.exec(b);
+      if (!h || h[2].trim() !== agent) continue;
+      const inb = (/\*\*In:\*\*\s*([\s\S]*?)(?=\n\*\*Cortex|$)/.exec(b) || [])[1] || '';
+      const rep = (/\*\*Cortex →:\*\*\s*([\s\S]*)$/.exec(b) || [])[1] || '';
+      out.push({ ts: h[1], status: h[3], latency: +h[4] || 0, ask: inb.trim().slice(0, 300), reply: rep.trim().slice(0, 1600) });
+      if (out.length >= n) return out;
+    }
+  }
+  return out;
+}
+// A seat can wear a name here without changing what it is underneath. The VPS
+// runs the August seat as AUGUSTTT; the relay, the logs and the runner still
+// call it august, and so does every channel.
+function applyAliases() {
+  const al = (STATE && STATE.settings && STATE.settings.agentAlias) || {};
+  for (const f of [...FLEET, ...INFRA_SEATS]) {
+    if (f.baseName === undefined) f.baseName = f.name;
+    const a = al[f.id];
+    f.name = a && String(a).trim() ? String(a).trim().slice(0, 32) : f.baseName;
+  }
+}
+function fleetDigest() {
+  applyAliases();
+  const ix = parseInteractions();
+  const day = localDay();
+  const live = safe(() => liveStatus().agents, []);
+  const tasks = STATE.tasks || [];
+  const agents = FLEET.filter((f) => f.lane === 'relay').map((f) => {
+    const mine = ix.filter((x) => x.agent === f.id);
+    const today = mine.filter((x) => (x.ts || '').slice(0, 10) === day);
+    const lv = live.find((l) => l.agent === f.id) || {};
+    const w = safe(() => currentWork(f.id), null);
+    const cfg = agentCfg(f.id);
+    const lat = today.filter((x) => x.ok && x.latency).map((x) => x.latency).sort((a, b) => a - b);
+    return {
+      id: f.id, name: f.name, baseName: f.baseName || f.name, role: f.role, tone: f.tone,
+      model: cfg.model, effort: cfg.effort, turns: cfg.turns, paused: cfg.paused,
+      gear: seatMode(f.id), status: lv.status || 'none', inflight: !!lv.inflight,
+      subagents: lv.subagentsRunning || 0,
+      now: w && w.inflight ? { ask: String(w.inbound || '').slice(0, 700), since: w.startEpoch || 0,
+        last: w.lastEvent, tools: w.toolCount || 0, files: (w.filesTouched || []).slice(0, 6),
+        events: (w.recentEvents || []).slice(-6) } : null,
+      last: mine[0] ? { ts: mine[0].ts, ok: mine[0].ok, status: mine[0].status, latency: mine[0].latency, msg: String(mine[0].msg || '').slice(0, 240) } : null,
+      today: today.length, faults: today.filter((x) => !x.ok).length,
+      medLatency: lat.length ? lat[Math.floor(lat.length / 2)] : null,
+      safestep: safestepTail(f.id, 6),
+      replies: recentReplies(f.id, 2),
+      open: tasks.filter((t) => t.status !== 'done' && t.agent === f.id).length,
+    };
+  }).filter((a) => a.today || a.last || a.id === digestPrimary() || a.open || a.safestep.length);
+  const open = tasks.filter((t) => t.status !== 'done')
+    .sort((a, b) => (a.priority || 2) - (b.priority || 2) || String(b.updated || b.created || '').localeCompare(String(a.updated || a.created || '')));
+  const done = tasks.filter((t) => t.status === 'done')
+    .sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || ''))).slice(0, 12);
+  const slim = (t) => ({ id: t.id, title: String(t.title || '').slice(0, 200), body: String(t.body || '').slice(0, 600), status: t.status,
+    agent: t.agent || '', priority: t.priority || 2, tags: (t.tags || []).slice(0, 4), created: t.created || '', updated: t.updated || '',
+    lastJob: (t.jobs || [])[0] ? { ts: t.jobs[0].ts, ok: t.jobs[0].ok, note: String(t.jobs[0].note || '').slice(0, 300) } : null });
+  const d = STATE.duo || {};
+  return {
+    at: new Date().toISOString(), host: os.hostname(), version: app.getVersion(), platform: process.platform,
+    primary: digestPrimary(), agents,
+    fleet: fleetSnapshot().filter((f) => f.lane === 'relay' && !f.infra).map((f) => ({ id: f.id, name: f.name })),
+    models: KNOWN_MODELS.map((m) => ({ id: m.id, label: m.label })), quality: QUALITY.map((q) => ({ id: q.id, label: q.label })),
+    board: { open: open.slice(0, 40).map(slim), openCount: open.length, done: done.map(slim),
+      counts: TASK_STATES.reduce((a, s) => (a[s] = tasks.filter((t) => t.status === s).length, a), {}) },
+    duo: { active: !!d.active, agent: d.agent || 'davara', cadenceMin: d.cadenceMin || 25, mode: d.mode || 'complement',
+      wrapUp: !!d.wrapUp, brief: String(d.brief || '').slice(0, 2000), runs: d.runs || 0, skipped: d.skipped || 0,
+      second: d.second || null, flights: duoFlights(),
+      loops: (STATE.loops || []).filter((l) => l.approved).map((l) => ({ id: l.id, name: l.name, kind: l.kind, enabled: !!l.enabled, cadenceMin: l.cadenceMin, lastRun: l.lastRun || 0, runs: l.runs || 0 })),
+      pending: (STATE.loops || []).filter((l) => !l.approved).length,
+      log: (d.log || []).slice(0, 8).map((e) => ({ ts: e.ts, agent: e.agent, title: e.title, ok: e.ok, skipped: !!e.skipped, confidence: e.confidence, lane: e.lane || 'main' })) },
+    work: (STATE.duoWork || []).slice(0, 12).map((w) => ({ ts: w.ts, title: w.title, verdict: w.verdict, loopName: w.loopName || '', agent: w.agent || '',
+      did: String(w.did || '').slice(0, 600), files: (w.files || []).slice(0, 8), confidence: w.confidence, next: String(w.next || '').slice(0, 300) })),
+    gear: gearView(),
+    control: safe(() => { const c = controlState(); return { stopped: c.stopped, hard: c.hard, hardEffective: c.hardEffective, inflight: c.inflight }; }, {}),
+    reading: safe(() => systemReading(), null),
+    stats: { totalTurns: ix.length, todayTurns: ix.filter((x) => (x.ts || '').slice(0, 10) === day).length },
+    notes: (STATE.notifications || []).slice(0, 8).map((n) => ({ ts: n.ts, level: n.level, title: n.title, body: String(n.body || '').slice(0, 300) })),
+    aliases: (STATE.settings && STATE.settings.agentAlias) || {},
+    greta: safe(() => { const g = gretaState(); return { judged: g.judged, avg: g.avg, pass: g.pass, revise: g.revise, block: g.block,
+      critiques: g.critiques.slice(0, 8).map((c) => ({ ts: c.ts, verdict: c.verdict, score: c.score, title: c.subject.title, flaw: c.flaw, fix: c.fix, agent: c.subject.agent })) }; }, null),
+    decisions: signalLog().decisions.filter((d) => d.status === 'open').slice(0, 8),
+    breaker: breakerState(),
+  };
+}
+// The seat a Remote screen talks to first: the one the operator named, or on a
+// server, the August seat (that is who a VPS runs), else Davara.
+function digestPrimary() {
+  const p = STATE && STATE.settings && STATE.settings.primaryAgent;
+  if (p && isRelayAgent(p)) return p;
+  return process.platform === 'linux' ? 'august' : 'davara';
+}
+ipcMain.handle('cortex:fleetDigest', requireGate(() => fleetDigest()));
+ipcMain.handle('cortex:agentAlias', requireGate((_e, { agent, name } = {}) => {
+  if (!FLEET_BY_ID[agent]) return { ok: false, error: 'no such seat' };
+  STATE.settings.agentAlias = Object.assign({}, STATE.settings.agentAlias || {});
+  if (name && String(name).trim()) STATE.settings.agentAlias[agent] = String(name).trim().slice(0, 32);
+  else delete STATE.settings.agentAlias[agent];
+  applyAliases(); saveState();
+  return { ok: true, aliases: STATE.settings.agentAlias };
+}));
+ipcMain.handle('cortex:primaryAgent', requireGate((_e, { agent } = {}) => {
+  if (agent && !isRelayAgent(agent)) return { ok: false, error: 'not a relay seat' };
+  STATE.settings.primaryAgent = agent || ''; saveState();
+  return { ok: true, primary: digestPrimary() };
+}));
 
 // ---- one-click heal ----
 ipcMain.handle('heal:run', requireGate(async (_e, { action, arg }) => {
@@ -14099,6 +15349,8 @@ async function runSmoke() {
     // secrets and a pinned host key, so it is exactly the kind of room that must
     // never ship having been opened only by hand.
     await visit('remote', 2200, 'remoteBody');
+    // GRETA judges the fleet's big moves; her room is where he reads the verdicts.
+    await visit('greta', 2200, 'gretaBody');
 
     // ── THE READINGS MUST ACTUALLY READ ────────────────────────────────────
     // A view that renders is not a view that reports. Each of these three
@@ -14863,6 +16115,108 @@ async function runFleetTest() {
     const agents = await visit('agents', 2200);
     // idle seats legitimately show zero; one seat with real turns is the proof
     ok('agents shows turns', /\b[1-9]\d* TURNS/i.test(agents), (agents.match(/\d+ TURNS/gi) || []).slice(0, 6).join(' · '));
+
+    // ── 3.68: the digest a Remote screen paints from, in one call
+    const md = path.join(root(), 'logs', 'interactions', 'davara-' + localDay() + '.md');
+    fs.appendFileSync(md, '\n### ' + localDay() + ' 10:00:00 · davara · OK · 41.2s · 900 chars (mouth)\n**In:** refine the gate copy\n\n**Cortex →:** The gate now says what it stores.\n\n---\n');
+    const dg = fleetDigest();
+    const dv = (dg.agents || []).find((a) => a.id === 'davara');
+    ok('digest carries the fleet', !!dv && dv.today >= 1 && dg.board && Array.isArray(dg.board.open), dv ? dv.today + ' today' : 'no davara');
+    ok('digest reads the last answer', !!(dv && dv.replies[0] && /says what it stores/.test(dv.replies[0].reply)), dv && dv.replies[0] ? dv.replies[0].reply : 'none');
+    ok('digest names the primary', dg.primary === (process.platform === 'linux' ? 'august' : 'davara'), dg.primary);
+    // ── the gear: said, carried first, written, cooled
+    const g1 = await setGear('motivus', { by: 'harness', ttlMin: 1 });
+    const bf = fs.readFileSync(briefPath(), 'utf8');
+    ok('motivus rides first in the brief', g1.ok && (runnerAppliesModes() || bf.startsWith('--- GEAR: MOTUS MOTIVUS')), bf.slice(0, 60));
+    const mj = safe(() => JSON.parse(fs.readFileSync(modesPath(), 'utf8')), {});
+    ok('modes.json holds the gear', !!(mj.davara && mj.davara.mode === 'motivus' && mj.davara.deep), JSON.stringify(mj.davara || {}).slice(0, 90));
+    ok('motivus lifts the turn budget', JSON.parse(fs.readFileSync(fleetConfigPath(), 'utf8')).agents.davari.turns >= GEAR_TURNS);
+    STATE.gear.until = new Date(now() - 1000).toISOString();
+    gearTick();
+    const mj2 = safe(() => JSON.parse(fs.readFileSync(modesPath(), 'utf8')), {});
+    ok('motivus cools down by itself', fleetGear().mode === 'cruise' && !mj2.davara && !fs.readFileSync(briefPath(), 'utf8').startsWith('--- GEAR'), fleetGear().mode);
+    ok('the gear phrase is heard', (gearPhrase('enter motus motivus mode and fix the board') || {}).rest === 'fix the board' && gearPhrase('what is motus motivus?') === null);
+    // ── duo-drive: wrap up with nothing in flight stops at once
+    STATE.duo = STATE.duo || {}; STATE.duo.active = true;
+    const w = duoWrapUp();
+    ok('wrap up with nothing running stops now', w.stopped && !STATE.duo.active, w.said);
+    // ── the tidy: fleet urgency lowered, his own untouched, stalls returned, cold parked, undo exact
+    const old = (d) => new Date(now() - d * 864e5).toISOString();
+    const mk = (title, o) => { const r = taskCreate({ title, agent: 'davara', priority: o.p, tags: o.tags }); Object.assign(r.task, { status: o.s || 'inbox', created: old(o.age), updated: old(o.age) }); return r.task; };
+    const tFleetHot = mk('Fleet test tidy: fleet filed urgent', { p: 1, tags: ['from davara'], age: 3 });
+    const tMineCold = mk('Fleet test tidy: my own urgent and old', { p: 1, tags: [], age: 40 });
+    const tStalled = mk('Fleet test tidy: stalled in motion', { p: 2, tags: ['from davara'], age: 4, s: 'active' });
+    const tQuestion = mk('Fleet test tidy: unanswered question', { p: 1, tags: ['question', 'from davara'], age: 9, s: 'waiting' });
+    const tCold = mk('Fleet test tidy: cold normal', { p: 2, tags: ['from davara'], age: 30 });
+    const dry = boardTidy({ apply: false });
+    ok('the tidy plans before it moves', dry.counts.lower >= 1 && dry.counts.stall >= 1 && dry.counts.expire >= 1 && dry.counts.park >= 1, JSON.stringify(dry.counts));
+    boardTidy({ apply: true, reason: 'harness' });
+    ok('the tidy lowers fleet urgency and spares his', tFleetHot.priority === 2 && tMineCold.priority === 1 && !(tMineCold.tags || []).includes('parked'), 'fleet=' + tFleetHot.priority + ' mine=' + tMineCold.priority);
+    ok('the tidy returns stalls and parks the cold', tStalled.status === 'inbox' && (tCold.tags || []).includes('parked') && (tQuestion.tags || []).includes('expired'));
+    tidyUndo();
+    ok('undo puts the board back exactly', tFleetHot.priority === 1 && tStalled.status === 'active' && !(tCold.tags || []).includes('parked') && !(tQuestion.tags || []).includes('expired'));
+    const i1 = fleetIntake({ title: 'Fleet test intake: wire the lantern switch', by: 'davari', priority: 1 });
+    const i2 = fleetIntake({ title: 'Fleet test intake: wire the lantern switch now', by: 'davari', priority: 2 });
+    ok('the fleet files at normal, and a twin reinforces', i1.task && i1.task.priority === 2 && i2.merged && i2.task.id === i1.task.id, 'p=' + (i1.task || {}).priority + ' merged=' + !!i2.merged);
+    STATE.tasks = STATE.tasks.filter((t) => !/^Fleet test (tidy|intake)/.test(t.title));
+    // ── the breaker: two identical failures hold the third
+    const bmsg = 'Fleet test breaker: the same ask ' + now();
+    breakerRecord('davara', bmsg, { ok: false, error: 'x' });
+    breakerRecord('davara', bmsg, { ok: false, error: 'x' });
+    const held = await relaySend('davara', bmsg);
+    ok('the breaker refuses a third identical failure', held.blocked && held.breaker, held.error);
+    _brk.asks.clear(); _brk.streak = [];
+    // ── Greta and the signal, with the relay stubbed: no test ever spends a real turn
+    const realSend = relaySend;
+    let said = 'VERDICT: REVISE\nSCORES: craft 6/10 · meaning 8/10 · clarity 5/10 · truth 9/10\nSTRONGEST FLAW: the lantern label is grey on graphite\nFIX: lantern.css .label color #dce3ec\nKEEP: the motion curve\nLESSON: Secondary text is near-bone, never grey, on every surface.\nCONVICTION: 8/10';
+    relaySend = async (agent) => ({ ok: agent === 'greta', text: said, latency: 1 });
+    try {
+      const q1 = gretaQueue({ kind: 'hand', title: 'Fleet test greta: the lantern', did: 'restyled the lantern', agent: 'davara' });
+      for (let i = 0; i < 40 && !(STATE.critiques || []).some((c) => c.subject.title === 'Fleet test greta: the lantern'); i++) await wait(100);
+      const c1 = (STATE.critiques || []).find((c) => c.subject.title === 'Fleet test greta: the lantern');
+      ok('Greta judges and scores', q1.ok && c1 && c1.verdict === 'REVISE' && c1.score === 7, c1 ? c1.verdict + ' ' + c1.score : 'no critique');
+      ok('a revise lands on the author\'s board', (STATE.tasks || []).some((t) => (t.tags || []).includes('greta') && t.agent === 'davara' && /grey on graphite/.test(t.title)));
+      ok('her lesson reaches every seat', (STATE.learnings || []).some((l) => l.source === 'greta' && /near-bone/.test(l.title)));
+      said = said.replace('VERDICT: REVISE', 'VERDICT: BLOCK');
+      await gretaJudge({ key: 'fleet-block', manual: true, subject: { kind: 'manual', title: 'Fleet test greta: the broken gate', did: 'x', agent: 'davara' } });
+      const dec = signalLog().decisions.find((d) => /broken gate/.test(d.title));
+      ok('a block becomes a decision for his phone', !!dec && dec.status === 'open', dec ? dec.id : 'none');
+      writeAgentBrief();
+      ok('the brief carries the id inside the window the bridge hands over', !!dec && fs.readFileSync(briefPath(), 'utf8').slice(0, 2000).includes(dec.id), dec ? dec.id : 'none');
+      fs.appendFileSync(inboxPath(), JSON.stringify({ op: 'decision', id: dec ? dec.id : 'd0000', text: 'no', by: 'davara', ts: new Date().toISOString() }) + '\n');
+      ingestAgentInbox();
+      const bt = (STATE.tasks || []).find((t) => /broken gate/.test(t.title));
+      ok('his "no" from the phone closes it', !!dec && dec.status === 'answered' && bt && bt.status === 'done', dec ? dec.status : 'none');
+      const dg2 = fleetDigest();
+      ok('the digest carries Greta', dg2.greta && dg2.greta.judged >= 2, dg2.greta ? dg2.greta.judged + ' judged' : 'none');
+      const gv = await visit('greta', 2200);
+      ok('Greta has a room', /Greta/.test(gv) && /(REVISE|BLOCK)/.test(gv), gv.slice(0, 90));
+      // ── the reckoning: predictions meet their day
+      const base = Date.parse('2026-09-23T12:00:00');
+      ok('a falsifier names its own day', parseDue('if no stranger run lands within 3 days', base) === base + 3 * 864e5 && parseDue('by 2026-10-01 the tally reads 1', base) === Date.parse('2026-10-01T18:00:00') && parseDue('nothing dated here', base) === base + 7 * 864e5);
+      const lp = { id: 'lp-reckon', name: 'Fleet test loop', kind: 'refine', approved: true, enabled: true, cadenceMin: 60 };
+      STATE.loops = [lp, ...(STATE.loops || [])];
+      const tenDays = new Date(now() - 10 * 864e5).toISOString();
+      const mkW = (title, conf) => ({ ts: tenDays, title, verdict: 'shipped', confidence: conf, loopId: lp.id, loopName: lp.name, falsifier: 'if the label is still grey within 2 days, this was cosmetic', files: [] });
+      STATE.duoWork = [mkW('Fleet test reckon: lantern contrast', 9), mkW('Fleet test reckon: gate copy', 8), ...(STATE.duoWork || [])];
+      said = '[r1] BROKE · the label still computes 3.1:1 on graphite\n[r2] HELD · the gate says what it stores\nLESSON: Check contrast on the rendered page, not the stylesheet.';
+      const rk = await reckonTick({ force: true });
+      const w1 = STATE.duoWork.find((w) => w.title === 'Fleet test reckon: lantern contrast');
+      ok('the reckoning judges against the world', rk.judged === 2 && w1.reckon && w1.reckon.verdict === 'BROKE', JSON.stringify(rk));
+      ok('the loop learns its own record', lp.broke === 1 && lp.held === 1, 'held ' + lp.held + ' broke ' + lp.broke);
+      ok('Motus Max sees what the world said', /the world said: the label still computes/.test(recentMoves(6)));
+      ok('calibration is counted', calibration().hi === 2 && calibration().hiHeld === 1);
+    } finally {
+      relaySend = realSend;
+      STATE.duoWork = (STATE.duoWork || []).filter((w) => !/^Fleet test reckon/.test(w.title));
+      STATE.loops = (STATE.loops || []).filter((l) => l.id !== 'lp-reckon');
+      STATE.learnings = (STATE.learnings || []).filter((l) => l.source !== 'reckoning');
+      STATE.tasks = (STATE.tasks || []).filter((t) => !/Fleet test greta/.test(t.title) && !(t.tags || []).includes('greta'));
+      STATE.critiques = (STATE.critiques || []).filter((c) => !/Fleet test greta/.test(c.subject.title));
+      STATE.learnings = (STATE.learnings || []).filter((l) => l.source !== 'greta');
+    }
+    // ── every seat on Opus 5.5 at max
+    ok('the default seat is Opus 5.5 at max', agentCfg('davara').model === 'claude-opus-5-5' && agentCfg('davara').effort === 'max', agentCfg('davara').model + ' · ' + agentCfg('davara').effort);
   } catch (e) { problems.push(`[THROW] ${e && e.message}\n${e && e.stack}`); }
   await wait(400);
   if (problems.length) {
@@ -15089,8 +16443,10 @@ if (!_ISOLATED && !_SMOKE && !_FRESH && !_FLEET && !app.requestSingleInstanceLoc
 
   app.whenReady().then(async () => {
     STATE = loadState();
+    safe(() => applyAliases());   // a seat's chosen name, before anything prints one
     publishFleetConfig();       // the runner reads this per turn — make it current at boot
     ensureAgentBridgeFiles();   // (re)write the agent CLI + README so the fleet can reach the board
+    safe(() => ensureGretaSoul());   // the critic's identity, once, never over his edits
     safe(() => writeAgentBrief());    // orient the fleet before it takes its next turn
     safe(() => ingestAgentInbox());   // apply anything the fleet queued while the app was closed
     safe(() => sweepZombieRuns());    // runs killed by an app restart become resumable, not stuck

@@ -372,8 +372,8 @@ async function loadRemote() {
     ${!r.available ? `<div class="panel glass rm-warn"><div class="panel-head"><h3>The SSH client is missing from this build</h3></div>
       <div class="rm-p">Run <code>npm install</code> in the project folder and start the app again.</div></div>` : ''}
 
-    <div class="panel glass">
-      <div class="panel-head"><h3>The machine</h3><span class="panel-sub">where the other console runs</span></div>
+    <details class="panel glass rm-machine" ${connected ? '' : 'open'}>
+      <summary class="panel-head"><h3>The machine</h3><span class="panel-sub">${connected ? 'linked to ' + esc(r.host) + ' as ' + esc(r.user) + ' · open to change it' : 'where the other console runs'}</span></summary>
       <div class="rm-form">
         <label class="fr-lbl">Host</label>
         <input id="rmHost" class="txt" type="text" value="${escAttr(r.host)}" placeholder="203.0.113.10 or vps.example.com" spellcheck="false"/>
@@ -405,13 +405,13 @@ async function loadRemote() {
         <span class="focus-hint">both secrets are sealed by this machine's keystore and never shown again</span>
       </div>
       <div id="rmOut">${r.lastError ? `<div class="rm-err">${esc(r.lastError)}</div>` : ''}</div>
-    </div>
+    </details>
 
-    <div class="panel glass">
+    ${connected ? '' : `<div class="panel glass">
       <div class="panel-head"><h3>What this does over there</h3></div>
-      <div class="rm-p">Everything the console answers here, it answers there: the reading, the board, the fleet, the focus, the loops. Turning the agents off from this page turns them off on that machine, which is the setting that stops it spending anything while you are not using it.</div>
+      <div class="rm-p">Once linked, this screen becomes that machine's fleet: every seat and what it is doing this minute, its board, its live feed, what it shipped, its Duo-Drive and its settings, all driven from here. Turning its agents off from here turns them off there, which is the setting that stops it spending while you are away.</div>
       <div class="rm-p mono">on that machine, the same things are: <b>cortex status</b> · <b>cortex board</b> · <b>cortex off</b></div>
-    </div>
+    </div>`}
 
     <div id="rmLinked">${connected ? '<div class="rm-p">reading that machine…</div>' : ''}</div>
   `);

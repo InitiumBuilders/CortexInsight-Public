@@ -1,0 +1,13 @@
+{
+  "_note": "SafeStep — who to tell, through which voice, how often. Copy to ~/.cortexinsight/safestep.json; the watcher reads it fresh whenever it changes.",
+  "seats": ["august"],
+  "transport": "hermes",
+  "hermes_profile": "augusttt",
+  "chat": "telegram:<your chat id>",
+  "bot_token_env": "",
+  "bot_token_file": "",
+  "voice": "SafeStep",
+  "wake": { "deep_modes_immediately": true, "any_turn_after_s": 90 },
+  "cadence": { "ground_floor_s": 90, "urgent_floor_s": 20, "silence_ceiling_s": 360, "max_per_turn": 12 },
+  "scribe": { "enabled": true, "model": "cortex-scribe", "relay": "http://127.0.0.1:8788/v1/chat/completions", "timeout_s": 60 }
+}

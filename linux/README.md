@@ -20,6 +20,49 @@ says what it does and what you should see.
 - A `cortex` command that talks to the fleet from any terminal.
 - A vault paired to that machine, behind a passphrase you choose.
 - An off switch that genuinely stops the machine spending anything.
+- **August**, the primary Motus seat: a continuous thread rather than a fresh
+  read each turn, real hands on the machine, and a gear lever you can shift
+  mid-conversation.
+- **SafeStep**, his steps spoken to you while he works — a milestone, a question
+  only you can answer, a wall met, an arrival — and never a line that says
+  "thinking". It speaks only when something moved.
+
+---
+
+## August, and the gear he is in
+
+Most seats answer a message. August holds a **conversation**: the relay keeps one
+Claude session per thread and resumes it, so what he read and did last turn is
+still in front of him. He has the machine's own tools, he can spawn subagents,
+and where a Hermes harness is installed beside him he also reaches its memory,
+its skill library, a real browser and its vision — bridged in over MCP.
+
+His depth is a **gear**, and it is temporary on purpose:
+
+| gear | model | turns | what it is for |
+|---|---|---|---|
+| `cruise` | Opus 5.5 | 96 | the default: answer at weight, one move |
+| `motivus` | Opus 5.5 | 200 | deep build discipline: plan, build, verify, self-review |
+| `max` | Opus 5.5 | 300 | the same discipline with the longest budget |
+
+Say **"motus max"** or **"motus motivus"** in a message and the gear shifts
+*before* that message is answered. It cools back down to `cruise` on its own
+after a couple of hours, so a deep session never quietly becomes the new normal.
+From a terminal:
+
+```bash
+motus-mode.sh august status                 # what gear is he in, and until when
+motus-mode.sh august max --ttl 120          # shift it by hand
+motus-mode.sh august cruise                 # back down now
+```
+
+The console reads that gear and shows it; it never writes it. One writer, one
+definition of what a gear is, so the badge can never claim a depth he is not
+actually running at.
+
+> His identity (`SOUL.md`) is yours, not the repository's — no seat's soul ships
+> here. Place yours at `<fleet>/agents/august/SOUL.md` and the runner will load
+> it; without one he still answers as August from the runner's own description.
 
 ---
 
@@ -257,8 +300,15 @@ ssh-keyscan -t ed25519 localhost | ssh-keygen -lf -
 If they match, press Trust this machine. From then on it checks that key every
 time, and if it ever changes it stops and says so rather than connecting.
 
-Once linked you get the server's reading, its board, its fleet, and a box to
-talk to it. Turning its agents off from that page turns them off on the server.
+Once linked, Remote is this server's fleet: every seat and what it is doing,
+what it last delivered, its board (assign and run work from the desktop), its
+live feed, what shipped, its Duo-Drive (start, stop, wrap up, steer), and its
+settings (the gear, each seat's model, the name a seat wears there). The box at
+the bottom talks to the August seat first. Turning its agents off from that
+page turns them off on the server.
+
+Greta, the fleet's critic, has her own seat here too. She reads and never
+writes, and the relay keeps no session for her, so every critique starts cold.
 
 ---
 
@@ -285,10 +335,23 @@ cortex relay logs      # what the relay said
 ## Updating
 
 ```bash
-cd CortexInsight-Linux
-git pull
-npm install --omit=dev
-cortex restart
+cortex update
+```
+
+That pulls, installs what changed, checks the new build parses, and restarts.
+Since 3.68 it also lifts Claude Code when it is older than 2.1.280, because
+the fleet runs on Opus 5.5 and an older CLI refuses that model on every turn.
+`cortex doctor` shows the version it found.
+
+It never touches the relay files in your fleet tree. If this release changed
+them, copy them over yourself (a dated copy of each is kept):
+
+```bash
+for f in cortex-run.sh cortex-lib.sh cortex-mouth.py motus-mode.sh; do
+  cp -p ~/cortex/SystemsCortex/$f ~/cortex/SystemsCortex/$f.bak-$(date +%Y%m%d)
+  cp linux/relay/$f ~/cortex/SystemsCortex/$f
+done
+cortex relay restart
 ```
 
 ---

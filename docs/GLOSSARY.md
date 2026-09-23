@@ -18,6 +18,42 @@ The console uses a small vocabulary on purpose. Most of these words appear on sc
 
 **Workhorse.** The lean infra seat with no identity. Takes cycles whose plan is already set.
 
+**August.** The primary Motus seat, and the only August. He reaches the operator through Hermes on Telegram, answers on a resumed Claude session, and has real hands: Claude Code's own tools, subagents, and Hermes' tools bridged in over MCP. The gear lever moves him between Opus 5 and Fable 5.1.
+
+**Scribe.** The infra seat that names threads and writes their summaries, so a thinking seat never has to. One turn, no hands, no session kept. SafeStep asks it for the line when it answers, and uses a plain template when it does not.
+
+**Gear.** The depth a seat is in right now: a temporary override of model, effort and turn budget, kept in `~/.cortexinsight/modes.json` and read fresh by the runner every turn. Saying "motus max" or "motus motivus" in a message shifts it before that message is answered; `motus-mode.sh` shifts it from a shell. The console reads the gear and shows it as a badge; it never writes it.
+
+**Cruise, motivus, max.** The three gears. `cruise` is the default: Opus 5.5 at max, 96 turns, an answer at weight and one move. `motivus` is Opus 5.5 at 200 turns with deep build discipline on; `max` is the same discipline at 300 turns, badged MOTUS MAX, a gear and not the layer that operates the machine.
+
+**Cool-down.** A gear's return to cruise on its own, about two hours after it was set, so a deep session never quietly becomes the new normal. Saying "cool down" or "motus cruise" brings it down now.
+
+**Continuity.** One Claude session per conversation, resumed, so what August read and did last turn is still in front of him. It is checked, not assumed: the key is the thread's opening line, the tail of the relay's last reply is the identity, and the caller's last assistant message must carry that tail. When the key misses, the relay finds the thread whose last reply the caller still carries and re-files it; when nothing matches, it starts a fresh session from the caller's thread.
+
+**The heartbeat.** An empty delta the relay sends every 30 seconds of silence, so a caller that drops a quiet stream at 900 seconds still sees a seat at work. It stamps liveness without counting as delivered text. Proven at the relay, where 35 pulses carried a 1036-second turn through 1000 seconds of tool silence; that Hermes reads an empty delta as liveness is verified from its source, not yet by a long Telegram turn.
+
+**SafeStep.** The clarity protocol for Motus agents: the seat's steps, spoken to the operator only when something moved. Five marks, no sixth. Today it speaks through August's own bot to the operator's DM, every line opening with its mark, until a bot of its own exists.
+
+**Ground.** ◆ A milestone that is real: a file exists, a test passes, a deploy answers, a subagent returns.
+
+**Keystone.** ◇ A question only the operator can answer, with the two live options and what happens if it goes unanswered.
+
+**Next.** → One move worth naming, seen from inside the work; a SafeStep mark, not the NEXT tray.
+
+**Friction.** ⧗ A wall met honestly, and how it is being handled.
+
+**Arrival.** ● The work is done or has stopped: what moved, what was verified, what was left out on purpose, the one next move.
+
+**The watcher.** The SafeStep daemon that reads a seat's checkpoint and Claude Code's live transcript of that session, and derives Ground, Friction, Arrival and a bounded "still moving". It never talks to the seat, cannot slow it, cannot break it. The seat adds what only it knows with `safestep.sh step|ask|next|friction|done "<line>"`, and those explicit signals are never batched away.
+
+**Hermes.** The messaging gateway that carries Telegram to the relay and back. Its `augusttt` profile holds no API key, so nothing on that path can bill.
+
+**The Hermes bridge.** `hermes-tools-mcp.py`, which offers Hermes' own tools to a seat over MCP: memory, session history, the skill library, a real browser, vision, send_message. Tools Claude Code already has natively are left out at the bridge. The relay carries text, not tool calls, so the hands live in the runner.
+
+**Deny list.** What read-only means when it is true. `--allowedTools` only pre-approves, so `arden` and `sympath-cortex` carry `READONLY_DENY` on `--disallowedTools`, and the harness refuses Write, Edit, Bash, Agent, Skill and the MCP bridge instead of trusting the seat to refuse itself. One arm it cannot reach: `--disallowedTools` does not refuse SendMessage, so an observer cannot touch the machine but can still put text on a wire, and that arm stays instructional.
+
+**The two claude binaries.** A newer CLI in the operator's own bin (2.1.273) serves Fable 5.1; the older one system-wide (2.1.92) answers 400 to it. The relay's service PATH names the newer one through a systemd drop-in. If Fable ever fails, check PATH first.
+
 **The GPT seat.** The second stack, on the operator's OpenAI key. Answers `/gpt`.
 
 ## The rooms
@@ -213,3 +249,21 @@ The console uses a small vocabulary on purpose. Most of these words appear on sc
 **Lingering.** The setting that lets your services keep running after you log out, which on a server is most of the time.
 
 **The durable token.** A subscription token that lasts about a year, so a machine nobody sits at does not go quiet overnight when the ordinary credentials expire.
+
+**The gear.** Cruise or Motus Motivus, for the whole fleet. Cruise is Opus 5.5 at max; Motus Motivus adds the ultracode discipline and cools back to cruise by itself.
+
+**Greta.** The fleet's critic. A seat that reads and never writes, and judges big moves before they count.
+
+**A decision.** A message on the phone with an id, answered in one line to any seat you talk to. Five a day at most.
+
+**The reckoning.** Checking a shipped move against its own falsifier on the day it named. HELD, BROKE or UNKNOWN.
+
+**Calibration.** How often the moves the fleet called 8 out of 10 or better actually held.
+
+**The tidy.** The board's daily pass: park what went cold, return what stalled, expire unanswered questions. Nothing deleted, one click to undo.
+
+**The breaker.** What stops a loop that is not working from paying for itself again.
+
+**Wrap up.** Stopping Duo-Drive after the pass in flight lands, so nothing is cut off.
+
+**The fleet digest.** Everything a Remote screen shows, answered by the far console in one round trip.

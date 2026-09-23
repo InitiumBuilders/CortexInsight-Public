@@ -110,13 +110,13 @@ module.exports = function attachRemote(ctx) {
     stream = null; conn = null; buf = '';
   }
 
-  function sendLine(msg) {
+  function sendLine(msg, timeoutMs = 120000) {
     return new Promise((resolve, reject) => {
       if (!stream) return reject(new Error('not connected'));
       const id = ++seq;
       const timer = setTimeout(() => {
         if (waiting.has(id)) { waiting.delete(id); reject(new Error('the far end did not answer in time')); }
-      }, 120000);
+      }, timeoutMs);
       waiting.set(id, (m) => { clearTimeout(timer); m.ok ? resolve(m.result) : reject(new Error(m.error || 'refused')); });
       stream.write(JSON.stringify({ id, ...msg }) + '\n');
     });
@@ -349,10 +349,14 @@ module.exports = function attachRemote(ctx) {
 
   ipcMain.handle('cortex:remoteDisconnect', requireGate(() => { reset('disconnected'); return { ok: true }; }));
 
+  // A real turn over there can run as long as the relay lets it (30 minutes).
+  // Everything else is a read or a switch and should answer in seconds; waiting
+  // two minutes on those is how a dead link looks alive.
+  const LONG = new Set(['cortex:send', 'cortex:taskDispatch', 'cortex:duoPass', 'cortex:voiceTurn', 'cortex:critique']);
   ipcMain.handle('cortex:remoteInvoke', requireGate(async (_e, { channel, args } = {}) => {
     if (!ready) return { error: 'not connected to a remote console' };
     if (!channel || !/^[a-z]+:[A-Za-z]+$/.test(channel)) return { error: 'that is not a channel name' };
-    try { return await sendLine({ op: 'invoke', channel, args: args || [] }); }
+    try { return await sendLine({ op: 'invoke', channel, args: args || [] }, LONG.has(channel) ? 32 * 60000 : 120000); }
     catch (e) { return { error: e.message }; }
   }));
 

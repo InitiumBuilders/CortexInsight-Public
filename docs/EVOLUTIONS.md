@@ -117,6 +117,20 @@ The first real Linux boot found three defects that had been true on every platfo
 
 *Lesson: a platform you have never run on is a mirror. Three of the five things this found were not Linux bugs at all; they were bugs everywhere that only a machine with no history, no keyring and more than one person on it would show you.*
 
+## Era seven: the judge, the phone and the record (September 23)
+
+**3.68.** Every seat moved to Opus 5.5 at max. The relay's CLI had to move first: 2.1.258 refused the new id as unrecognized, and 2.1.280 answered on it. A one-time migration moved every saved seat, kept the old values beside its stamp, and never runs again, so a seat the operator changes afterwards stays his. Ultracode became a gear. Motus Motivus puts every seat in deep-build discipline and cools back to cruise by itself, through the same modes.json the server's own seat already used, said in the same words on either machine.
+
+Linked to a server, Remote now paints that machine's fleet from one digest: each seat with what it is doing this minute, what it said it is doing, and what it last delivered; the board, where work can be assigned and run; the live feed; what shipped; Duo-Drive; and the gear, models, names and switches. Duo-Drive learned to wrap up, so the pass in flight finishes and lands before it stops. It gained a second lane that never touches a project the first lane is working, and it no longer starts a second pass beside a long first one.
+
+Greta joined the fleet as its critic, read-only by design. Big moves pass through her; a revision goes to the author's board and a block goes to the phone. The phone carries decisions now, five a day at most, each with an id the operator answers in one line to the seat he already talks to. The board keeps itself: the fleet files at normal priority, a near-duplicate reinforces the open task, and a daily tidy parks what went cold and undoes in one click. A breaker in the one function every turn passes through stops paying for a loop that is not working.
+
+The deepest change is the reckoning. Since 3.55 every loop pass and every strategic read had named a falsifier, and nothing had ever gone back to check one. Each shipped move is now checked against its own falsifier on the day it named, by a judge who did not make it. What held and what broke feeds Motus Max's next choice, the loops' cadence, and a calibration line in every brief.
+
+The operator's real board was read before any line changed: 90 open, 78 filed by the fleet from Telegram, 63 at priority 1, 48 older than three weeks. The first tidy, run on a copy of that vault, left 43 open and 3 at priority 1. The public gate learned Telegram chat ids, Python files, and a list of private terms it reads without shipping. Its first run found the operator's chat id and a group id that had arrived with the server seat's own notes.
+
+*Lesson: a prediction nobody checks is a mood with a date on it. The fleet started choosing better only when its choices started meeting the day they named.*
+
 ## What the arc says
 
 Three loops turned through these versions. The build loop: attention became shipped surface. The canon loop: every build became a lesson, and the lesson became a law in the code or in these pages. The mover loop: the console became something a second operator could run without the first one in the room. The third loop is the youngest and the one this release is for.

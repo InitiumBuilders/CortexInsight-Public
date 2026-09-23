@@ -214,6 +214,21 @@ const check = (name, ok, extra) => {
   check('a real channel answers from the far machine',
     !!ov && !ov.error && ov.stats !== undefined, ov && ov.stats ? ov.stats.totalTurns + ' turns' : (ov && ov.error));
 
+  // 3.68: the Remote screen paints the far fleet from one digest, and drives it
+  // through the same channels the far console's own screens use.
+  const dg = await call('cortex:remoteInvoke', { channel: 'cortex:fleetDigest' });
+  check('the far fleet arrives in one digest',
+    !!dg && !dg.error && Array.isArray(dg.agents) && !!dg.board && !!dg.duo && !!dg.gear, dg && dg.error ? dg.error : (dg ? dg.primary + ' first · ' + dg.agents.length + ' seat(s)' : ''));
+  check('a server talks to the August seat first', !!dg && dg.primary === 'august', dg && dg.primary);
+  const gear = await call('cortex:remoteInvoke', { channel: 'cortex:gearSet', args: [{ mode: 'motivus', ttlMin: 5 }] });
+  check('the gear turns over there', !!gear && gear.ok === true && gear.gear.fleet.deep === true, gear && gear.error);
+  await call('cortex:remoteInvoke', { channel: 'cortex:gearSet', args: [{ mode: 'cruise' }] });
+  const tk = await call('cortex:remoteInvoke', { channel: 'cortex:taskCreate', args: [{ title: 'remote test: assigned from the desktop', agent: 'august', priority: 2 }] });
+  check('a task can be assigned to a seat over there', !!tk && tk.ok === true && tk.task.agent === 'august', tk && tk.error);
+  if (tk && tk.ok) await call('cortex:remoteInvoke', { channel: 'cortex:taskDelete', args: [{ id: tk.task.id }] });
+  const duo = await call('cortex:remoteInvoke', { channel: 'cortex:duo', args: [{ wrapUp: true }] });
+  check('Duo-Drive answers over there, wrap-up included', !!duo && !!duo.duo && typeof duo.said === 'string', duo && (duo.error || duo.said));
+
   const off = await call('cortex:remoteInvoke', { channel: 'cortex:control', args: [{ stopped: true, hard: false }] });
   check('the off switch reaches across', !!off && off.stopped === true);
   await call('cortex:remoteInvoke', { channel: 'cortex:control', args: [{ stopped: false, hard: false }] });

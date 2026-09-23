@@ -190,7 +190,13 @@ ok "fleet tree: $CORTEX_ROOT"
 # ── 5. the relay ────────────────────────────────────────────────────────────
 step "The relay"
 RELAY_DST="$CORTEX_ROOT/SystemsCortex"
-for f in cortex-run.sh cortex-lib.sh cortex-mouth.py cortex-stream-parse.py; do
+# motus-mode.sh is the one definition of a gear (cruise/motivus/max); the runner
+# and the console both defer to it. relay-health.sh is the watchdog for a relay
+# that is alive but wedged. hermes-tools-mcp.py bridges Hermes' own tools to a
+# seat and is inert unless that seat's mcp.json points at it, so it is safe to
+# place on a machine with no Hermes installed.
+for f in cortex-run.sh cortex-lib.sh cortex-mouth.py cortex-stream-parse.py \
+         motus-mode.sh relay-health.sh hermes-tools-mcp.py; do
   SRC="$LINUX_DIR/relay/$f"
   DST="$RELAY_DST/$f"
   if [ -f "$DST" ] && ! cmp -s "$SRC" "$DST"; then
@@ -211,6 +217,27 @@ for f in cortex-run.sh cortex-lib.sh cortex-mouth.py cortex-stream-parse.py; do
 done
 chmod +x "$RELAY_DST"/*.sh "$RELAY_DST"/*.py
 bash -n "$RELAY_DST/cortex-run.sh" || die "the runner did not pass a syntax check; nothing was started"
+
+# ── 5b. SafeStep — the seat's steps, spoken only when something moved ─────────
+# A watcher that reads what the relay and runner leave on disk and tells the
+# operator, in a few short lines, when ground is gained. It never touches a seat.
+# It is placed and enabled here; it speaks only once ~/.cortexinsight/safestep.json
+# names a chat, so a fresh install is silent until the operator chooses a voice.
+SS_DST="$CORTEX_ROOT/safestep"
+mkdir -p "$SS_DST"
+for f in safestep.py safestep.sh CODEX.md; do
+  [ -f "$LINUX_DIR/safestep/$f" ] && cp "$LINUX_DIR/safestep/$f" "$SS_DST/$f"
+done
+chmod +x "$SS_DST"/*.sh "$SS_DST"/*.py 2>/dev/null
+if [ -f "$LINUX_DIR/safestep/safestep.service" ]; then
+  mkdir -p "$HOME/.config/systemd/user"
+  sed -e "s#/root/cortex#$CORTEX_ROOT#g" -e "s#Environment=HOME=/root#Environment=HOME=$HOME#" \
+      "$LINUX_DIR/safestep/safestep.service" > "$HOME/.config/systemd/user/safestep.service"
+  [ -f "$HOME/.cortexinsight/safestep.json" ] || { mkdir -p "$HOME/.cortexinsight"; cp "$LINUX_DIR/safestep/safestep.example.json" "$HOME/.cortexinsight/safestep.json"; }
+  systemctl --user daemon-reload 2>/dev/null && systemctl --user enable --now safestep.service 2>/dev/null \
+    && ok "SafeStep is watching (it will speak once safestep.json names a chat)" \
+    || info "SafeStep unit placed; enable it later with: systemctl --user enable --now safestep.service"
+fi
 # PYTHONDONTWRITEBYTECODE: the compile check used to leave a __pycache__ folder
 # sitting in the operator's fleet tree, which this app treats as read-only
 # territory by intent. Checking that something compiles should not write anything.

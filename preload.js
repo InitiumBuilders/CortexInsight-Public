@@ -69,6 +69,14 @@ contextBridge.exposeInMainWorld('cortex', {
 
   // --- v2.0: fleet config (per-agent model + quality) & the runner bridge ---
   fleet: () => ipcRenderer.invoke('cortex:fleet'),
+  gear: () => ipcRenderer.invoke('cortex:gear'),
+  boardTidy: (p) => ipcRenderer.invoke('cortex:boardTidy', p || {}),
+  greta: (p) => ipcRenderer.invoke('cortex:greta', p || {}),
+  critique: (p) => ipcRenderer.invoke('cortex:critique', p || {}),
+  signal: (p) => ipcRenderer.invoke('cortex:signal', p || {}),
+  reckon: (p) => ipcRenderer.invoke('cortex:reckon', p || {}),
+  breaker: () => ipcRenderer.invoke('cortex:breaker'),
+  gearSet: (mode, ttlMin) => ipcRenderer.invoke('cortex:gearSet', { mode, ttlMin }),
   setAgentConfig: (p) => ipcRenderer.invoke('cortex:setAgentConfig', p),
   bridge: (action) => ipcRenderer.invoke('cortex:bridge', { action }),
 
@@ -101,7 +109,8 @@ contextBridge.exposeInMainWorld('cortex', {
 
   // --- v2.0: Duo-Drive autonomous mode ---
   duo: (patch) => ipcRenderer.invoke('cortex:duo', patch),
-  duoPass: () => ipcRenderer.invoke('cortex:duoPass'),
+  duoPass: (lane) => ipcRenderer.invoke('cortex:duoPass', { lane: lane || 'main' }),
+  onDuoState: (cb) => ipcRenderer.on('cortex:duoState', (_e, s) => cb(s)),
 
   // --- v3: Leverage Loops · project registry · design ethos · work ledger ---
   loops: () => ipcRenderer.invoke('cortex:loops'),
