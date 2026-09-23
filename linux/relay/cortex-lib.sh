@@ -57,6 +57,9 @@ cortex_ckpt_resume_sid() {
   now="$(date +%s)"
   case "$status" in
     inflight|incomplete)
+      # inflight also means "running right now": a second ask that arrives mid-turn
+      # must not resume the live session (two processes on one session, 2026-09-23)
+      [ -n "$sid" ] && pgrep -f -- "$sid" >/dev/null 2>&1 && return 1
       [ -n "$sid" ] && [ $(( now - ${epoch:-0} )) -le "$CORTEX_CKPT_TTL" ] && { echo "$sid"; return 0; }
       ;;
   esac
