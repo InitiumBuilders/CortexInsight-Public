@@ -256,6 +256,14 @@ The console uses a small vocabulary on purpose. Most of these words appear on sc
 
 **Greta's journal.** One entry an evening: the standard to raise tomorrow, what was beautiful, what fell short, where the flow broke, and a lesson for the builders. The standard rides in every brief.
 
+**Outlier Akomi.** Davara's full vessel on a seat of its own, live through the operator's Omi wearable, and the front door for Command and DASH-OPS. Off until he turns it on; off means nothing is kept.
+
+**ASI.** The deep-work seat: one question held for a long session, closed on a move.
+
+**AOSSI.** Adapt Outlier Systems Super Intelligence: one question asked of every seat at six horizons, and the one move that holds across them.
+
+**A fault card.** A short reply that opens with a sign-in, credit or usage-limit error. The relay logs it as OK; the console counts it as a failed turn.
+
 **Background depth.** The effort and turn budget for passes the app starts by itself. High and 48 by default, so they finish inside the relay's thirty minutes.
 
 **A ghost turn.** A turn a relay restart cut off. Its checkpoint still says inflight, so the seat looks busy. The watchdog clears it.

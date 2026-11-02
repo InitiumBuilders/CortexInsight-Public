@@ -645,3 +645,98 @@ async function paintReckonPanel(sel) {
     paintReckonPanel(sel);
   };
 }
+
+/* ======================= OUTLIER AKOMI (the live seat) =======================
+   His Omi hears the day; Akomi keeps a note of each conversation while the
+   switch is on and acts when it hears its name. This room is the switch, the
+   feed and the proposals. A proposal reaches the board only when he keeps it,
+   and nothing in this room is ever broadcast. */
+const AK = { busy: false };
+const AK_KIND = { conversation: 'heard', wake: 'you said', reply: 'Akomi', error: 'error' };
+// the one subject: the pendant on its cord; it breathes only while it listens (M8)
+function akPendant(on) {
+  return `<svg class="ak-pendant${on ? ' on' : ''}" viewBox="0 0 64 64" role="img" aria-label="${on ? 'Akomi is listening' : 'Akomi is off'}" data-rung="M8">
+    <path class="ak-cord" d="M13 5c1.6 17 9.4 27.5 19 27.5S49.4 22 51 5"/>
+    <circle class="ak-halo" cx="32" cy="42" r="13"/>
+    <circle class="ak-stone" cx="32" cy="42" r="7.5"/>
+    <path class="ak-ear" d="M18.5 35.5a16 16 0 0 0 0 13M45.5 35.5a16 16 0 0 1 0 13"/>
+  </svg>`;
+}
+function akTime(ts) { const d = new Date(Date.parse(ts) || 0); return d.getTime() ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''; }
+function akRow(x) {
+  const k = AK_KIND[x.kind] || x.kind;
+  const who = x.kind === 'reply' && x.seat ? x.seat : k;
+  return `<div class="ak-row k-${esc(x.kind)}${x.ok ? '' : ' bad'} expandable" tabindex="0" role="button" aria-label="${escAttr(who + ', ' + akTime(x.ts) + ': open in full')}" data-body="${escAttr(x.text || '')}" data-rtitle="${escAttr(x.title || who)}" data-rsub="${escAttr(x.ts || '')}">
+    <span class="ak-when mono">${esc(akTime(x.ts))}</span>
+    <span class="ak-k">${esc(who)}</span>
+    <div class="ak-body">${x.title ? `<b>${esc(x.title)}</b>` : ''}<span class="ak-text">${esc(x.text || '')}</span></div>
+  </div>`;
+}
+async function loadAkomi() {
+  const host = $('#akomiBody'); if (!host) return;
+  const a = await C.akomi();
+  if (!a || a.error) return viewFail('akomi', a || null);
+  const sw = a.switch || { on: false, wake: ['akomi'] };
+  const on = !!sw.on;
+  const waiting = (a.feed || []).filter((x) => x.kind === 'proposal' && !x.kept);
+  const feed = (a.feed || []).filter((x) => x.kind !== 'proposal').slice(0, 60);
+  const c = a.counts || {};
+  // the reading says what is true now, once: off, not wired, or what it heard today
+  const reading = !on
+    ? 'Your Omi\'s conversations reach nothing here, and nothing is kept.'
+    : !a.bridge ? 'On, but the Omi bridge is not running on this machine yet, so nothing can arrive.'
+    : (c.today ? `Today it kept ${c.conversations || 0} conversation note${c.conversations === 1 ? '' : 's'} and heard its name ${c.wakes || 0} time${c.wakes === 1 ? '' : 's'}.` : 'Listening. Nothing has arrived today.');
+  setHTML(host, `
+    <div class="view-head"><h2>Outlier Akomi</h2>
+      <p class="view-desc">Davara's full vessel on a seat of its own, live through your Omi. While it is on, it keeps a short note of each conversation your Omi records and answers when you say its name. It keeps no audio and no transcript, and anything it proposes waits here until you choose it.</p></div>
+    <div class="panel glass ak-switch tone-azure${on ? ' on' : ''}">
+      ${akPendant(on)}
+      <div class="ak-sw-main">
+        <div class="ak-state">${on ? 'Listening' : 'Off'}</div>
+        <div class="ak-reading">${esc(reading)}</div>
+        <details class="ak-wake"><summary>It answers to <b>${esc(sw.wake.join(', '))}</b><span class="mini">change</span></summary>
+          <div class="ak-wake-edit"><input id="akWakeIn" class="txt" value="${escAttr(sw.wake.join(', '))}" spellcheck="false" aria-label="The words Akomi answers to, separated by commas"/><button class="mini go" id="akWakeSave">Save</button></div></details>
+      </div>
+      <button class="${on ? 'ghost-btn' : 'prime-btn'} ak-toggle" id="akToggle">${on ? 'Turn off' : 'Turn on listening'}</button>
+    </div>
+    ${waiting.length ? `<div class="panel glass ak-props">
+      <div class="panel-head"><h3>Waiting on you</h3><span class="panel-sub">${waiting.length} proposal${waiting.length === 1 ? '' : 's'} from your conversations</span></div>
+      ${waiting.slice(0, 12).map((x) => `<div class="ak-prop">
+        <div class="ak-body"><b>${esc(x.title || (x.text || '').split('\n')[0])}</b>${x.title && x.text ? `<span class="ak-text">${esc(x.text)}</span>` : ''}<span class="ak-when mono">${esc(akTime(x.ts))}</span></div>
+        <div class="ak-prop-act"><button class="mini go" data-ak-keep="${escAttr(x.id)}">Keep</button><button class="mini" data-ak-drop="${escAttr(x.id)}">Let go</button></div>
+      </div>`).join('')}
+    </div>` : ''}
+    <div class="panel glass ak-feed">
+      <div class="panel-head"><h3>Today and before</h3><span class="panel-sub">newest first · stays on this machine</span></div>
+      ${feed.length ? feed.map(akRow).join('') : `<div class="empty">${on ? 'Nothing has arrived yet. A conversation note lands here when your Omi finishes one.' : 'Nothing is kept while Akomi is off.'}</div>`}
+    </div>
+    <div class="ak-foot">
+      <span>The Omi bridge is ${a.bridge ? 'running' : 'not running'}.</span>
+      <span>Akomi's seat is ${a.seat === 'ready' ? 'ready' : 'not set up yet'}.</span>
+      <span>${a.frontDoor ? 'Command and DASH-OPS answer as Akomi.' : a.seat === 'ready' ? 'Command answers as ' + esc(a.frontAgent || 'Davara') + '; pick Akomi in the agent picker any time.' : 'Command answers as ' + esc(a.frontAgent || 'Davara') + ' until Akomi\'s seat is ready.'}</span>
+    </div>`);
+  $('#akToggle').onclick = async () => {
+    if (AK.busy) return; AK.busy = true;
+    const r = await C.akomiSet({ on: !on }).catch(() => null);
+    AK.busy = false;
+    toast(r && r.ok ? (r.switch.on ? 'Akomi is listening. Say its name to ask it something.' : 'Akomi is off. Nothing is kept.') : 'The switch did not move', r && r.ok ? 'good' : 'bad');
+    loadAkomi();
+  };
+  $('#akWakeSave').onclick = async () => {
+    const wake = $('#akWakeIn').value.split(',').map((w) => w.trim()).filter(Boolean);
+    if (!wake.length) { toast('Give it at least one word to answer to', 'warn'); return; }
+    const r = await C.akomiSet({ wake }).catch(() => null);
+    toast(r && r.ok ? 'It answers to ' + r.switch.wake.join(', ') : 'Not saved', r && r.ok ? 'good' : 'bad');
+    loadAkomi();
+  };
+  // a row opens from the keyboard the same way a click opens it
+  host.querySelectorAll('.ak-row').forEach((el) => el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } });
+  host.querySelectorAll('[data-ak-keep],[data-ak-drop]').forEach((b) => b.onclick = async () => {
+    const keep = !!b.dataset.akKeep;
+    const id = b.dataset.akKeep || b.dataset.akDrop;
+    b.disabled = true;
+    const r = await C.akomiKeep(id, keep).catch(() => null);
+    toast(r && r.ok ? (keep ? 'On the board as your task' : 'Let go') : ((r && r.error) || 'Not saved'), r && r.ok ? 'good' : 'bad');
+    loadAkomi();
+  });
+}

@@ -260,11 +260,46 @@ older than sixty days. Press Archive it.
 You should see: the vault size before and after, and the archive folder where
 every removed entry was written. Nothing is deleted.
 
+## 21. Sign the relay back in
+
+When the title bar shows "relay signed out · sign in", press it (or Sign it
+back in on Pulse). A terminal opens and runs the sign-in. Approve it in your
+browser with your Claude account, then paste the token the terminal shows. It
+is tested before it replaces anything. The terminal can also put the same
+token on your server.
+
+You should see: the pill turn back to "relay up" within a minute, and autonomy
+resume. If it still says signed out, the new token did not answer; the
+terminal says why.
+
+## 22. Turn on Outlier Akomi
+
+Open Akomi in the rail under NOW and press Turn on listening. Your Omi's
+conversations now reach the bridge on this machine. Say "akomi" (or a word you
+set under change) and what you want, and it answers on your Omi. Anything it
+proposes waits under Waiting on you until you press Keep or Let go.
+
+You should see: a short note for each conversation your Omi finishes, and
+what you said to it and what it answered. Press Turn off and nothing is kept.
+
+## 23. Ask AOSSI
+
+In Command, type `/aossi` and a question. Every seat answers at six horizons,
+from this hour to ten years, and one turn finds the move that holds across
+all of them. It takes a few minutes, because the seats think in parallel at
+full depth.
+
+You should see: the move, why it holds, where the seats disagree, the first
+step and what would prove it wrong, then each seat's answers across time. The
+move is the first path in Motus Max, one press from being driven.
+
 ## Troubleshooting
 
 | You see | What it means | What to do |
 |---|---|---|
 | "relay offline" in the titlebar | the loopback proxy is not listening | `wsl -e systemctl --user start cortex-mouth-proxy.service`, or run the sync helper |
+| "relay signed out · sign in" in the titlebar | the relay is up but its Claude sign-in was revoked or expired, so every turn fails | press it and sign in (section 21) |
+| "relay out of credits" in the titlebar | the relay's turns go to a paid provider whose credits ran out | top up that provider, or sign the relay into the subscription (section 21) |
 | "could not reach the fleet on this network" at the gate | the vault is not paired to this machine | this is the foreign-device state; on your own machine, delete the vault to re-pair |
 | The Davara view is empty | no baseline clone in the WSL home | clone one, or accept loops without organs |
 | Voice says the key was refused | the key did not answer `/v1/voices` | it may be a key id rather than a key; keys start with `sk_` |

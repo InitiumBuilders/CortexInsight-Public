@@ -12,8 +12,8 @@ const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 // 2026-09-02: sympath-sei moved rose -> spring. Rose was serving two agents at once, and
 // colour is the only disambiguator Davari has in the constellation (davara/davaris/davari
 // all render the letter 'D'). Davari keeps rose; the external agent took the new tone.
-const TONE = { davara: 'violet', davaris: 'cyan', davari: 'rose', 'sympath-cortex': 'emerald', arden: 'gold', august: 'amber', greta: 'ember', 'sympath-sei': 'spring' };
-const ANAME = { davara: 'Davara', davaris: 'Davaris', davari: 'Davari', 'sympath-cortex': 'Sympath-Cortex', arden: 'Arden AI', august: 'August', greta: 'Greta', 'sympath-sei': 'Sympath SEI' };
+const TONE = { davara: 'violet', davaris: 'cyan', davari: 'rose', 'sympath-cortex': 'emerald', arden: 'gold', august: 'amber', greta: 'ember', akomi: 'azure', asi: 'pearl', 'sympath-sei': 'spring' };
+const ANAME = { davara: 'Davara', davaris: 'Davaris', davari: 'Davari', 'sympath-cortex': 'Sympath-Cortex', arden: 'Arden AI', august: 'August', greta: 'Greta', akomi: 'Outlier Akomi', asi: 'ASI', 'sympath-sei': 'Sympath SEI' };
 const aname = (id) => ANAME[id] || cap(id);
 // The live fleet, fetched once at boot and refreshed on config changes. Every
 // agent picker in the app reads from HERE, so no screen can miss an agent.
@@ -294,6 +294,8 @@ const NAV = [
   // LIVE rides fourth — August: "put Live right after the Goal tab". Watching
   // the work happen is a first-class activity, not a footnote.
   ['live', 'Live', 'M12 11.5a.6 .6 0 1 0 .01 0M8 8a5.7 5.7 0 0 0 0 8M16 8a5.7 5.7 0 0 1 0 8M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14', 350, 'NOW'],
+  // Outlier Akomi: a pendant on its cord, with the arcs of hearing on either side.
+  ['akomi', 'Akomi', 'M5 3c.6 6.5 3.4 10 7 10s6.4-3.5 7-10M12 13.5a3 3 0 1 0 .01 0M7.6 14.5a5.5 5.5 0 0 0 0 5M16.4 14.5a5.5 5.5 0 0 1 0 5', 215, 'NOW'],
 
   ['omni', 'Motus Max', 'M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1M12 8.2a3.8 3.8 0 1 0 .01 0', 175, 'MOVE'],
   ['tasks', 'Board', 'M4 6h16M4 12h16M4 18h10', 155, 'MOVE'],
@@ -934,6 +936,7 @@ function _loadView(view, quiet) {
     case 'settings': return loadSettings();
     case 'remote': return (typeof loadRemote === 'function' ? loadRemote() : null);
     case 'greta': return (typeof loadGreta === 'function' ? loadGreta() : null);
+    case 'akomi': return (typeof loadAkomi === 'function' ? loadAkomi() : null);
   }
 }
 
@@ -957,9 +960,24 @@ function renderOverview(o) {
   // titlebar status
   const h = o.health || {};
   const dotc = h.level === 'nominal' ? 'good' : h.level === 'degraded' ? 'bad' : 'warn';
+  // up is not the same as answering: a relay that is signed out says so here, and one click starts the fix
+  const ra = o.relayAuth || {};
+  const raSay = ra.kind === 'signed-out' ? 'relay signed out' : ra.kind === 'no-credits' ? 'relay out of credits' : 'usage limit';
+  const raAct = ra.canFix ? 'sign in' : ra.kind === 'limited' && ra.until ? 'resets ' + new Date(ra.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'check';
   setHTML($('#tbStatus'),
     `<span class="pill"><span class="dot ${dotc}"></span> Cortex ${h.level || '—'}</span>
-     <span class="pill"><span class="dot ${o.uptime ? 'good' : 'bad'}"></span> relay ${o.uptime ? 'up ' + fmtDur(o.uptime) : 'offline'} · ${o.stats.totalTurns} turns · ${compact(o.stats.totalTokens)} tok</span>`);
+     ${ra.state === 'fault'
+      ? `<button class="pill pill-fault" id="tbRelayFix" title="${esc('Since ' + new Date(ra.since).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ': ' + (ra.line || ra.say || ''))}"><span class="dot bad"></span> ${raSay} · ${raAct}</button>`
+      : `<span class="pill" title="${esc(o.stats.totalTurns + ' turns · ' + compact(o.stats.totalTokens) + ' tokens read from the relay log')}"><span class="dot ${o.uptime ? 'good' : 'bad'}"></span> relay ${o.uptime ? 'up ' + fmtDur(o.uptime) : 'offline'} · ${o.stats.totalTurns} turns</span>`}`);
+  const fixBtn = $('#tbRelayFix');
+  if (fixBtn) fixBtn.onclick = async () => {
+    fixBtn.disabled = true;
+    const r = ra.canFix ? await C.relaySignin() : await C.relayCheck();
+    fixBtn.disabled = false;
+    if (ra.canFix) toast(r && r.ok ? (r.already ? 'The sign-in window is already open.' : 'A terminal opened. Approve the sign-in in your browser, then paste the token there. The relay picks it up on its next turn.') : 'Could not open the sign-in: ' + ((r && r.error) || 'unknown'), r && r.ok ? 'good' : 'bad');
+    else toast(r && r.ok ? 'The relay answered. Autonomy resumes.' : 'Still failing: ' + ((r && r.error) || 'no answer'), r && r.ok ? 'good' : 'warn');
+    loadOverview();
+  };
   // rail orb + meta
   const orb = $('#cortexOrb'); orb.className = 'cortex-orb' + (h.level === 'degraded' ? ' bad' : h.level === 'watch' ? ' warn' : '');
   $('#cmUptime').textContent = o.uptime ? fmtDur(o.uptime) : 'offline';
@@ -1320,7 +1338,7 @@ function renderChat() {
     const who = m.who ? `<div class="who">${esc(m.who)}</div>` : '';
     const pend = m.pending ? ' pending' : '';
     const kc = m.kind ? ' kind-' + m.kind : '';
-    return `<div class="msg ${m.role}${pend}${kc}">${who}${esc(m.text)}${m.timer ? `<div class="thinking-timer" data-timer>${m.timer}</div>` : ''}</div>`;
+    return `<div class="msg ${m.role}${pend}${kc}">${who}${esc(m.text)}${m.pending ? `<div class="thinking-note" data-pnote>${esc(m.note || '')}</div>` : ''}${m.timer ? `<div class="thinking-timer" data-timer>${m.timer}</div>` : ''}</div>`;
   }).join('');
   log.scrollTop = log.scrollHeight;
 }
@@ -1346,13 +1364,14 @@ $('#chatForm').addEventListener('submit', async (e) => {
   pushMsg('me', kind === 'steer' ? `/steer → ${aname(agent)}` : kind === 'goal' ? `/goal → ${aname(agent)}` : kind === 'motus' ? `/motus → ${aname(agent)}` : `You → ${aname(agent)}`, text, kind === 'chat' ? '' : kind);
   const pending = { role: 'them', who: aname(agent), text: '', pending: true, timer: '0s', kind: kind === 'chat' ? '' : kind };
   chatMsgs.push(pending); renderChat();
+  CHAT_PENDING = pending;
   const t0 = Date.now();
   // tick the timer node in place — never re-render the log (kills selection + flickers)
   const iv = setInterval(() => { pending.timer = Math.round((Date.now() - t0) / 1000) + 's'; const tEl = $('#chatLog [data-timer]'); if (tEl) tEl.textContent = pending.timer; }, 1000);
   $('#chatSend').disabled = true;
   const r = await C.send({ agent, kind, text });
   clearInterval(iv); $('#chatSend').disabled = false;
-  pending.pending = false; pending.timer = null;
+  pending.pending = false; pending.timer = null; pending.note = ''; CHAT_PENDING = null;
   pending.text = r.ok ? r.text : `⚠ ${r.error || 'relay did not return'}`;
   if (!r.ok) pending.role = 'them';
   renderChat();
@@ -2010,7 +2029,15 @@ C.onPulse((p) => {
   if (CUR.view === 'overview') renderConstellation(p);
   const orb = $('#cortexOrb'); if (orb) orb.classList.toggle('bad', !!p.faulting);
 });
-C.onSendProgress(() => {});
+// A long turn says what it is doing (AOSSI's seats, a gear change) in the bubble
+// that is waiting for it: updated in place, never a re-render of the log.
+let CHAT_PENDING = null;
+C.onSendProgress((p) => {
+  if (!p || p.phase !== 'note' || !CHAT_PENDING || !CHAT_PENDING.pending) return;
+  CHAT_PENDING.note = String(p.text || '').slice(0, 400);
+  const el = $('#chatLog [data-pnote]');
+  if (el) el.textContent = CHAT_PENDING.note;
+});
 
 /* ============================ LIVE STREAMING ============================ */
 const LIVE = { active: false, agent: 'davara', events: [], sid: '', rendered: 0 };

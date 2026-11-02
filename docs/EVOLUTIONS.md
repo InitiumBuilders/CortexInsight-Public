@@ -139,6 +139,16 @@ The Clear archives what the console has moved past: the long bodies of old Duo-D
 
 *Lesson: a seat that looks stuck may only have missed being told it stopped. Before fixing the loop, check that the record of the last turn is true.*
 
+## Era eight: the live seat (November 1)
+
+**3.70.** The fleet had gone dark, and every instrument in the console said it was fine. The desktop relay's runners catch a CLI 401 and answer with a polite card, so the relay logged "OK davara 268c", the app counted a turn, Duo-Drive logged passes, and the breaker never saw a failure. The long-lived sign-in had been revoked and the login session could not refresh. The server was worse off. It had held no subscription token since mid-October, and its turns fell through to OpenRouter, which answered 402 on every one. A reply is now read for what it says before the app believes it. A short reply that opens with a sign-in, credit or usage-limit error counts as a failed turn. Autonomy holds, the phone hears it once, and the title bar and Pulse name the cause. One press opens a terminal where the operator approves the sign-in in a browser and pastes the token; the app never sees it. The hold clears when the token file changes or a real answer comes back, and a hold nothing else lifts checks itself with one tiny turn every half hour. The smoke walk now stages the fault in its own process and fails if the title bar does not say it. An adversarial review of the release found eighteen more defects before it shipped, among them a red pill nobody could click (it sat in the window's drag region), a relay timeout that quietly sent the whole prompt a second time, and an old card in the log that brought the hold back after a restart.
+
+Outlier Akomi joined the fleet: Davara's full vessel on a seat of its own, live through the operator's Omi wearable. It became the front door for Command and DASH-OPS once its seat existed. Its room owns one switch and reads one feed, both plain files that a separate bridge service shares. Off is the default, and off means the bridge keeps nothing. While it is on, the bridge keeps a short note of each conversation and acts when it hears its name. It stores no audio and no transcript. A proposal reaches the board only when the operator keeps it, as the action alone and as his own task; nothing else from the feed leaves the room. A far console sees counts, and nothing Akomi heard is ever a broadcast candidate, kept or not. What he says to it out loud is counted as a turn and never shown. ASI, the deep-work seat, joined beside it.
+
+AOSSI asks one question of every seat at six horizons, from this hour to ten years, then finds the one move that holds across the seats and across time. The move becomes the first path in Motus Max, one press from being driven.
+
+*Lesson: an instrument that reads its own status line can be precisely wrong. Read what the turn said before believing it said OK.*
+
 ## What the arc says
 
 Three loops turned through these versions. The build loop: attention became shipped surface. The canon loop: every build became a lesson, and the lesson became a law in the code or in these pages. The mover loop: the console became something a second operator could run without the first one in the room. The third loop is the youngest and the one this release is for.

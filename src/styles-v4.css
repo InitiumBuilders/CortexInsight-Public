@@ -7,10 +7,12 @@
   --ink-1:#f4f6f9; --ink-2:#e6ebf4; --ink-3:#dce3ec;
   --t-violet:#b99aff; --t-cyan:#7be3ea; --t-rose:#f19ac0; --t-emerald:#6fe8bf;
   --t-gold:#f0d48c; --t-amber:#ffd98a; --t-slate:#b7c6e2; --t-spring:#9ff0b0; --t-ember:#ffb08a;
+  --t-azure:#8fb8ff; --t-pearl:#f1ebdf;
 }
 .tone-violet{--tone:var(--t-violet)} .tone-cyan{--tone:var(--t-cyan)} .tone-rose{--tone:var(--t-rose)}
 .tone-emerald{--tone:var(--t-emerald)} .tone-gold{--tone:var(--t-gold)} .tone-amber{--tone:var(--t-amber)}
 .tone-slate{--tone:var(--t-slate)} .tone-spring{--tone:var(--t-spring)} .tone-ember{--tone:var(--t-ember)}
+.tone-azure{--tone:var(--t-azure)} .tone-pearl{--tone:var(--t-pearl)}
 
 /* ── the machine form folds away once linked ───────────────────────────── */
 details.rm-machine > summary{list-style:none;cursor:pointer;user-select:none}
@@ -264,3 +266,74 @@ details.rm-machine:not([open]){padding-bottom:12px}
 /* ── title bar: one telemetry pill, never wrapped, gone under 1100px ────── */
 .tb-status .pill{white-space:nowrap}
 @media (max-width:1100px){#tbStatus .pill{display:none}}
+
+/* ── the relay that is signed out: the one pill that never hides ────────── */
+#tbStatus .pill.pill-fault{display:inline-flex;align-items:center;gap:6px;border:0;font:inherit;color:#ffd9df;cursor:pointer;
+  background:rgba(255,93,120,.16);box-shadow:0 0 18px rgba(255,93,120,.22);-webkit-tap-highlight-color:transparent}
+#tbStatus .pill.pill-fault:hover{background:rgba(255,93,120,.24);box-shadow:0 0 24px rgba(255,93,120,.34)}
+#tbStatus .pill.pill-fault:focus-visible{outline:2px solid rgba(255,140,160,.7);outline-offset:2px}
+#tbStatus .pill.pill-fault:disabled{opacity:.7;cursor:progress}
+
+/* ── Outlier Akomi: the switch is the one lit panel, the pendant its subject ── */
+.ak-switch{display:grid;grid-template-columns:88px 1fr auto;align-items:center;gap:20px;padding:22px 24px;border-radius:28px;margin:4px 0 16px;
+  box-shadow:inset 0 1px 0 rgba(216,239,252,.12),0 0 0 1px rgba(143,184,255,.12),0 18px 48px rgba(5,11,32,.42)}
+.ak-switch.on{box-shadow:inset 0 1px 0 rgba(216,239,252,.22),0 0 0 1px rgba(143,184,255,.34),0 0 44px rgba(143,184,255,.2),0 18px 48px rgba(5,11,32,.42)}
+.ak-pendant{width:88px;height:88px;overflow:visible}
+.ak-cord{fill:none;stroke:rgba(216,239,252,.5);stroke-width:1.8;stroke-linecap:round}
+.ak-halo{fill:rgba(143,184,255,.06);transform-box:fill-box;transform-origin:center}
+.ak-stone{fill:#1a1f3c;stroke:var(--t-azure);stroke-width:1.8}
+.ak-ear{fill:none;stroke:rgba(143,184,255,.28);stroke-width:1.8;stroke-linecap:round}
+.ak-pendant.on .ak-stone{fill:rgba(143,184,255,.32);stroke:#d8effc}
+.ak-pendant.on .ak-halo{fill:rgba(143,184,255,.2);animation:akBreathe 5.6s ease-in-out infinite}
+.ak-pendant.on .ak-ear{stroke:rgba(143,184,255,.85);animation:akHear 5.6s ease-in-out infinite}
+@keyframes akBreathe{0%,100%{transform:scale(.84);opacity:.5}50%{transform:scale(1.12);opacity:1}}
+@keyframes akHear{0%,100%{opacity:.42}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.ak-pendant.on .ak-halo,.ak-pendant.on .ak-ear{animation:none}}
+.ak-state{font-size:24px;font-weight:600;letter-spacing:-.01em;color:var(--ink-1)}
+.ak-switch.on .ak-state{color:var(--t-azure)}
+.ak-reading{font-size:15px;line-height:1.5;color:var(--ink-2);margin-top:4px;max-width:64ch}
+.ak-wake{margin-top:10px;font-size:14px;color:var(--ink-3)}
+.ak-wake summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:10px;min-height:32px}
+.ak-wake summary::-webkit-details-marker{display:none}
+.ak-wake b{color:var(--ink-1);font-weight:600}
+.ak-wake-edit{display:flex;gap:8px;margin-top:8px;max-width:440px}
+.ak-wake-edit .txt{flex:1;min-width:0}
+.ak-toggle{min-height:44px;white-space:nowrap}
+.ak-prop{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;padding:12px 0;border-top:1px solid rgba(255,255,255,.07)}
+.ak-prop-act{display:flex;gap:8px;flex-shrink:0}
+.ak-row{display:grid;grid-template-columns:52px 84px minmax(0,1fr);gap:12px;align-items:baseline;padding:11px 0;border-top:1px solid rgba(255,255,255,.07);cursor:pointer}
+.ak-when{font-size:12px;color:var(--ink-3)}
+.ak-k{font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--t-azure)}
+.ak-row.k-wake .ak-k{color:var(--t-pearl)}
+.ak-row.k-error .ak-k,.ak-row.bad .ak-k{color:#ff9aac}
+.ak-body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ak-body b{font-size:15px;font-weight:600;color:var(--ink-1)}
+.ak-text{font-size:14px;line-height:1.5;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
+.ak-row.open .ak-text{display:block;-webkit-line-clamp:unset}
+.ak-foot{display:flex;flex-wrap:wrap;gap:8px 18px;margin:14px 2px 6px;font-size:13px;color:var(--ink-3)}
+@media (max-width:720px){
+  .ak-switch{grid-template-columns:64px minmax(0,1fr);padding:18px}
+  .ak-pendant{width:64px;height:64px}
+  .ak-toggle{grid-column:1/-1;width:100%}
+  .ak-row{grid-template-columns:44px minmax(0,1fr)}
+  .ak-row .ak-body{grid-column:1/-1}
+  .ak-prop{flex-direction:column}
+}
+
+/* ── the title bar never breaks a word across two lines; the subtitle gives way first ── */
+.tb-sub,.gear-chip,.tb-stop,.tb-duo{white-space:nowrap}
+@media (max-width:1500px){.tb-sub{display:none}}
+
+/* ── review fixes, 3.70 ─────────────────────────────────────────────────────
+   The title bar is a window-drag region (frameless window): without no-drag a
+   click on a pill is taken by Windows as a caption click and never reaches it. */
+#tbStatus .pill{-webkit-app-region:no-drag}
+#tbStatus .pill.pill-fault{font-size:12px;min-height:28px}
+/* the Akomi room's own controls: 13px text and 44px targets */
+.ak-switch .mini,.ak-props .mini,.ak-wake-edit .mini{min-height:44px;font-size:13px;padding:0 16px}
+.ak-wake summary{min-height:44px}
+.ak-wake summary .mini{display:inline-flex;align-items:center;min-height:32px;font-size:13px;padding:0 12px}
+.ak-row:focus-visible{outline:2px solid rgba(143,184,255,.6);outline-offset:4px;border-radius:12px}
+/* the waiting bubble says what a long turn is doing */
+.msg .thinking-note{font-size:13px;line-height:1.45;color:var(--ink-3);margin-top:6px}
+.msg .thinking-note:empty{display:none}

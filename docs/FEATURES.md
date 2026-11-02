@@ -353,3 +353,27 @@ The console was designed from meaning outward. Before a room got its panels it g
 **Why.** A backlog the fleet can fill faster than anyone can close stops being a plan. A loop that keeps failing costs tokens and teaches nothing.
 
 **Module.** `fleetIntake`, `boardTidy`, `tidyUndo`, `breakerRecord` in main.js.
+
+## Sign-in truth
+
+**What.** A relay can be up and still unable to answer. When the Claude sign-in behind it is revoked or expired, the runners answer with a short card and the relay logs it as OK. The console reads each reply before believing it: a short reply that opens with a sign-in, credit or usage-limit error is a failed turn. Autonomy holds, one notification and one phone message go out, the title bar shows "relay signed out · sign in", and Pulse names the cause. The watchdog reads the relay's own reply logs too, so a fault is seen even when the turn came from Telegram. Pressing the pill or the Pulse button opens a terminal running the fleet tree's `relay-signin.sh`: the operator approves in a browser and pastes the token there. The hold clears when the token file changes or a real answer arrives.
+
+**Why.** The fleet ran dark for weeks while every gauge here read nominal. A status line is a claim; the reply is the evidence.
+
+**Module.** `relayFault`, `relayAuthNote`, `relayAuthTick`, `cortex:relaySignin`, `cortex:relayCheck` in main.js; the pill in `src/renderer.js`; the Pulse banner in `src/renderer-v2.js`.
+
+## Outlier Akomi
+
+**What.** A seat that is Davara's full vessel, live through the operator's Omi wearable, and from 3.70 the front door for Command and DASH-OPS. Its room has one switch, off by default. While it is on, a bridge service (the Outlier Akomi skill's reference implementation, a separate process) keeps a short note of each Omi conversation and answers when it hears its name. The room shows today's notes, what it heard and said, and its proposals, each of which reaches the board only when the operator presses Keep. ASI, the deep-work seat, sits beside it in the fleet.
+
+**Why.** A live AI that hears the day is only safe if the operator holds the switch and chooses what it keeps. The contract is two plain files: the app writes `~/.cortexinsight/akomi/state.json`, the bridge appends to `~/.cortexinsight/akomi/feed.jsonl`. A missing switch file means off, and off means nothing is kept. No audio and no transcript is stored, and a far console sees counts and never words. A kept proposal lands on the board as the action alone, as his own task, and nothing Akomi heard is ever a MotusLive candidate. What he says to it out loud is counted as a turn and never shown, toasted or forwarded.
+
+**Module.** `akomiSwitch`, `akomiSetSwitch`, `akomiFeed`, `akomiKeep`, `akomiDigest`, `migrateAkomiFrontDoor` in main.js; `loadAkomi` in `src/renderer-v4.js`.
+
+## AOSSI
+
+**What.** `/aossi <question>` in Command (also `/aosi`, `/aubri`, `/claudbri`). Davara, Greta and Arden, with ASI and Akomi when their seats exist, each answer at six horizons (this hour, today, this week, this quarter, this year, ten years) and name the one move that is right at all of them, with what would prove it wrong. The front-door seat then finds the move that holds across the seats and across time. The answer shows in Command, and the move becomes the first path in Motus Max.
+
+**Why.** Each seat sees from its own place, and a move that is right this hour can be wrong this year. A move several seats reach by different roads, and that holds at every horizon, is worth driving.
+
+**Module.** `aossiRun`, `aossiSeats`, `aossiPick`, `aossiText` in main.js.

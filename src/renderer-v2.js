@@ -3666,6 +3666,10 @@ function omniPaths() {
     if (!t || out.some((p) => p.t === t)) return;
     out.push({ t, sub: sub || '', step: step || '', conf: Number.isFinite(conf) ? conf : null, fals: fals || '' });
   };
+  // an AOSSI move from the last day stays first: arming fires a new read, and the
+  // move he asked every seat for must not fall off the deck because of it
+  const A = (OMNI.reads || []).find((r) => r.source === 'aossi' && Date.now() - (Date.parse(r.ts) || 0) < 864e5);
+  if (A) add(A.lever, A.whyNow, A.firstStep, A.confidence, A.falsifier);
   const R = (OMNI.reads || [])[0];
   if (R) { add(R.lever, R.whyNow, R.firstStep, R.confidence, R.falsifier); add(R.frame, 'her divergent frame from the same read', ''); }
   const F = (OMNI.framesAll || [])[0];
@@ -4771,6 +4775,17 @@ async function paintTheMove() {
     : 'The console reads a fleet tree in WSL: a home folder holding logs/interactions and agents. ')
     + 'Set the fleet path on Config → Preferences (it is discovered on first run when one exists), then reopen Pulse.', { go: 'settings', label: 'Set the fleet path' });
   else if (o && !o.uptime) push(100, 355, 'BROKEN', 'The relay is offline', 'Nothing can run until the mouth-proxy answers on 127.0.0.1:8788.', { go: 'settings', label: 'Open diagnosis' });
+  else if (o && o.relayAuth && o.relayAuth.state === 'fault') {
+    // the cause, named, with the fix one press away (a terminal opens; the sign-in is his)
+    const ra = o.relayAuth;
+    push(98, 355, ra.kind === 'no-credits' ? 'OUT OF CREDITS' : ra.kind === 'limited' ? 'AT THE LIMIT' : 'SIGNED OUT', cap(ra.say || 'the relay is failing'),
+      'Every Claude turn since ' + new Date(ra.since).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' has failed, so autonomy is holding. '
+      + (ra.canFix ? 'A terminal opens: approve in your browser, then paste the token it shows.'
+        : ra.kind === 'signed-out' ? 'Run claude setup-token on the relay\'s machine, save the token where the relay reads it, then press check in the title bar.'
+        : ra.kind === 'no-credits' ? 'Top up that provider, or move the seat off the paid route. It clears by itself on the next real answer.'
+        : 'It resets by itself.'),
+      { go: ra.canFix ? 'relay-signin' : 'settings', label: ra.canFix ? 'Sign it back in' : 'See the diagnosis' });
+  }
   else if (h.level === 'degraded') push(92, 355, 'DEGRADED', 'The Cortex is degraded', 'Turns are faulting. Look at why before starting anything new.', { go: 'settings', label: 'See the diagnosis' });
 
   // ── things WAITING ON HIM — his answer unblocks a real agent ──
@@ -4810,7 +4825,13 @@ async function paintTheMove() {
     ${rest.length ? `<div class="tm-rest">${rest.map((m) => `
       <button class="tm-r" data-tmgo="${m.act.go}" style="--tmh:${m.hue}">
         <span class="tm-r-k">${esc(m.kind)}</span><span class="tm-r-t">${esc(m.title)}</span></button>`).join('')}</div>` : ''}`;
-  $$('#theMove [data-tmgo]').forEach((x) => x.onclick = () => switchView(x.dataset.tmgo));
+  $$('#theMove [data-tmgo]').forEach((x) => x.onclick = async () => {
+    if (x.dataset.tmgo !== 'relay-signin') return switchView(x.dataset.tmgo);
+    x.disabled = true;
+    const r = await C.relaySignin().catch(() => null);
+    x.disabled = false;
+    toast(r && r.ok ? (r.already ? 'The sign-in window is already open.' : 'A terminal opened. Approve the sign-in in your browser, then paste the token there.') : 'Could not open the sign-in: ' + ((r && r.error) || 'unknown'), r && r.ok ? 'good' : 'bad');
+  });
 }
 
 /* ═══ THE PRIVACY VERDICT — read the public endpoint the way a stranger does.

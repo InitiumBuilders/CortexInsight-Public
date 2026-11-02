@@ -125,6 +125,20 @@ const FLEET = [
   { id: 'greta', name: 'Greta', lane: 'relay', tone: 'ember', maxTurns: 24,
     role: 'Critic · the quality, design and symbolic standard', effort: 'max',
     coder: false, blurb: 'Judges the big moves before they count. Says what fails, the smallest fix that makes it great, and what must survive.' },
+  // Outlier Akomi (2026-11-01, August: "update our CortexInsight to start using our
+  // standard latest motus agent we'll call this fully activated live ai Outlier Akomi").
+  // Davara's full vessel on a seat of its own, live through his Omi while the
+  // switch is on. The relay runs it as run-davara.sh with its own checkpoint, so
+  // it never resumes Davara's session. Its soul lives in the fleet tree.
+  { id: 'akomi', name: 'Outlier Akomi', lane: 'relay', tone: 'azure', maxTurns: 48,
+    role: "Davara's full vessel on its own seat, live through Omi", effort: 'max',
+    coder: false, blurb: 'Hears your Omi while the switch is on and answers when you say its name.' },
+  // ASI (2026-11-01, August: "that deep work bot let's build that out of our setup and
+  // stack for motusmoves.us/Davara so we'll follow those motus agent project stack").
+  // The deep-work seat: one question held for a long session, closed on a move.
+  { id: 'asi', name: 'ASI', lane: 'relay', tone: 'pearl', maxTurns: 64,
+    role: 'Deep work: holds one question and closes on a move', effort: 'max',
+    coder: true, blurb: "Built from Davara's baseline and August-V3 for long sessions on one question." },
   { id: 'sympath-sei', name: 'Sympath SEI', lane: 'openrouter', tone: 'rose', maxTurns: 0,
     role: 'Healer SEI · OpenRouter · the one paid-key agent', effort: null,
     provider: 'openrouter', external: true,
@@ -516,6 +530,24 @@ function migrateOpus55(s) {
   }
   s.migrations.opus55 = { ts: new Date().toISOString(), was };
 }
+// ONE-TIME, and only once its soul exists. August 2026-11-01: "update our
+// CortexInsight to start using our standard latest motus agent we'll call this
+// fully activated live ai Outlier Akomi". Command and DASH-OPS answer as Akomi
+// from then on. The old choices are kept beside the stamp; Settings changes
+// them back, and a choice he makes afterwards stays his.
+function migrateAkomiFrontDoor() {
+  const s = STATE.settings;
+  STATE.migrations = STATE.migrations || {};
+  if (STATE.migrations.akomiFrontDoor) return false;
+  if (!statOf(P('agents', 'akomi', 'SOUL.md'))) return false;   // the seat is not there yet; ask again later
+  STATE.migrations.akomiFrontDoor = { ts: new Date().toISOString(), was: { defaultAgent: s.defaultAgent || 'davara', voiceAgent: s.voiceAgent || 'davara' } };
+  s.defaultAgent = 'akomi';
+  s.voiceAgent = 'akomi';
+  saveState();
+  safe(() => publishFleetConfig());
+  pushNotification('good', 'Outlier Akomi answers now', 'Command and DASH-OPS speak as Outlier Akomi, Davara\'s full vessel on its own seat. Davara and the rest of the fleet are one tap away in the agent picker, and Settings switches the default back.', 'agents', 'akomi-front-door');
+  return true;
+}
 // A plausible-looking residential IPv4 — used as the public face of "your IP" so the
 // real one is never exposed to the renderer (or a screen-peeker, or a compromised view).
 function genFakeIp() {
@@ -847,6 +879,8 @@ const ROUTE_TOKEN = {
   arden: 'arden', august: 'august',   // one August; the observer duplicate is retired (2026-09-16)
   workhorse: 'cortex-workhorse',   // the reflex lane — mouth-proxy maps it to the lean seat
   greta: 'greta',                  // the critic; both relays map the name to her own seat
+  akomi: 'cortex-akomi',           // the live vessel; the desktop mouth routes it (2026-11-01)
+  asi: 'cortex-asi',               // the deep-work seat
   scribe: 'cortex-scribe',         // titles and summaries; never a thinking seat
 };
 
@@ -930,6 +964,7 @@ function breakerCheck(agent, message) {
 }
 function breakerRecord(agent, message, r, operator = false) {
   if (r && r.blocked) return;                       // a stop is not a failure
+  if (r && r.fault && r.fault !== 'failed') return; // a dead sign-in has its own hold and its own message; a spent-retries card is a plain failure
   const k = brkKey(agent, message);
   const t = now();
   if (operator) {                                   // his own words are never held; they still count toward the fleet streak
@@ -970,11 +1005,178 @@ function breakerState() {
 // opts.operator: the operator typed or said this. The per-ask breaker never
 // holds his own words (the notice has always promised that); only loops the
 // app runs by itself are held.
+// ###########################################################################
+//  v3.70 · A RELAY THAT SAYS OK HAS NOT NECESSARILY ANSWERED.
+//
+//  2026-11-01: both relays were down and both logged OK. The desktop runner
+//  catches a CLI 401 and answers with a polite 268-character card ("my relay's
+//  Claude subscription sign-in has expired"), so the relay wrote "OK davara
+//  268c", this app counted a turn, Duo-Drive logged passes, and the breaker
+//  never saw a failure. The server's turns had fallen through to OpenRouter
+//  and came back 402 on every turn. Every instrument here said the fleet was
+//  fine. A reply is now read for what it SAYS before the app believes it: the
+//  hold is specific (autonomy waits, his own turns still go), the phone hears
+//  it once, and the fix is one click from the title bar.
+// ###########################################################################
+// Every real card OPENS with its error: the CLI's own words, or the runners'
+// fixed card ("🔑 August — my relay's Claude subscription sign-in has expired
+// (a 401 …"). So every pattern is anchored to the start, and a raw CLI error
+// must also be one short paragraph. A reply that quotes a card, or a short
+// answer about somebody else's 401, is not a fault. `say: null` marks a turn
+// that failed without a sign-in fault: the breaker counts it, no hold is set.
+const RELAY_FAULTS = [
+  { kind: 'signed-out', say: 'the relay is signed out of the Claude subscription', card: true,
+    re: /^[^\w\n]{0,4}august\W{1,4}(?:my|the) relay['’]s claude subscription sign-in has expired/i },
+  { kind: 'signed-out', say: 'the relay is signed out of the Claude subscription',
+    re: /^(?:failed to authenticate|invalid authentication credentials|invalid api key|api error: 401|oauth (?:access token|session)[^\n]{0,60}(?:revoked|expired))/i },
+  { kind: 'no-credits', say: 'the relay\'s model provider is out of credits',
+    re: /^(?:api error: 402|(?:your )?credit balance is too low)/i },
+  { kind: 'limited', say: 'the Claude subscription hit its usage limit',
+    re: /^(?:claude (?:ai )?usage limit reached|(?:5-hour|session|weekly) limit reached|you['’]ve hit your (?:usage )?limit|api error: 429)/i },
+  // the runners' own "every retry spent" cards
+  { kind: 'failed', say: null, card: true,
+    re: /^(?:one breath, august\W{1,4}the cortex relay couldn['’]t complete|the [\w-]+ relay couldn['’]t complete this turn)/i },
+];
+// The faults are short cards. A real answer that mentions a 401 is long.
+function relayFault(text) {
+  const t = String(text || '').trim();
+  if (!t || t.length > 700) return null;
+  const oneShortParagraph = t.length <= 400 && !/\n\s*\n/.test(t);
+  for (const f of RELAY_FAULTS) {
+    if (!f.re.test(t) || (!f.card && !oneShortParagraph)) continue;
+    return { kind: f.kind, say: f.say, line: (t.split('\n').find((l) => l.trim()) || '').trim().slice(0, 220) };
+  }
+  return null;
+}
+function relayAuthState() { return STATE.relayAuth || (STATE.relayAuth = { state: 'ok' }); }
+function relaySigninScript() { return P('SystemsCortex', 'relay-signin.sh'); }
+// What the relay signs in with, newest first by the moment it last changed. The
+// desktop relay reads semble-oauth-token; the server relay reads
+// $CORTEX_TOKEN_FILE, by default cortex-oauth-token. The CLI's own login file
+// counts only where neither token file exists, because a token file outranks it
+// (a fresh `claude auth login` beside a revoked token file fixes nothing).
+function relayTokenMtime() {
+  const home = path.join(path.dirname(root()), '.claude');
+  const files = [!IS_WIN && process.env.CORTEX_TOKEN_FILE, path.join(home, 'semble-oauth-token'), path.join(home, 'cortex-oauth-token')].filter(Boolean);
+  const stats = files.map((f) => statOf(f)).filter(Boolean);
+  if (!stats.length) { const c = statOf(path.join(home, '.credentials.json')); return c ? c.mtimeMs : 0; }
+  return Math.max(...stats.map((s) => s.mtimeMs));
+}
+function relayAuthHeld() {
+  const a = relayAuthState();
+  if (a.state !== 'fault') return null;
+  if (a.kind === 'limited' && a.until && a.until < now()) return null;
+  return a;
+}
+function relayAuthPublic() {
+  const a = relayAuthState();
+  if (a.state !== 'fault') return { state: 'ok', cleared: a.cleared || 0, was: a.was || '' };
+  return { state: 'fault', kind: a.kind, say: (RELAY_FAULTS.find((f) => f.kind === a.kind) || {}).say || 'the relay is failing',
+    line: a.line || '', since: a.since || 0, count: a.count || 0, agent: a.agent || '', until: a.until || 0,
+    // only a sign-in fault is fixed by a sign-in; credits and limits are checked, not signed
+    canFix: IS_WIN && a.kind === 'signed-out' && !!statOf(relaySigninScript()) };
+}
+const hhmm = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function relayFixWords(kind) {
+  return kind === 'signed-out' ? 'Sign it back in from the title bar (relay signed out), or run relay-signin.sh from the fleet tree\'s SystemsCortex folder on the laptop.'
+    : kind === 'no-credits' ? 'Top up that provider, or move the seat off the paid route. It clears by itself on the next real answer.'
+    : 'It resets by itself; autonomy waits half an hour.';
+}
+// One place decides. A fault arrives from a turn the app sent, or from a reply
+// the watchdog read in the relay's own log; a real answer clears it. A fault
+// stamped before the last clear is history, never a new outage (a restart
+// re-reads the log, and the newest entry of a quiet seat can still be a card).
+function relayAuthNote(agent, r, via = 'turn') {
+  if (r && r.fault === 'failed') return;            // a failed turn, not a sign-in: the breaker counts it
+  const a = relayAuthState();
+  const t = now();
+  if (r && r.fault) {
+    const at = r.at || t;
+    if (at <= (a.cleared || 0)) return;
+    const fresh = a.state !== 'fault' || a.kind !== r.fault;
+    const since = fresh ? at : (a.since || at);
+    STATE.relayAuth = { state: 'fault', kind: r.fault, line: r.faultLine || a.line || '', last: t, agent, via, since,
+      count: fresh ? 1 : (a.count || 0) + 1, until: r.fault === 'limited' ? at + 30 * 60000 : 0,
+      probeAt: fresh ? t : (a.probeAt || t),
+      tokenMtime: fresh ? safe(() => relayTokenMtime(), 0) : (a.tokenMtime || 0) };
+    if (!fresh) return;
+    saveState();
+    _readingMemo = { at: 0, v: null };   // the reading is cached for 30 s; this cannot wait
+    const say = (RELAY_FAULTS.find((f) => f.kind === r.fault) || {}).say || 'the relay is failing';
+    const body = 'Every turn since ' + hhmm(since) + ' has failed with: “' + (r.faultLine || '') + '”. Autonomy is holding so nothing runs on a dead line. ' + relayFixWords(r.fault);
+    pushNotification('bad', cap(say), body, 'overview', 'relay-auth:' + r.fault + ':' + localDay());
+    safe(() => signal({ kind: 'alert', key: 'relay-auth:' + r.fault + ':' + localDay(), title: cap(say), body }));
+    safe(() => omniAudit('relay', say + ' (' + (r.faultLine || '') + ')'));
+    return;
+  }
+  if (r && r.ok && a.state === 'fault' && (r.at || t) > (a.since || 0)) {
+    STATE.relayAuth = { state: 'ok', cleared: t, was: a.kind, clearedBy: agent };
+    saveState();
+    _readingMemo = { at: 0, v: null };
+    pushNotification('good', 'The relay is answering again', ((FLEET_BY_ID[agent] || {}).name || agent) + ' just gave a real answer, so autonomy resumes.', 'overview', 'relay-auth-ok:' + t, { native: false });
+  }
+}
+// The seat a check should ask: the one that faulted, while it can still be reached.
+function relayProbeSeat() {
+  const a = relayAuthState();
+  return a.agent && isRelayAgent(a.agent) && !agentCfg(a.agent).paused ? a.agent : 'davara';
+}
+// The watchdog's half. The relay's own log is read too, so a fault is seen when
+// the turn came from Telegram or a runner, and a fresh sign-in is seen without
+// spending a turn. A hold that nothing else lifts checks itself every thirty
+// minutes with one tiny turn, because a topped-up provider changes no file.
+const _raSeen = { proxy: 0, files: new Map(), probing: false };
+function relayAuthTick() {
+  const a = relayAuthState();
+  if (a.state === 'fault' && a.kind !== 'limited') {
+    const m = safe(() => relayTokenMtime(), 0);
+    if (m && m > (a.tokenMtime || 0)) {
+      STATE.relayAuth = { state: 'ok', cleared: now(), was: a.kind, clearedBy: 'sign-in' };
+      saveState();
+      _readingMemo = { at: 0, v: null };
+      pushNotification('good', 'The relay is signed back in', 'A new sign-in landed, so autonomy resumes. The next turn confirms it.', 'overview', 'relay-signin:' + Math.round(m));
+      return;
+    }
+    if (!_raSeen.probing && now() - (a.probeAt || a.since || 0) > 30 * 60000) {
+      _raSeen.probing = true;
+      a.probeAt = now();
+      relaySend(relayProbeSeat(), 'Reply with exactly: PONG', 180000, { operator: true })
+        .catch(() => {}).finally(() => { _raSeen.probing = false; });
+    }
+  }
+  const pst = statOf(P('logs', 'mouth-proxy.log'));
+  if (!pst || pst.mtimeMs === _raSeen.proxy) return;
+  _raSeen.proxy = pst.mtimeMs;
+  const day = localDay();
+  const seen = [];
+  for (const ag of AGENTS) {
+    const f = P('logs', 'interactions', ag + '-' + day + '.md');
+    const st = statOf(f);
+    if (!st || _raSeen.files.get(f) === st.mtimeMs) continue;
+    _raSeen.files.set(f, st.mtimeMs);
+    const rep = safe(() => recentReplies(ag, 1)[0], null);
+    if (!rep) continue;
+    const at = Date.parse(String(rep.ts || '').replace(' ', 'T')) || 0;
+    if (!at || now() - at > 24 * 3600e3) continue;
+    seen.push({ ag, at, fl: relayFault(rep.reply), real: String(rep.reply || '').trim().length > 40 });
+  }
+  // in the order they happened, so the newest word wins whichever seat said it
+  for (const e of seen.sort((x, y) => x.at - y.at)) {
+    if (e.fl) relayAuthNote(e.ag, { ok: false, fault: e.fl.kind, faultLine: e.fl.line, at: e.at }, 'log');
+    else if (e.real) relayAuthNote(e.ag, { ok: true, at: e.at }, 'log');
+  }
+}
 function relaySend(agent, message, timeoutMs = 1850000, opts = {}) {
   const operator = !!(opts && opts.operator);
   const held = operator ? null : breakerCheck(agent, message);
   if (held) return Promise.resolve({ ok: false, text: '', latency: 0, error: held, blocked: true, breaker: true });
-  return relaySendRaw(agent, message, timeoutMs).then((r) => { safe(() => breakerRecord(agent, message, r, operator)); return r; });
+  return relaySendRaw(agent, message, timeoutMs).then((r) => {
+    // read what it SAYS before believing it said OK
+    if (r && r.ok) { const f = relayFault(r.text); if (f) r = { ...r, ok: false, error: (f.say ? cap(f.say) : 'The relay could not complete the turn') + ': ' + f.line, fault: f.kind, faultLine: f.line }; }
+    safe(() => relayAuthNote(agent, r));
+    safe(() => breakerRecord(agent, message, r, operator));
+    return r;
+  });
 }
 function relaySendRaw(agent, message, timeoutMs = 1850000) {
   message = withOperator(message);                 // the fleet hears the operator's own name
@@ -1005,7 +1207,12 @@ function relaySendRaw(agent, message, timeoutMs = 1850000) {
       });
     });
     // A transport-level failure is exactly the WSL-bridge symptom: retry inside WSL.
+    // ⚠ NOT after our own timeout: req.destroy() raises ECONNRESET, and retrying
+    // then sent the whole prompt a second time through WSL as a ghost turn whose
+    // answer nobody read, at full depth (review, 2026-11-01).
+    let timedOut = false;
     req.on('error', async (e) => {
+      if (timedOut) return;
       if (['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ECONNABORTED'].includes(e.code)) {
         _wslFallback = { on: true, since: now() };
         const r = await relayViaWsl(payload, timeoutMs);
@@ -1015,7 +1222,7 @@ function relaySendRaw(agent, message, timeoutMs = 1850000) {
       }
       resolve({ ok: false, text: '', latency: (now() - t0) / 1000, error: e.message });
     });
-    req.on('timeout', () => { req.destroy(); resolve({ ok: false, text: '', latency: (now() - t0) / 1000, error: 'timeout (>30m)' }); });
+    req.on('timeout', () => { timedOut = true; req.destroy(); resolve({ ok: false, text: '', latency: (now() - t0) / 1000, error: 'timeout (>30m)' }); });
     req.write(payload); req.end();
   });
 }
@@ -1123,7 +1330,9 @@ function parseInteractions(maxPerFile = 160 * 1024) {
         ts: r.ts, agent: r.agent || 'unknown', status: r.status || '?',
         via: r.via || 'mouth-proxy', attempts: r.attempts || 1,
         latency: +r.latency_s || 0, chars: +r.out_chars || 0,
-        tokens: estTokens(+r.out_chars || 0), msg: r.msg || '',
+        // an Omi wake turn carries what he said out loud, and the relay logs it whole:
+        // the app counts the turn and never shows, toasts or forwards the words
+        tokens: estTokens(+r.out_chars || 0), msg: r.agent === 'akomi-fast' ? '' : (r.msg || ''),
         ok: String(r.status || '').startsWith('OK'),
         epoch: Date.parse((r.ts || '').replace(' ', 'T')) || 0,
       });
@@ -2083,7 +2292,12 @@ function systemDynamics() {
   const biggestDay = days.reduce((m, v, i) => (v > m.v ? { v, i } : m), { v: 0, i: 0 });
 
   const tasks = STATE.tasks || [];
-  const open = tasks.filter((t) => t.status !== 'done');
+  // Parked cards are not work in progress; every other open-set here excludes
+  // them, and counting them made this reading say "closing is the lever" on a
+  // board whose live set clears in ten days.
+  const isParked = (t) => (t.tags || []).includes('parked');
+  const open = tasks.filter((t) => t.status !== 'done' && !isParked(t));
+  const parked = tasks.filter((t) => t.status !== 'done' && isParked(t)).length;
   const done = tasks.filter((t) => t.status === 'done');
   const doneAtOf = (t) => Date.parse(t.doneAt || t.updated || '') || 0;
   const done7 = done.filter((t) => doneAtOf(t) >= d7).length;
@@ -2114,7 +2328,7 @@ function systemDynamics() {
     ? `${wk} turns this week against ${wkPrev} last week (${wk >= wkPrev ? '+' : ''}${Math.round(100 * (wk - wkPrev) / wkPrev)}%).`
     : `${wk} turns this week, with no prior week to compare.` });
   if (open.length) R.push({ k: 'flow', t: clearDays != null
-    ? `${open.length} open on the board and ${done28} closed in 28 days. At this pace the board clears in about ${Math.round(clearDays)} days (Little's law: work in progress divided by throughput). ${clearDays > 30 ? 'Closing tasks is the lever now.' : 'Healthy. Keep intake matched to the close rate.'}`
+    ? `${open.length} open on the board${parked ? ` (${parked} parked, not counted)` : ''} and ${done28} closed in 28 days. At this pace the board clears in about ${Math.round(clearDays)} days (Little's law: work in progress divided by throughput). ${clearDays > 30 ? 'Closing tasks is the lever now.' : 'Healthy. Keep intake matched to the close rate.'}`
     : `${open.length} open on the board and nothing closed in 28 days. Until something reaches done, the board only lists work.` });
   if (leads.length) R.push({ k: 'delay', t: `A task takes a median ${dur(leadMed)} from created to done (${leads.length} closed).` });
   if (rec7.length || duo.runs) R.push({ k: 'loops', t: `Duo-Drive this week: ${shipped7} shipped, ${reported7} reported, ${skipped7} skipped${duo.skipped ? `. ${duo.skipped} idle passes avoided all time, which is the balancing loop doing its job` : ''}.` });
@@ -2137,7 +2351,7 @@ function systemDynamics() {
   const v = {
     ts: t0, ring, today, days: days.slice().reverse(),
     peak: { start: peak.start, end: (peak.start + 3) % 24, share: n28 ? peak.sum / n28 : 0 },
-    stocks: { open: open.length, learnings: learn.length, repeats, receipts: dw.length },
+    stocks: { open: open.length, parked, learnings: learn.length, repeats, receipts: dw.length },
     flows: { turns7: n7, turnsWeekPrev: wkPrev, done7, shipped7, perDay: Math.round((n7 / 7) * 10) / 10 },
     delays: { relayMed: Math.round(q(0.5)), relayP90: Math.round(q(0.9)), leadMedDays: Math.round(leadMed * 10) / 10, clearDays: clearDays == null ? null : Math.round(clearDays) },
     loops: { duoRuns: duo.runs || 0, duoSkipped: duo.skipped || 0, maxSessions: om.sessions || 0, maxCycles: om.cycles || 0, okRate7: n7 ? ok7 / n7 : 1 },
@@ -2185,6 +2399,7 @@ function buildOverview() {
     rootReadable: exists(P('logs')) && exists(P('agents')),
     platform: process.platform,                                   // the first-run card words the path for the machine
     uptime: proxy.lastStart ? now() - proxy.lastStart : null,    // proxy uptime (ms)
+    relayAuth: relayAuthPublic(),                                  // up is not the same as answering
     proxyStart: proxy.lastStart || null,
     appUptime: now() - bootEpoch,
     firstRun: STATE.firstRun,
@@ -2240,6 +2455,8 @@ function healthVerdict(interactions, proxy) {
   if (faults >= 3) heal.push('Multiple recent faults — run `SystemsCortex/cortex-health.sh` and inspect `logs/runner-stderr/`.');
   if (proxy.events.filter((e) => e.kind === 'TIMEOUT').length) heal.push('Timeouts recorded — a true 1800s hang isn\'t retried; lower MAX_TURNS or split the task.');
   if (!proxy.lastStart) heal.push('No proxy START line found — confirm `cortex-mouth-proxy.service` is active (systemctl --user status).');
+  const ra = relayAuthHeld();
+  if (ra) { level = 'degraded'; score = Math.min(score, 20); heal.unshift(cap((RELAY_FAULTS.find((f) => f.kind === ra.kind) || {}).say || 'the relay is failing') + ' since ' + hhmm(ra.since) + '. ' + (ra.kind === 'signed-out' ? 'Sign it back in from the title bar.' : ra.kind === 'no-credits' ? 'Top up the provider or sign the relay into the subscription.' : 'It resets by itself.')); }
   return { level, score: clamp(score, 0, 100), faults, stale, heal };
 }
 function pulseSnapshot(interactions, proxy, ckpts) {
@@ -2565,7 +2782,7 @@ function systemReading() {
     const att = (d.readings || []).find((r) => r.k === 'attractor');
     const grow = att && /growth/.test(att.t);
     const clear = att && /clearing/.test(att.t);
-    if (d.delays.clearDays != null) S.push(`The board's attractor is ${grow ? 'growth' : clear ? 'clearing' : 'its current size'}: ${d.stocks.open} open, clearing in about ${d.delays.clearDays} days at this pace${d.delays.clearDays > 30 ? ', so closing is the lever' : ''}.`);
+    if (d.delays.clearDays != null) S.push(`The board's attractor is ${grow ? 'growth' : clear ? 'clearing' : 'its current size'}: ${d.stocks.open} open${d.stocks.parked ? ` (${d.stocks.parked} parked, not counted)` : ''}, clearing in about ${d.delays.clearDays} days at this pace${d.delays.clearDays > 30 ? ', so closing is the lever' : ''}.`);
     else if (d.stocks.open) S.push(`${d.stocks.open} open on the board and nothing closed in 28 days; until something reaches done there is no pace to read.`);
   }
   if (d && d.flows) {
@@ -2576,8 +2793,12 @@ function systemReading() {
     // a sentence that follows a full stop starts with a capital, whichever bit came first
     if (bits.length) { const s = bits.join(', '); S.push(s.charAt(0).toUpperCase() + s.slice(1) + '.'); }
   }
-  const stacks = ['Claude Code' + (oa && oa.keySet ? ' and OpenAI are' : ' is')];
-  S.push(stacks[0] + ' open' + (oa && oa.keySet ? ', both stacks live.' : '; add an OpenAI key to open the second stack.'));
+  const ra = relayAuthHeld();
+  if (ra) S.unshift(cap((RELAY_FAULTS.find((f) => f.kind === ra.kind) || {}).say || 'the relay is failing') + ' since ' + hhmm(ra.since) + ', so every Claude turn fails and autonomy is holding. ' + (ra.kind === 'signed-out' ? 'Sign it back in from the title bar.' : ra.kind === 'no-credits' ? 'Top up the provider, or sign the relay into the subscription.' : 'It resets by itself.'));
+  else {
+    const stacks = ['Claude Code' + (oa && oa.keySet ? ' and OpenAI are' : ' is')];
+    S.push(stacks[0] + ' open' + (oa && oa.keySet ? ', both stacks live.' : '; add an OpenAI key to open the second stack.'));
+  }
   const v = {
     ts: now(), line: S.slice(0, 2).join(' '), more: S.slice(2).join(' '),
     ring: d ? d.ring : null, today: d ? d.today : null, peak: d ? d.peak : null,
@@ -4032,6 +4253,7 @@ const HELP_TEXT = `◈ HELP
 Plain text goes to the selected seat. These do more:
 /reading            the whole system in one sentence
 /leverage <q>       the strategic read: lever, rung, why now, first step, cost, a frame
+/aossi <q>          one question to every seat at six horizons, and the one move that holds
 /frames <subject>   several frames on one subject, each with a test
 /map [focus]        see what she sees, at orbit, map or ground altitude
 /motusmax <goal>    start a drive on an armed Motus Max (arm it by hand first)
@@ -4098,6 +4320,14 @@ ipcMain.handle('cortex:send', requireGate(async (_e, { agent, kind, text }) => {
   if (gp) {
     const r = await openaiSend('gpt', (gp[1] || '').trim() || 'Say what you are and what you can do here, in three lines.');
     return { ok: true, latency: r.latency || 0, text: r.ok ? r.text : 'GPT seat: ' + r.error };
+  }
+  // /aossi — one question, every seat, six horizons, one move that holds (any of his four names opens it)
+  const ao = /^\s*\/(?:aossi|aosi|aubri|claudbri)\b[\s:]*([\s\S]*)$/i.exec(message);
+  if (ao) {
+    const note = (text) => { if (mainWin) safe(() => mainWin.webContents.send('cortex:sendProgress', { phase: 'note', agent, text })); };
+    const r = await aossiRun((ao[1] || '').trim(), { onNote: note });
+    if (!r.aossi) return { ok: true, latency: 0, text: 'AOSSI: ' + r.error };
+    return { ok: true, latency: Math.round((r.aossi.ms || 0) / 1000), goView: r.ok ? 'omni' : '', text: aossiText(r.aossi) + (r.ok ? '' : '\n\n' + r.error) };
   }
   // /leverage — the strategic read on demand, without starting a drive.
   const lv = /^\s*\/(?:leverage|lever|strategic|read)\b[\s:]*([\s\S]*)$/i.exec(message);
@@ -7772,7 +8002,7 @@ const CI_ACTIONS = {
   'omni-go':      { tier: 'confirm', args: 'goal',        help: 'propose a Motus Max (OmniDrive) session — needs his tap AND the arm switch' },
   'motusmodel':   { tier: 'confirm', args: 'name|essence|mantra', help: 'draft a new MotusModel in the studio' },
 };
-const CI_VIEWS = ['overview', 'motus', 'goal', 'agents', 'subagents', 'tasks', 'workflows', 'duo', 'voice', 'chat', 'work', 'live', 'output', 'systems', 'usage', 'learnings', 'sympath', 'nextsteps', 'models', 'security', 'levels', 'settings', 'motusmodels', 'omni', 'remote', 'greta'];
+const CI_VIEWS = ['overview', 'motus', 'goal', 'agents', 'subagents', 'tasks', 'workflows', 'duo', 'voice', 'chat', 'work', 'live', 'output', 'systems', 'usage', 'learnings', 'sympath', 'nextsteps', 'models', 'security', 'levels', 'settings', 'motusmodels', 'omni', 'remote', 'greta', 'akomi'];
 
 function actionVocabulary() {
   return Object.entries(CI_ACTIONS)
@@ -11542,7 +11772,9 @@ function onAirCandidates() {
   add('motus', 'MOTUS', STATE.motus && STATE.motus.text);
   const th = threadState();
   if (th.goal) add('thread', 'DRIVE', th.goal.split('\n')[0]);
-  for (const t of (STATE.tasks || []).filter((x) => x.status !== 'done').slice(0, 10)) add('task:' + t.id, 'TASK', t.title);
+  // A task he kept from Outlier Akomi was chosen for his board, never for the air:
+  // it came out of his own conversations. "Only the stuff I select."
+  for (const t of (STATE.tasks || []).filter((x) => x.status !== 'done' && !(x.tags || []).includes('akomi')).slice(0, 10)) add('task:' + t.id, 'TASK', t.title);
   for (const w of (STATE.duoWork || []).slice(0, 8)) add('move:' + w.id, w.verdict === 'shipped' ? 'SHIPPED' : 'MOVE', w.title);
   const seen = new Set();
   for (const w of (STATE.duoWork || []).slice(0, 20)) {
@@ -12525,6 +12757,10 @@ function budgetState() {
 // May an autonomous job spend right now? Returns null to allow, or a reason.
 function autonomyAllowed(what) {
   if (STATE.control && STATE.control.stopped) return 'the fleet is stopped';
+  const ra = relayAuthHeld();
+  if (ra) return ra.kind === 'limited' ? `the Claude subscription hit its usage limit; ${what} waits until ${hhmm(ra.until)}`
+    : ra.kind === 'no-credits' ? `the relay's provider is out of credits; ${what} waits for a fix`
+    : `the relay is signed out; ${what} waits until it is signed back in`;
   if (STATE.breaker && STATE.breaker.until > now()) return `the breaker is holding autonomy after ${STATE.breaker.why}; ${what} waits until ${new Date(STATE.breaker.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   const b = budgetState();
   if (!b.governed) return null;
@@ -12643,6 +12879,179 @@ function strategicConfidence(text) {
   const n = parseInt((c.match(/(\d{1,2})\s*\/\s*10/) || c.match(/(\d{1,2})/) || [])[1], 10);
   const basis = (c.match(/BASIS\s*[:—-]\s*(.+)$/i) || [])[1] || '';
   return { confidence: Number.isFinite(n) ? Math.max(0, Math.min(10, n)) : null, basis: basis.trim().slice(0, 300) };
+}
+
+// ###########################################################################
+//  v3.70 · AOSSI — one question, every seat, every horizon.
+//
+//  August, 2026-11-01: "build a mulitdimensional multi time dimension ...
+//  "Adapt Outlier Systems Super Intelligence" AOSSI". Two dimensions, both
+//  real. The SEATS: each mind answers from where it stands (Davara the
+//  structure, Greta the standard, Arden what hides beneath, ASI the question
+//  under the question, Akomi the day as lived). TIME: the same question at six
+//  horizons, from this hour to ten years. The seats answer in parallel, in one
+//  pass each; a last turn finds the move that holds across seats AND across
+//  time, and it lands where moves get driven: the top path in Motus Max. The
+//  name is still his to choose (AOSI, AOSSI, Aubri, Claudbri); every one of
+//  them opens it.
+// ###########################################################################
+const AOSSI_HORIZONS = [['NOW', 'this hour'], ['TODAY', 'today'], ['WEEK', 'this week'], ['QUARTER', 'this quarter'], ['YEAR', 'this year'], ['DECADE', 'ten years from now']];
+const AOSSI_LENS = {
+  davara: 'the structure: which loop is running, where the lever sits, and what a change there does downstream',
+  greta: 'the standard: what would make this beautiful and true for the person it is for, and what would fail them',
+  arden: 'what hides beneath: the risk, the dependency, the thing nobody is saying',
+  asi: 'the question under the question: what is really being asked, and what answering it would close',
+  // themes only: never what anyone said, and only while he has Akomi listening
+  akomi: 'the shape of his recent days: the themes they return to, in general terms, never what anyone said',
+  august: 'his own motion: what he would do with his own hands, and what moves him',
+};
+// A seat answers only if it is on the relay, not paused, and real on this machine.
+// Akomi carries his days, so it is asked only while he has its switch on.
+function aossiSeats() {
+  return ['davara', 'greta', 'arden', 'asi', 'akomi']
+    .filter((id) => isRelayAgent(id) && !agentCfg(id).paused && (['davara', 'greta', 'arden'].includes(id) || statOf(P('agents', id, 'SOUL.md'))))
+    .filter((id) => id !== 'akomi' || safe(() => akomiSwitch().on, false))
+    .slice(0, 5);
+}
+// The seat that finds the move: the front door when it can answer, else the first seat that can.
+function aossiSynthSeat(seats) {
+  const ok = (id) => isRelayAgent(id) && !agentCfg(id).paused && !(FLEET_BY_ID[id] || {}).infra;
+  const front = STATE.settings.defaultAgent;
+  if (front && ok(front) && (front !== 'akomi' || seats.includes('akomi') || statOf(P('agents', 'akomi', 'SOUL.md')))) return front;
+  return ['davara', ...seats].find(ok) || '';
+}
+// A key counts only at the start of a line (after a list marker or bold), so
+// "KNOW:" is never "NOW:". "1. NOW:", "• NOW (this hour) –" and "**NOW:**" all read.
+function aossiPick(text, key) {
+  const re = new RegExp('^[ \\t>*_#•\\d.)-]*' + key.replace(/ /g, '\\s+') + '(?:\\s*\\([^)\\n]{0,40}\\))?\\s*(?:\\*\\*|__)?\\s*[:\\u2013\\u2014-](?:\\s*(?:\\*\\*|__))?[ \\t]*([^\\n]*)$', 'mi');
+  const m = re.exec(String(text || ''));
+  return m ? m[1].replace(/\*\*|__/g, '').trim().slice(0, 600) : '';
+}
+function aossiSeatPrompt(id, question) {
+  const name = (FLEET_BY_ID[id] || {}).name || id;
+  return `/AOSSI. ${name}, one question across six horizons, from where you stand.
+
+THE QUESTION: ${question}
+YOUR LENS: ${AOSSI_LENS[id] || 'your own'}
+
+The horizons: NOW is this hour, TODAY is today, WEEK is this week, QUARTER is this quarter, YEAR is this year, DECADE is ten years from now. Answer from what you already know and what you can read in a few minutes. Do not build or change anything. One line each, in exactly this shape, no other text:
+NOW: <what matters at this horizon>
+TODAY: <...>
+WEEK: <...>
+QUARTER: <...>
+YEAR: <...>
+DECADE: <...>
+HOLDS: <the one move that is right at every horizon at once>
+BREAKS IF: <what would prove that move wrong, and by when>
+CONFIDENCE: <0-10>`;
+}
+function aossiSynthPrompt(question, seats) {
+  const blocks = seats.map((s) => `— ${s.name} (${AOSSI_LENS[s.seat] || ''}):\n` + AOSSI_HORIZONS.map(([k]) => `  ${k}: ${s.h[k] || '(no answer)'}`).join('\n') + `\n  HOLDS: ${s.holds || '(none)'}\n  BREAKS IF: ${s.breaks || '(none)'}`).join('\n\n');
+  return `/AOSSI SYNTHESIS. ${seats.length} seats answered one question at six horizons. Find the one move that holds across the seats AND across time. Prefer a move several seats reached by different roads over the loudest single answer.
+
+THE QUESTION: ${question}
+
+${blocks}
+
+Reply in exactly this shape, one line each, no other text:
+THE MOVE: <the single move that holds across the most seats and horizons>
+WHY IT HOLDS: <which seats and horizons agree, and why>
+WHERE THEY SPLIT: <the one real disagreement, and the horizon it lives in>
+FIRST STEP: <the first concrete action, today>
+RUNG: <the Meadows rung, 1 to 12>
+BREAKS IF: <the falsifier, with a date>
+CONFIDENCE: <0-10>`;
+}
+// A seat that has not answered by the deadline is read as late; its turn runs
+// on, but the reading does not wait half an hour for one seat.
+const AOSSI_SEAT_MS = 12 * 60000;
+const AOSSI_SYNTH_MS = 12 * 60000;
+function aossiWithin(p, ms, label) {
+  let t;
+  return Promise.race([p, new Promise((res) => { t = setTimeout(() => res({ ok: false, late: true, error: label + ' did not answer within ' + Math.round(ms / 60000) + ' minutes' }), ms); })])
+    .finally(() => clearTimeout(t));
+}
+const _aossi = { busy: false };
+async function aossiRun(question, { onNote } = {}) {
+  question = String(question || '').trim().slice(0, 1200);
+  if (!question) return { ok: false, error: 'AOSSI needs a question: /aossi <the question>' };
+  if (_aossi.busy) return { ok: false, error: 'an AOSSI reading is already running' };
+  const held = relayAuthHeld();
+  if (held && held.kind !== 'limited') return { ok: false, error: cap((RELAY_FAULTS.find((f) => f.kind === held.kind) || {}).say || 'the relay is failing') + '. ' + (held.kind === 'signed-out' ? 'Sign it back in from the title bar, then ask again.' : 'Ask again once it answers.') };
+  const seats = aossiSeats();
+  if (seats.length < 2) return { ok: false, error: 'AOSSI needs at least two seats on the relay' };
+  const synthSeat = aossiSynthSeat(seats);
+  if (!synthSeat) return { ok: false, error: 'no seat is free to find the move; resume one and ask again' };
+  _aossi.busy = true;
+  const t0 = now();
+  try {
+    if (onNote) onNote('Asking ' + seats.map((id) => (FLEET_BY_ID[id] || {}).name || id).join(', ') + ' at six horizons, in parallel.');
+    const answers = await Promise.all(seats.map((id) => {
+      const name = (FLEET_BY_ID[id] || {}).name || id;
+      return aossiWithin(relaySend(id, aossiSeatPrompt(id, question), 1850000, { operator: true }), AOSSI_SEAT_MS, name)
+        .then((r) => {
+          const a = { seat: id, name, ok: !!r.ok, late: !!r.late, error: r.ok ? '' : String(r.error || 'no answer').slice(0, 300),
+            h: Object.fromEntries(AOSSI_HORIZONS.map(([k]) => [k, r.ok ? aossiPick(r.text, k) : ''])),
+            holds: r.ok ? aossiPick(r.text, 'HOLDS') : '', breaks: r.ok ? aossiPick(r.text, 'BREAKS IF') : '',
+            confidence: r.ok ? strategicConfidence(r.text).confidence : null, raw: String(r.text || '').slice(0, 4000) };
+          // answered, but in a shape nothing could read: named, never silently dropped
+          a.unread = a.ok && !a.holds && !AOSSI_HORIZONS.some(([k]) => a.h[k]);
+          return a;
+        })
+        .catch((e) => ({ seat: id, name, ok: false, error: String((e && e.message) || e), h: {}, holds: '', breaks: '', confidence: null, raw: '' }));
+    }));
+    const good = answers.filter((a) => a.ok && !a.unread);
+    const rec = { id: 'ao' + crypto.randomBytes(3).toString('hex'), ts: new Date().toISOString(), question, seats: answers, synthesis: null, ok: false, ms: 0 };
+    const missing = answers.filter((a) => !a.ok || a.unread).map((a) => a.name + ' (' + (a.unread ? 'answered in a shape that could not be read' : a.error) + ')');
+    if (good.length < 2) {
+      rec.error = 'only ' + good.length + ' seat(s) gave a readable answer' + (missing.length ? ': ' + missing.join('; ') : '');
+      STATE.aossi = [rec, ...(STATE.aossi || [])].slice(0, 12); saveState();
+      return { ok: false, error: rec.error, aossi: rec };
+    }
+    if (onNote) onNote(good.length + ' seats answered' + (missing.length ? ' (' + missing.length + ' did not)' : '') + '. ' + ((FLEET_BY_ID[synthSeat] || {}).name || synthSeat) + ' is finding the move that holds across them.');
+    const sr = await aossiWithin(relaySend(synthSeat, aossiSynthPrompt(question, good), 1850000, { operator: true }), AOSSI_SYNTH_MS, (FLEET_BY_ID[synthSeat] || {}).name || synthSeat);
+    const pick = (k) => (sr.ok ? aossiPick(sr.text, k) : '');
+    rec.synthesis = { seat: synthSeat, ok: !!sr.ok, error: sr.ok ? '' : String(sr.error || '').slice(0, 300),
+      move: pick('THE MOVE'), why: pick('WHY IT HOLDS'), split: pick('WHERE THEY SPLIT'), first: pick('FIRST STEP'),
+      rung: pick('RUNG'), breaks: pick('BREAKS IF'), confidence: sr.ok ? strategicConfidence(sr.text).confidence : null, raw: String(sr.text || '').slice(0, 4000) };
+    rec.ok = !!(sr.ok && rec.synthesis.move);
+    rec.ms = now() - t0;
+    STATE.aossi = [rec, ...(STATE.aossi || [])].slice(0, 12);
+    // The move lands where moves get driven: the newest read, which Motus Max offers
+    // first. The disagreement is kept as `split`, never as a frame: a frame is a
+    // drivable path, and the place the seats disagree is not a move.
+    if (rec.ok) {
+      const S = rec.synthesis;
+      STATE.strategicReads = [{ ts: rec.ts, agent: synthSeat, source: 'aossi', aossi: rec.id, question,
+        phase: '', loop: '', lever: S.move, rung: S.rung, whyNow: S.why, firstStep: S.first, frame: '', split: S.split,
+        obsoletes: '', cost: '', confidence: S.confidence, basis: good.length + ' seats across six horizons', falsifier: S.breaks, raw: S.raw },
+        ...(STATE.strategicReads || [])].slice(0, 30);
+    }
+    saveState();
+    safe(() => omniAudit('aossi', (rec.ok ? 'the move that holds: ' + rec.synthesis.move : 'no synthesis: ' + (rec.synthesis.error || 'unparsed')).slice(0, 300)));
+    return { ok: rec.ok, aossi: rec, error: rec.ok ? '' : ('the synthesis did not land: ' + (rec.synthesis.error || 'its answer could not be read')) };
+  } finally { _aossi.busy = false; }
+}
+function aossiText(rec) {
+  const S = rec.synthesis || {};
+  const L = ['◈ AOSSI · Adapt Outlier Systems Super Intelligence', '', 'THE QUESTION: ' + rec.question, ''];
+  if (S.move) {
+    L.push('THE MOVE: ' + S.move);
+    if (S.why) L.push('WHY IT HOLDS: ' + S.why);
+    if (S.split) L.push('WHERE THEY SPLIT: ' + S.split);
+    if (S.first) L.push('FIRST STEP: ' + S.first);
+    if (S.breaks) L.push('BREAKS IF: ' + S.breaks + (S.confidence != null ? '  ·  confidence ' + S.confidence + '/10' : ''));
+    L.push('', 'It is the top path in Motus Max now: press drive this to run it.');
+  }
+  L.push('', 'ACROSS TIME');
+  for (const s of rec.seats || []) {
+    if (!s.ok) { L.push('', s.name.toUpperCase() + (s.late ? ' (late: ' : ' (no answer: ') + s.error + ')'); continue; }
+    if (s.unread) { L.push('', s.name.toUpperCase() + ' (answered in a shape that could not be read; it began:)', '  ' + String(s.raw || '').replace(/\s+/g, ' ').slice(0, 280)); continue; }
+    L.push('', s.name.toUpperCase());
+    for (const [k, label] of AOSSI_HORIZONS) if (s.h[k]) L.push('  ' + label + ' · ' + s.h[k]);
+    if (s.holds) L.push('  holds · ' + s.holds);
+  }
+  return L.join('\n');
 }
 function duoLoopPrompt(loop, agent, ctx) {
   const d = STATE.duo;
@@ -13118,6 +13527,8 @@ async function watchdogTick() {
     safe(() => ingestAgentInbox());
     safe(() => gearTick());            // Motus Motivus cools down on its own
     safe(() => healStaleCheckpoints()); // a turn a relay restart killed stops looking busy
+    safe(() => relayAuthTick());       // a relay that says OK while it is signed out is read as what it is
+    safe(() => migrateAkomiFrontDoor()); // one stat until Akomi's soul lands, then never again
     safe(() => tidyTick());            // the board keeps itself, once a day
     safe(() => signalTick());          // one digest a day, only when there is something in it
     safe(() => { reckonTick().catch(() => {}); });   // predictions meet the day they named
@@ -13978,6 +14389,160 @@ function theClear({ apply = false, logs = false } = {}) {
   return { ok: true, applied: !!apply, vault, fleet, inbox, archiveDir: path.join(userDataDir(), 'archive') };
 }
 ipcMain.handle('cortex:clean', requireGate((_e, p = {}) => theClear({ apply: !!p.apply, logs: !!p.logs })));
+// The sign-in itself is his: a browser approval and a paste in a terminal the
+// app opens. The app never sees the token. The script tests it before the swap.
+let _signinAt = 0;   // one sign-in window at a time: a second press while one is open does nothing
+ipcMain.handle('cortex:relaySignin', requireGate(() => {
+  if (now() - _signinAt < 3 * 60000) return { ok: true, already: true };
+  const script = relaySigninScript();
+  if (!statOf(script)) return { ok: false, error: 'the sign-in script is not in the fleet tree (' + toLinuxPath(script) + ')' };
+  const linux = toLinuxPath(script);
+  const cmd = "bash '" + linux + "'";
+  if (!IS_WIN) return { ok: false, manual: true, command: cmd, error: 'run it in a terminal on this machine: ' + cmd };
+  if (/['"%&|<>^]/.test(linux) || !/^[\w.-]+$/.test(wslDistro())) return { ok: false, error: 'the script path cannot be passed safely; run it by hand: ' + cmd };
+  return new Promise((resolve) => {
+    try {
+      // ⚠ A detached child with stdio 'ignore' gets a console window whose input
+      // is NUL, so the script's hidden paste would read nothing. `start` on a
+      // launcher gives the window its own real console: his keyboard, his paste.
+      const launcher = path.join(app.getPath('temp'), 'cortexinsight-relay-signin.cmd');
+      fs.writeFileSync(launcher, ['@echo off', 'title Sign the relay back in',
+        // -e, not --: "--" runs through a login shell first, which would expand anything with a $ before bash saw it
+        'wsl.exe -d ' + wslDistro() + ' -e bash -lc "' + cmd + "; echo; read -rp 'Press Enter to close this window. '" + '"', 'exit', ''].join('\r\n'));
+      const p = require('child_process').spawn('cmd.exe', ['/d', '/c', 'start "" "' + launcher + '"'], { windowsVerbatimArguments: true, detached: true, stdio: 'ignore', windowsHide: true });
+      p.on('error', (e) => { _signinAt = 0; resolve({ ok: false, error: e.message }); });
+      p.unref();
+      _signinAt = now();
+      setTimeout(() => resolve({ ok: true, command: cmd }), 400);
+    } catch (e) { resolve({ ok: false, error: e.message }); }
+  });
+}));
+ipcMain.handle('cortex:relayCheck', requireGate(async () => {
+  const r = await relaySend(relayProbeSeat(), 'Reply with exactly: PONG', 180000, { operator: true });
+  return { ok: !!r.ok, fault: r.fault || '', error: r.ok ? '' : (r.error || 'no answer'), relayAuth: relayAuthPublic() };
+}));
+
+// ###########################################################################
+//  v3.70 · OUTLIER AKOMI — the live seat, heard through his Omi.
+//
+//  The bridge (the Outlier Akomi skill's reference service, a separate
+//  process in the fleet tree) receives his Omi's conversations and listens
+//  for its name. This app owns the SWITCH and reads the FEED. Nothing else
+//  crosses between them:
+//    ~/.cortexinsight/akomi/state.json  written only here. Missing means off,
+//                                        and off means the bridge keeps nothing.
+//    ~/.cortexinsight/akomi/feed.jsonl  written only by the bridge, append-only:
+//                                        {ts, kind, id, title?, text, seat?, ok?}
+//  His law for anything that listens (MotusLive, 2026-09): "nothing ever
+//  private or security stuff. Only the stuff I select." and "when we have it
+//  off its not broadcasting anything". So: off by default; no audio and no
+//  raw transcript is ever stored; a proposal reaches the board only when he
+//  keeps it; the feed's text never leaves this room. The fleet digest carries
+//  counts, never words, and the brief carries nothing from it.
+// ###########################################################################
+const AKOMI_KINDS = ['conversation', 'wake', 'reply', 'proposal', 'error'];
+const AKOMI_STOPWORDS = new Set(['hello', 'hey there', 'okay', 'alright', 'right', 'yeah', 'thanks', 'thank you', 'listen', 'please', 'today', 'there', 'where', 'what', 'about', 'really', 'actually', 'basically', 'literally']);
+function akomiDir() { return path.join(ciDir(), 'akomi'); }
+function akomiStatePath() { return path.join(akomiDir(), 'state.json'); }
+function akomiFeedPath() { return path.join(akomiDir(), 'feed.jsonl'); }
+function akomiSwitch() {
+  const j = safe(() => JSON.parse(fs.readFileSync(akomiStatePath(), 'utf8')), null);
+  const wake = Array.isArray(j && j.wake) ? j.wake.map((w) => String(w).toLowerCase().trim()).filter(Boolean).slice(0, 4) : [];
+  return { on: !!(j && j.on === true), wake: wake.length ? wake : ['akomi'], updated: (j && j.updated) || '', exists: !!j };
+}
+function akomiSetSwitch({ on, wake } = {}) {
+  const cur = akomiSwitch();
+  const next = {
+    on: on == null ? cur.on : !!on,
+    // a wake word must be rare enough not to fire on ordinary talk: five letters or more, never a filler word
+    wake: Array.isArray(wake) ? wake.map((w) => String(w).toLowerCase().replace(/[^a-z0-9 '-]/g, '').replace(/\s+/g, ' ').trim()).filter((w) => w.replace(/[^a-z0-9]/g, '').length >= 5 && !AKOMI_STOPWORDS.has(w)).slice(0, 4) : cur.wake,
+    updated: new Date().toISOString(), by: 'console',
+  };
+  if (!next.wake.length) next.wake = ['akomi'];
+  fs.mkdirSync(akomiDir(), { recursive: true });
+  const p = akomiStatePath(), tmp = p + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(next, null, 2));
+  fs.renameSync(tmp, p);
+  if (next.on !== cur.on) safe(() => omniAudit('akomi', next.on ? 'Akomi switched ON: the Omi bridge may keep conversation notes and act on its name' : 'Akomi switched OFF: the bridge keeps nothing'));
+  return next;
+}
+// The feed is small and append-only; read the tail, only when it grew.
+let _akFeed = { mtime: -1, size: -1, items: [] };
+function akomiFeed(n = 160) {
+  const f = akomiFeedPath();
+  const st = statOf(f);
+  if (!st) { _akFeed = { mtime: -1, size: -1, items: [] }; return []; }
+  if (st.mtimeMs !== _akFeed.mtime || st.size !== _akFeed.size) {
+    const items = [];
+    for (const line of tailFile(f, 256 * 1024).split('\n')) {
+      const t = line.trim(); if (!t || t[0] !== '{') continue;
+      const o = safe(() => JSON.parse(t), null); if (!o || !AKOMI_KINDS.includes(o.kind)) continue;
+      items.push({ ts: String(o.ts || ''), kind: o.kind, id: String(o.id || '').slice(0, 80),
+        title: String(o.title || '').slice(0, 200), text: String(o.text || '').slice(0, 2000),
+        seat: String(o.seat || '').slice(0, 40), ok: o.ok !== false });
+    }
+    _akFeed = { mtime: st.mtimeMs, size: st.size, items: items.reverse() };
+  }
+  return _akFeed.items.slice(0, n);
+}
+function akomiKeptMap() { return STATE.akomiKept || (STATE.akomiKept = {}); }
+function akomiWaiting() {
+  const kept = akomiKeptMap();
+  return akomiFeed(400).filter((x) => x.kind === 'proposal' && x.id && !kept[x.id]);
+}
+// Is the bridge process answering? One short local probe; never the end of the world.
+function akomiBridgeUp() {
+  return new Promise((resolve) => {
+    const req = http.get({ host: '127.0.0.1', port: 8795, path: '/health', timeout: 1500 }, (res) => { res.resume(); resolve(res.statusCode >= 200 && res.statusCode < 300); });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+async function akomiState() {
+  const sw = akomiSwitch();
+  const feed = akomiFeed(160);
+  const kept = akomiKeptMap();
+  const day = localDay();
+  const todays = feed.filter((x) => localDay(new Date(Date.parse(x.ts) || 0)) === day);
+  return {
+    switch: sw, bridge: await akomiBridgeUp(), seat: statOf(P('agents', 'akomi', 'SOUL.md')) ? 'ready' : 'not yet',
+    frontDoor: (STATE.settings.defaultAgent || 'davara') === 'akomi',
+    frontAgent: (FLEET_BY_ID[STATE.settings.defaultAgent || 'davara'] || {}).name || 'Davara',
+    feed: feed.map((x) => ({ ...x, kept: kept[x.id] || '' })),
+    counts: { today: todays.length, conversations: todays.filter((x) => x.kind === 'conversation').length,
+      wakes: todays.filter((x) => x.kind === 'wake').length, waiting: akomiWaiting().length,
+      errors: todays.filter((x) => x.kind === 'error').length },
+  };
+}
+// Keeping a proposal is his choice, and it lands on the board as HIS task.
+function akomiKeep(id, keep) {
+  const item = akomiFeed(400).find((x) => x.id === id && x.kind === 'proposal');
+  if (!item) return { ok: false, error: 'that proposal is no longer in the feed' };
+  const kept = akomiKeptMap();
+  if (kept[id]) return { ok: false, error: 'already ' + kept[id] };
+  if (!keep) { kept[id] = 'let go'; saveState(); return { ok: true, did: 'let go' }; }
+  // The bridge puts the CONVERSATION's title on every proposal from it and the
+  // action in the text. He chose the action; the subject of the conversation
+  // stays in the room. Overheard words never steer it: whatever a "fleet:" or
+  // an "@seat" in them parsed to, the task is his and nobody's seat.
+  const action = String(item.text || item.title || '').split('\n').find((l) => l.trim()) || '';
+  const r = taskCreate({ title: action.trim().slice(0, 200), body: '(Kept from Outlier Akomi, ' + item.ts + '.)', tags: ['akomi'], owner: 'mine', priority: 2 });
+  if (!r || !r.ok) return { ok: false, error: (r && r.error) || 'could not add it' };
+  r.task.owner = 'mine'; r.task.agent = '';
+  if (!(r.task.tags || []).includes('akomi')) r.task.tags = ['akomi', ...(r.task.tags || [])].slice(0, 8);
+  kept[id] = 'kept'; saveState();
+  return { ok: true, did: 'kept', task: r.task && r.task.id };
+}
+// counts only: a far console sees that Akomi is on and how much it heard, never what
+function akomiDigest() {
+  const sw = akomiSwitch();
+  const feed = akomiFeed(400);
+  const day = localDay();
+  return { on: sw.on, today: feed.filter((x) => localDay(new Date(Date.parse(x.ts) || 0)) === day).length, waiting: akomiWaiting().length };
+}
+ipcMain.handle('cortex:akomi', requireGate(() => akomiState()));
+ipcMain.handle('cortex:akomiSet', requireGate((_e, p = {}) => { const s = akomiSetSwitch(p); return { ok: true, switch: s }; }));
+ipcMain.handle('cortex:akomiKeep', requireGate((_e, p = {}) => akomiKeep(String(p.id || ''), p.keep !== false)));
 
 // ###########################################################################
 //  THE FLEET DIGEST — the whole picture, for a console watching this one.
@@ -14084,6 +14649,8 @@ function fleetDigest() {
     work: (STATE.duoWork || []).slice(0, 12).map((w) => ({ ts: w.ts, title: w.title, verdict: w.verdict, loopName: w.loopName || '', agent: w.agent || '',
       did: String(w.did || '').slice(0, 600), files: (w.files || []).slice(0, 8), confidence: w.confidence, next: String(w.next || '').slice(0, 300) })),
     gear: gearView(),
+    relayAuth: relayAuthPublic(),
+    akomi: safe(() => akomiDigest(), null),
     control: safe(() => { const c = controlState(); return { stopped: c.stopped, hard: c.hard, hardEffective: c.hardEffective, inflight: c.inflight }; }, {}),
     reading: safe(() => systemReading(), null),
     stats: { totalTurns: ix.length, todayTurns: ix.filter((x) => (x.ts || '').slice(0, 10) === day).length },
@@ -15793,6 +16360,21 @@ async function runSmoke() {
     await visit('remote', 2200, 'remoteBody');
     // GRETA judges the fleet's big moves; her room is where he reads the verdicts.
     await visit('greta', 2200, 'gretaBody');
+    // OUTLIER AKOMI: the switch, the feed and the proposals render (an honest empty state counts)
+    await visit('akomi', 2200, 'akomiBody');
+    // THE RELAY THAT SAYS OK: stage the fault in THIS process only (the vault is
+    // a copy, and a smoke never acts), and prove the title bar says it with a fix
+    {
+      const keep = STATE.relayAuth;
+      STATE.relayAuth = { state: 'fault', kind: 'signed-out', since: now() - 42 * 60000, line: 'Failed to authenticate. API Error: 401 OAuth access token has been revoked.', agent: 'davara', count: 3 };
+      await wc.executeJavaScript(`document.querySelector('[data-nav=overview]')?.click()`).catch(() => {});
+      await wait(2400);
+      const pill = await wc.executeJavaScript(`(() => { const b = document.getElementById('tbRelayFix'); if (!b) return null; const r = b.getBoundingClientRect(); return { text: b.textContent.trim(), w: r.width, shown: getComputedStyle(b).display !== 'none' }; })()`).catch(() => null);
+      await shoot('smoke-relay-signed-out.png');
+      console.log('[smoke] relay signed out: ' + JSON.stringify(pill));
+      if (!pill || !pill.shown || !/signed out/.test(pill.text)) problems.push('[MISSING] a signed-out relay did not show in the title bar: ' + JSON.stringify(pill));
+      STATE.relayAuth = keep || { state: 'ok' };
+    }
 
     // ── THE READINGS MUST ACTUALLY READ ────────────────────────────────────
     // A view that renders is not a view that reports. Each of these three
@@ -16737,6 +17319,142 @@ async function runFleetTest() {
     const rr = recentReplies('davara', 3);
     ok('a seat\'s last words come from its own files, faults included', rr.some((x) => x.status === 'FAULT-timeout>1800s' && /cut off/.test(x.reply)), JSON.stringify(rr).slice(0, 140));
     for (const z of [rpF, path.join(ixD, 'davara-zz-notes.md'), path.join(ixD, 'davara-zz-other.md')]) safe(() => fs.unlinkSync(z));
+    // ── 3.70: a relay that says OK while signed out is read as what it is (the real cards from 2026-11-01)
+    const CARD_401 = '🔑 August — my relay\'s Claude subscription sign-in has expired (a 401 from the CLI, not anything broken in me). On the SystemsCortex box, run  `claude auth login`  (or  `claude setup-token`  for a long-lived one), and I\'m instantly back — full context, nothing lost. ❤️';
+    const CARD_REVOKED = 'Failed to authenticate. API Error: 401 OAuth access token has been revoked.';
+    const CARD_402 = 'API Error: 402 This request requires more credits, or fewer max_tokens. You requested up to 64000 tokens, but can only afford 111. To increase, visit https://openrouter.ai/workspaces/default/';
+    ok('the three real failure cards are read as failures', (relayFault(CARD_401) || {}).kind === 'signed-out' && (relayFault(CARD_REVOKED) || {}).kind === 'signed-out' && (relayFault(CARD_402) || {}).kind === 'no-credits');
+    ok('a real answer that mentions a 401 is not a failure', relayFault('Done. The endpoint now returns 401 when the key is missing, and the test covers it.') === null && relayFault('x'.repeat(800) + ' API Error: 401') === null
+      && relayFault('Done: usage limit reached messages now show their reset time.') === null && relayFault('Fixed. Failed to authenticate errors now retry once.') === null
+      && (relayFault('Failed to authenticate: OAuth session expired and could not be refreshed') || {}).kind === 'signed-out' && (relayFault('Claude AI usage limit reached|1793600000') || {}).kind === 'limited');
+    const realRaw2 = relaySendRaw;
+    const streak0 = _brk.streak.length;
+    STATE.relayAuth = { state: 'ok' };
+    relaySendRaw = async () => ({ ok: true, text: CARD_REVOKED, latency: 1 });
+    try {
+      const rf = await relaySend('davara', 'Fleet test: anything at all', 1000);
+      ok('a sign-in card is a failed turn, not an OK', !rf.ok && rf.fault === 'signed-out' && /signed out/i.test(rf.error), rf.error || 'ok');
+      ok('autonomy holds while the relay is signed out', /signed out/.test(autonomyAllowed('a loop pass') || ''), autonomyAllowed('a loop pass') || 'not held');
+      ok('the breaker leaves a dead sign-in to its own hold', _brk.streak.length === streak0);
+      ok('health and the reading say it first', healthVerdict(parseInteractions(), parseProxyLog()).level === 'degraded' && (_readingMemo = { at: 0, v: null }, /signed out/i.test(systemReading().line)));
+      ok('the title bar is told', relayAuthPublic().state === 'fault' && relayAuthPublic().kind === 'signed-out');
+      relaySendRaw = async () => ({ ok: true, text: 'PONG', latency: 1 });
+      const rok = await relaySend('davara', 'Fleet test: anything at all, again', 1000);
+      ok('a real answer clears the hold', rok.ok && relayAuthState().state === 'ok' && !autonomyAllowed('a loop pass'), JSON.stringify(relayAuthState()).slice(0, 120));
+    } finally { relaySendRaw = realRaw2; }
+    // the watchdog reads the relay's own log, and a fresh token clears it without a turn
+    STATE.relayAuth = { state: 'ok' };
+    const tokDir = path.join(path.dirname(root()), '.claude');
+    fs.mkdirSync(tokDir, { recursive: true });
+    const tokF = path.join(tokDir, 'semble-oauth-token');
+    fs.writeFileSync(tokF, 'fleet-test-not-a-token\n');
+    const mdF = P('logs', 'interactions', 'greta-' + localDay() + '.md');
+    const stampNow = (() => { const d = new Date(); const p2 = (n) => String(n).padStart(2, '0'); return localDay() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds()); })();
+    fs.writeFileSync(mdF, '### ' + stampNow + ' · greta · OK · 24.8s\n**In:** Fleet test critique\n**Cortex →:** ' + CARD_REVOKED + '\n');
+    fs.appendFileSync(P('logs', 'mouth-proxy.log'), stampNow + ' OK greta 75c in 24.8s (attempt 1)\n');
+    _raSeen.proxy = 0; _raSeen.files.clear();
+    relayAuthTick();
+    ok('the watchdog reads a dead sign-in from the relay\'s own log', relayAuthState().state === 'fault' && relayAuthState().via === 'log', JSON.stringify(relayAuthState()).slice(0, 140));
+    await wait(30);
+    fs.writeFileSync(tokF, 'fleet-test-a-newer-token\n');
+    relayAuthTick();
+    ok('a fresh sign-in clears the hold without spending a turn', relayAuthState().state === 'ok' && relayAuthState().clearedBy === 'sign-in', JSON.stringify(relayAuthState()).slice(0, 140));
+    // a restart reads the same old card again: history before the clear is not a new outage
+    _raSeen.proxy = 0; _raSeen.files.clear();
+    relayAuthTick();
+    ok('an old card read again after the clear does not bring the hold back', relayAuthState().state === 'ok', JSON.stringify(relayAuthState()).slice(0, 140));
+    safe(() => fs.unlinkSync(mdF)); safe(() => fs.unlinkSync(tokF));
+    // a quoted card, a spent-retries card, a provider out of credits, and the half-open check
+    ok('a reply that quotes the card is not a fault', relayFault('You pasted: "' + CARD_401 + '" It means the relay token was revoked; run the sign-in.') === null);
+    const SPENT = 'One breath, August — the Cortex relay couldn\'t complete that turn (transient failure, all retries spent).';
+    ok('a spent-retries card is a failed turn', (relayFault(SPENT) || {}).kind === 'failed');
+    const realRaw3 = relaySendRaw;
+    STATE.relayAuth = { state: 'ok' };
+    _brk.asks.clear(); _brk.streak = [];
+    relaySendRaw = async () => ({ ok: true, text: SPENT, latency: 1 });
+    try {
+      const rf2 = await relaySend('davara', 'Fleet test: spent retries', 1000);
+      ok('the breaker counts a spent-retries card, and autonomy does not hold for it', !rf2.ok && rf2.fault === 'failed' && !relayAuthHeld() && _brk.streak.length === 1, JSON.stringify({ ok: rf2.ok, fault: rf2.fault, held: !!relayAuthHeld(), streak: _brk.streak.length }));
+      STATE.relayAuth = { state: 'fault', kind: 'no-credits', since: now() - 3600e3, line: 'API Error: 402', agent: 'davara', probeAt: now() - 31 * 60000, tokenMtime: relayTokenMtime() };
+      ok('a provider out of credits is checked, never offered a sign-in', relayAuthPublic().canFix === false);
+      relaySendRaw = async () => ({ ok: true, text: 'PONG', latency: 1 });
+      relayAuthTick();
+      await wait(150);
+      ok('a held relay checks itself every half hour and lifts the hold when it answers', relayAuthState().state === 'ok', JSON.stringify(relayAuthState()).slice(0, 120));
+    } finally { relaySendRaw = realRaw3; _brk.asks.clear(); _brk.streak = []; }
+    STATE.relayAuth = { state: 'ok' };
+    // ── Outlier Akomi: the seat, the front door, the switch, the feed, the keep
+    ok('Akomi and ASI are on the fleet', isRelayAgent('akomi') && isRelayAgent('asi') && ROUTE_TOKEN.akomi === 'cortex-akomi' && ROUTE_TOKEN.asi === 'cortex-asi');
+    const fd0 = { d: STATE.settings.defaultAgent, v: STATE.settings.voiceAgent };
+    ok('Akomi waits to be the front door until its seat exists', migrateAkomiFrontDoor() === false && STATE.settings.defaultAgent === fd0.d);
+    fs.mkdirSync(P('agents', 'akomi'), { recursive: true });
+    fs.writeFileSync(P('agents', 'akomi', 'SOUL.md'), '# Outlier Akomi (fleet test frame)\n');
+    ok('then Akomi becomes the front door, once, with the old choice kept', migrateAkomiFrontDoor() === true && STATE.settings.defaultAgent === 'akomi' && STATE.settings.voiceAgent === 'akomi' && STATE.migrations.akomiFrontDoor.was.defaultAgent === fd0.d && migrateAkomiFrontDoor() === false);
+    STATE.settings.defaultAgent = fd0.d; STATE.settings.voiceAgent = fd0.v; delete STATE.migrations.akomiFrontDoor;
+    safe(() => fs.rmSync(akomiDir(), { recursive: true, force: true }));
+    ok('Akomi is off until he turns it on', akomiSwitch().on === false && akomiSwitch().exists === false);
+    ok('AOSSI never asks Akomi while it is off', !aossiSeats().includes('akomi'));
+    const sw1 = akomiSetSwitch({ on: true, wake: ['Akomi', 'hey akomi', 'x'] });
+    ok('the switch is written where the bridge reads it', sw1.on && JSON.parse(fs.readFileSync(akomiStatePath(), 'utf8')).on === true && sw1.wake.join(',') === 'akomi,hey akomi');
+    ok('AOSSI asks Akomi only while it listens', aossiSeats().includes('akomi'));
+    ok('a wake word must be rare: short and filler words are refused', akomiSetSwitch({ wake: ['Hey', 'hello', 'okay'] }).wake.join(',') === 'akomi' && akomiSetSwitch({ wake: ['Akomi', 'hey akomi'] }).wake.join(',') === 'akomi,hey akomi');
+    const akNow = new Date().toISOString();
+    // the bridge's shape: a proposal carries the CONVERSATION's title, and the action in its text
+    fs.writeFileSync(akomiFeedPath(), [
+      { ts: akNow, kind: 'conversation', id: 'c1', title: 'Fleet test: a walk and a plan', text: 'He talked through the launch.' },
+      { ts: akNow, kind: 'wake', id: 'w1', text: 'akomi, what is the one move today' },
+      { ts: akNow, kind: 'reply', id: 'r1', seat: 'akomi-fast', text: 'Ship the relay fix first.' },
+      { ts: akNow, kind: 'proposal', id: 'p1', title: 'Fleet test: a walk and a plan', text: 'Send the Omi pitch to Nat @greta' },
+      { ts: akNow, kind: 'audio', id: 'a1', text: 'never kept' },
+    ].map((x) => JSON.stringify(x)).join('\n') + '\nnot json\n');
+    const ak = await akomiState();
+    ok('the feed is read, and only the kinds the contract names', ak.feed.length === 4 && !ak.feed.some((x) => x.kind === 'audio') && ak.counts.waiting === 1 && ak.counts.wakes === 1, JSON.stringify(ak.counts));
+    const kp = akomiKeep('p1', true);
+    const kt = (STATE.tasks || []).find((t) => /Omi pitch to Nat/.test(t.title));
+    ok('a kept proposal is the action he chose, his own, once', kp.ok && kt && kt.owner === 'mine' && kt.agent === '' && (kt.tags || []).includes('akomi') && !/walk and a plan/.test(kt.title + ' ' + (kt.body || '')) && akomiKeep('p1', true).ok === false && akomiWaiting().length === 0, kt ? JSON.stringify({ title: kt.title, owner: kt.owner, agent: kt.agent }) : 'no task');
+    ok('a kept proposal is never a broadcast candidate', !onAirCandidates().some((c) => /Omi pitch/.test(c.t)));
+    const dg3 = akomiDigest();
+    ok('a far console sees counts, never words', dg3.on === true && dg3.today === 4 && !JSON.stringify(dg3).includes('Omi pitch'));
+    // what he says to Akomi out loud is counted as a turn, never shown or forwarded
+    const fastF = P('logs', 'interactions', 'akomi-fast-' + localDay() + '.jsonl');
+    fs.writeFileSync(fastF, JSON.stringify({ ts: stampNow, agent: 'akomi-fast', status: 'OK', via: 'mouth-proxy', attempts: 1, latency_s: 2, out_chars: 40, msg: 'akomi, what did Nat say about the doctor' }) + '\n');
+    const fastX = parseInteractions().find((x) => x.agent === 'akomi-fast');
+    ok('an Omi wake turn is counted and its words are never read out', !!fastX && fastX.msg === '', fastX ? JSON.stringify(fastX.msg) : 'not read');
+    safe(() => fs.unlinkSync(fastF));
+    akomiSetSwitch({ on: false });
+    STATE.tasks = (STATE.tasks || []).filter((t) => !/Omi pitch to Nat/.test(t.title));
+    delete STATE.akomiKept;
+    safe(() => fs.rmSync(akomiDir(), { recursive: true, force: true }));
+    safe(() => fs.rmSync(P('agents', 'akomi'), { recursive: true, force: true }));
+    // ── AOSSI: every seat at six horizons, one move that holds, landing in Motus Max
+    ok('AOSSI reads a key only at the start of a line', aossiPick('I KNOW: nothing\nNOW: the relay', 'NOW') === 'the relay' && aossiPick('**HOLDS:** sign in first', 'HOLDS') === 'sign in first');
+    ok('AOSSI reads numbered, bulleted and labelled lines', aossiPick('1. NOW: a', 'NOW') === 'a' && aossiPick('• NOW (this hour) – b', 'NOW') === 'b' && aossiPick('NOW:\nTODAY: d', 'NOW') === '' && aossiPick('2) BREAKS IF: by Friday', 'BREAKS IF') === 'by Friday');
+    const late = await aossiWithin(new Promise(() => {}), 40, 'Greta');
+    ok('a seat that does not answer in time is read as late', late.late === true && /did not answer/.test(late.error));
+    const realSend2 = relaySend;
+    const asked = [];
+    relaySend = async (agent, msg) => {
+      asked.push(agent);
+      if (/^\/AOSSI SYNTHESIS/.test(msg)) return { ok: true, latency: 1, text: 'THE MOVE: Sign the relay back in, then let Akomi listen\nWHY IT HOLDS: every seat put it first at NOW and it still holds at DECADE\nWHERE THEY SPLIT: Greta wants the room polished first, at WEEK\nFIRST STEP: run the sign-in from the title bar\nRUNG: 6\nBREAKS IF: no real answer by 2026-11-03\nCONFIDENCE: 8/10' };
+      if (agent === 'arden') return { ok: true, latency: 1, text: 'Honestly I would just sign the relay in and see what happens.' };
+      return { ok: true, latency: 1, text: 'NOW: the relay is dark\nTODAY: sign it in\nWEEK: Akomi listening\nQUARTER: the fleet on Omi\nYEAR: a live AI people use\nDECADE: the operator\'s second mind\nHOLDS: sign the relay back in first\nBREAKS IF: still dark by 2026-11-03\nCONFIDENCE: 8' };
+    };
+    try {
+      const ar = await aossiRun('Fleet test: what is the one move?');
+      const arden = (ar.aossi && ar.aossi.seats || []).find((s) => s.seat === 'arden') || {};
+      ok('AOSSI asks every seat at six horizons, in parallel, then synthesizes', ar.ok && asked.filter((a) => ['davara', 'greta', 'arden'].includes(a)).length >= 3 && ar.aossi.seats.filter((s) => !s.unread).every((s) => s.h.DECADE) && ar.aossi.synthesis.move === 'Sign the relay back in, then let Akomi listen', JSON.stringify(asked));
+      ok('a seat that answered in a shape nobody can read is named, not dropped', arden.unread === true && /ARDEN \(answered in a shape that could not be read/.test(aossiText(ar.aossi)));
+      ok('the move lands in Motus Max as the newest read, and the split is never a path', (STATE.strategicReads || [])[0] && STATE.strategicReads[0].source === 'aossi' && STATE.strategicReads[0].lever === ar.aossi.synthesis.move && STATE.strategicReads[0].confidence === 8 && STATE.strategicReads[0].frame === '' && /polished first/.test(STATE.strategicReads[0].split));
+      ok('the answer reads across time', /THE MOVE: Sign the relay back in/.test(aossiText(ar.aossi)) && /ten years from now · the operator/.test(aossiText(ar.aossi)));
+      STATE.relayAuth = { state: 'fault', kind: 'signed-out', since: now(), line: 'x' };
+      const held2 = await aossiRun('Fleet test: and now?');
+      ok('AOSSI refuses to ask a signed-out relay', !held2.ok && /signed out/i.test(held2.error));
+    } finally {
+      relaySend = realSend2;
+      STATE.relayAuth = { state: 'ok' };
+      STATE.strategicReads = (STATE.strategicReads || []).filter((r) => r.source !== 'aossi');
+      STATE.aossi = [];
+    }
     // ── every seat on Opus 5.5 at max
     ok('the default seat is Opus 5.5 at max', agentCfg('davara').model === 'claude-opus-5-5' && agentCfg('davara').effort === 'max', agentCfg('davara').model + ' · ' + agentCfg('davara').effort);
   } catch (e) { problems.push(`[THROW] ${e && e.message}\n${e && e.stack}`); }
@@ -16971,6 +17689,7 @@ if (!_ISOLATED && !_SMOKE && !_FRESH && !_FLEET && !app.requestSingleInstanceLoc
       publishFleetConfig();       // the runner reads this per turn — make it current at boot
       ensureAgentBridgeFiles();   // (re)write the agent CLI + README so the fleet can reach the board
       safe(() => ensureGretaSoul());   // the critic's identity, once, never over his edits
+      safe(() => migrateAkomiFrontDoor());   // Outlier Akomi becomes the front door once its seat exists
       // The bridge is this app's own additive block. When a release changes it,
       // upgrade it in place (backup kept, syntax-checked, rolled back on failure)
       // rather than waiting for a click nobody knows to make.

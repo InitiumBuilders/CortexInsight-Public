@@ -146,6 +146,9 @@ async function renderStatus(cl) {
   if (g.needsSetup) kv('gate', gold('no passphrase yet — run:  cortex setup'));
   kv('fleet tree', ov.rootReadable ? green('readable') : rose('not readable — run:  cortex tree'));
   kv('relay', ov.proxyStart ? green('up') + dim(' · ' + ago(Date.now() - ov.proxyStart)) : rose('down') + dim('  start it:  cortex relay start'));
+  // up is not answering: a revoked sign-in or a provider out of credits still logs OK
+  const ra = ov.relayAuth || {};
+  if (ra.state === 'fault') kv('sign-in', rose(ra.say || 'the relay is failing') + dim(' · since ' + ago(Date.now() - (ra.since || Date.now())) + (ra.line ? ' · ' + String(ra.line).slice(0, 80) : '')));
   kv('health', (ov.health.level === 'nominal' ? green : ov.health.level === 'watch' ? gold : rose)(ov.health.level) + dim(' · ' + ov.health.score + '/100' + (ov.health.faults ? ' · ' + ov.health.faults + ' fault(s)' : '')));
   kv('turns', bold(String(ov.stats.totalTurns)) + dim(' total · ') + bold(String(ov.stats.todayTurns)) + dim(' today'));
   kv('model', ov.model + (ov.modelPerAgent ? dim(' · per seat') : ''));
@@ -633,6 +636,9 @@ async function doctor(cl, live) {
   line(!g.needsSetup, 'a gate passphrase is set', 'cortex setup');
   line(ov.rootReadable, 'the fleet tree is readable', 'cortex tree <path>');
   line(!!ov.proxyStart, 'the relay is up on 127.0.0.1:8788', 'cortex relay start');
+  const ra = ov.relayAuth || {};
+  line(ra.state !== 'fault', ra.state === 'fault' ? (ra.say || 'the relay is failing') + ' (' + String(ra.line || '').slice(0, 70) + ')' : 'the relay\'s last turns were real answers, not sign-in or credit errors',
+    ra.kind === 'no-credits' ? 'top up the provider, or install a subscription token (claude setup-token, saved to ~/.claude/cortex-oauth-token)' : 'claude setup-token, then save it to ~/.claude/cortex-oauth-token (mode 600)');
   line(ctl.bridgeInstalled, 'the fleet bridge is in the runner', 'cortex bridge install');
   line(!ctl.stopped, 'the agents are on', 'cortex on');
   // Opus 5.5 is the fleet's model, and a CLI older than 2.1.280 refuses the id
