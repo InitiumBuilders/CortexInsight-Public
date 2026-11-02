@@ -7,6 +7,10 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const C = window.cortex;
+// An Intel Mac (UHD 630 or Radeon Pro 5300M driving a 3072×1920 panel at 2x) pays
+// for every backdrop blur and every ambient loop on each composited frame. On one,
+// the glass keeps its tint and rim and the ambient motion holds still.
+try { if (C && C.env && C.env.platform === 'darwin' && C.env.arch === 'x64') document.documentElement.classList.add('gpu-lite'); } catch {}
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 // 2026-09-02: sympath-sei moved rose -> spring. Rose was serving two agents at once, and

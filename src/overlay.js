@@ -164,6 +164,7 @@ function frame(ts) {
 let _acc = 0, _prev = 0;
 function throttled(ts) {
   S.raf = 0;
+  if (document.hidden) { _prev = 0; return; }   // a hidden or locked overlay draws nothing; kick() resumes it
   if (!_prev) _prev = ts;
   _acc += ts - _prev; _prev = ts;
   if (_acc < 33) { S.raf = requestAnimationFrame(throttled); return; }
@@ -171,6 +172,7 @@ function throttled(ts) {
   frame(ts);
 }
 function kick() { if (!S.raf && S.live) { _prev = 0; S.raf = requestAnimationFrame(throttled); } }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
 
 /* --------------------------------------------------------------- the chip */
 function fmtLeft(ms) {

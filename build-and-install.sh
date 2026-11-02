@@ -18,9 +18,11 @@
 #   your vault       ~/Library/Application Support/cortexinsight/
 #   agent tools      ~/.cortexinsight/
 #
-# The build is not code-signed. Gatekeeper may still ask once: right-click the
-# app, Open, Open. This script clears the quarantine attribute on what it
-# copies, so a build made here usually opens without that step.
+# The build is signed ad hoc, not notarised. This script clears the quarantine
+# attribute on what it copies, so a build made here opens without a prompt. A
+# downloaded zip is different: since macOS 15, right-click → Open no longer
+# works for it. Open it once, then System Settings → Privacy & Security → Open
+# Anyway, or run: xattr -dr com.apple.quarantine /path/to/CortexInsight.app
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -62,6 +64,9 @@ case "$ARCH" in
 esac
 APP="$OUT/CortexInsight.app"
 [ -d "$APP" ] || { echo "packaging reported success but $APP is missing"; exit 1; }
+# An ad-hoc signature (no Apple account involved). Since Electron 42 a Mac
+# notification needs a signed app; an unsigned one shows nothing at all.
+codesign --force --deep --sign - "$APP" >/dev/null 2>&1 && echo "    signed ad hoc" || echo "    could not sign ad hoc; notifications will fall back to the bell"
 echo "    version $VER for $ARCH"
 
 step 4 'installing'

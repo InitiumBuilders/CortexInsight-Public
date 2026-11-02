@@ -337,3 +337,17 @@ details.rm-machine:not([open]){padding-bottom:12px}
 /* the waiting bubble says what a long turn is doing */
 .msg .thinking-note{font-size:13px;line-height:1.45;color:var(--ink-3);margin-top:6px}
 .msg .thinking-note:empty{display:none}
+
+/* ── gpu-lite: an Intel Mac (set by the renderer when darwin + x64) ──────────
+   A backdrop blur re-blurs what sits behind it on every composited frame, and
+   an infinite animation keeps the compositor awake: on an Intel UHD 630 or a
+   Radeon Pro 5300M at 2x that is the lag the eye feels. Glass keeps its tint
+   and rim; ambient motion holds still. What still moves means something: the
+   thinking dots, the segment in flight, the voice orb, the stop, an alert. */
+.gpu-lite *,.gpu-lite *::before,.gpu-lite *::after{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+.gpu-lite .vignette::before,.gpu-lite .vignette::after,.gpu-lite .tb-mark,.gpu-lite .gate-sigil span,.gpu-lite .veil-sigil span,
+.gpu-lite .orb-core,.gpu-lite .orb-ring,.gpu-lite .cnode.live .core,.gpu-lite .constellation .center-sun,.gpu-lite .cnode-hidden .core::after,
+.gpu-lite .live-dot,.gpu-lite .now-orb.live,.gpu-lite .rrow .rstat.s-live,.gpu-lite .sys-arrow span,.gpu-lite .tb-sign.lit,.gpu-lite .descent-glyph,
+.gpu-lite .dh-orb.live span,.gpu-lite .dh-orb.live::after,.gpu-lite .tc-auto-live,.gpu-lite .bd-auto-toggle.on .bd-auto-orb,
+.gpu-lite #viewSigil,.gpu-lite .gw-orbit,.gpu-lite .rfa-orb.live,.gpu-lite .ak-pendant .ak-halo,.gpu-lite .ak-pendant .ak-ear,
+.gpu-lite .om-hold.on,.gpu-lite .ub-dot,.gpu-lite .vc-orb::before{animation:none!important}

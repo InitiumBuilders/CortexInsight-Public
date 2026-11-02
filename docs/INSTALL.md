@@ -70,7 +70,9 @@ Or skip the install step and run `release-next\CortexInsight-win32-x64\CortexIns
 
 ## On a Mac
 
-**Download.** Take `CortexInsight-<version>-mac-arm64.zip` on Apple silicon or `-mac-x64.zip` on Intel from the Releases page, unzip, and move `CortexInsight.app` where you like. The build is not signed or notarised, so the first open needs one of two things: right-click the app, Open, Open; or, in a terminal:
+macOS 13 or later (Electron 44). Both architectures are tested on real Macs in CI before each release. On an Intel Mac (for example a 2019 MacBook Pro with Intel UHD 630 or Radeon Pro graphics) the console lightens itself: no backdrop blur, no ambient animation, the background field at half rate, and the drive overlay hidden while the screen is locked. Versions before 3.71 ran on Electron 33, which makes every window lag on macOS 26 Tahoe; use 3.71 or later there.
+
+**Download.** Take `CortexInsight-<version>-mac-arm64.zip` on Apple silicon or `-mac-x64.zip` on Intel from the Releases page, unzip, and move `CortexInsight.app` where you like. The build is signed ad hoc but not notarised, so the first open needs one of two things. On macOS 15 and later, right-click → Open no longer works for it: try to open it once, then go to System Settings → Privacy & Security and press Open Anyway. Or, in a terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /path/to/CortexInsight.app

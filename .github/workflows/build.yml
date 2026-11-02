@@ -17,6 +17,7 @@ permissions:
 jobs:
   gate:
     name: open-source gate
+    if: github.repository == 'InitiumBuilders/CortexInsight-Public'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +55,7 @@ jobs:
   linux:
     name: headless host and terminal (linux)
     needs: gate
+    if: github.repository == 'InitiumBuilders/CortexInsight-Public'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -148,6 +150,7 @@ jobs:
   windows:
     name: fresh run and package (windows)
     needs: gate
+    if: github.repository == 'InitiumBuilders/CortexInsight-Public'
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
@@ -158,6 +161,9 @@ jobs:
           cache: npm
       - name: dependencies
         run: npm ci --no-audit --no-fund
+      - name: the electron binary
+        # since Electron 42, npm ci no longer downloads it; the harnesses run it directly
+        run: node node_modules/electron/install.js
       - name: the stranger's first hour
         shell: pwsh
         run: |
@@ -220,11 +226,27 @@ jobs:
             The gate asks you to set a passphrase on first run. Your vault lives in your user data folder, never inside the app.
             `docs/INSTALL.md` covers the fleet tree, the relay, and what works on each platform.
 
+  # Two real Macs, one per architecture. The Intel build used to be cross-built
+  # on Apple silicon and never executed anywhere; now each architecture runs the
+  # stranger's first hour and the fleet on its own hardware before it is packaged.
   macos:
-    name: fresh run and package (macos)
+    name: fresh run and package (macos ${{ matrix.label }})
     needs: gate
-    runs-on: macos-latest
-    timeout-minutes: 40
+    if: github.repository == 'InitiumBuilders/CortexInsight-Public'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            label: apple silicon
+            arch: arm64
+            pkg: package:mac
+          - runner: macos-15-intel
+            label: intel
+            arch: x64
+            pkg: package:mac-x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -233,9 +255,13 @@ jobs:
           cache: npm
       - name: dependencies
         run: npm ci --no-audit --no-fund
+      - name: the electron binary
+        # since Electron 42, npm ci no longer downloads it; the harnesses run it directly
+        run: node node_modules/electron/install.js
       - name: the stranger's first hour
         run: |
           set -uo pipefail
+          uname -m
           T="${TMPDIR:-/tmp}"
           echo "TMPDIR=$T"
           rm -f "$T/ci-fresh-report.txt"
@@ -266,28 +292,30 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fresh-run-macos
+          name: fresh-run-macos-${{ matrix.arch }}
           path: fresh-artifacts/
           if-no-files-found: ignore
           retention-days: 14
-      - name: package (apple silicon and intel)
+      - name: package
+        run: npm run ${{ matrix.pkg }}
+      - name: sign ad hoc
+        # no Apple account involved; since Electron 42 a Mac notification needs a signed app
         run: |
-          npm run package:mac
-          npm run package:mac-x64
+          codesign --force --deep --sign - "release-next/CortexInsight-darwin-${{ matrix.arch }}/CortexInsight.app"
+          codesign --verify --deep --verbose=1 "release-next/CortexInsight-darwin-${{ matrix.arch }}/CortexInsight.app"
       - name: zip
         run: |
           VER=$(node -p "require('./package.json').version")
-          ditto -c -k --sequesterRsrc --keepParent release-next/CortexInsight-darwin-arm64/CortexInsight.app "CortexInsight-$VER-mac-arm64.zip"
-          ditto -c -k --sequesterRsrc --keepParent release-next/CortexInsight-darwin-x64/CortexInsight.app "CortexInsight-$VER-mac-x64.zip"
+          ditto -c -k --sequesterRsrc --keepParent "release-next/CortexInsight-darwin-${{ matrix.arch }}/CortexInsight.app" "CortexInsight-$VER-mac-${{ matrix.arch }}.zip"
           ls -la CortexInsight-*.zip
-      - name: keep the builds
+      - name: keep the build
         uses: actions/upload-artifact@v4
         with:
-          name: CortexInsight-mac
-          path: CortexInsight-*-mac-*.zip
+          name: CortexInsight-mac-${{ matrix.arch }}
+          path: CortexInsight-*-mac-${{ matrix.arch }}.zip
           retention-days: 14
       - name: release on a version tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: CortexInsight-*-mac-*.zip
+          files: CortexInsight-*-mac-${{ matrix.arch }}.zip

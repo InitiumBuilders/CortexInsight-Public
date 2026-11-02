@@ -4,6 +4,8 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('cortex', {
+  // the machine this window runs on: the renderer lightens itself on an Intel Mac
+  env: { platform: process.platform, arch: process.arch },
   // --- auth / lock ---
   unlock: (password) => ipcRenderer.invoke('auth:unlock', password),
   guardStatus: () => ipcRenderer.invoke('guard:status'),

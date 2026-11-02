@@ -834,13 +834,32 @@ function fireBeacon(rec) {
     req.write(body); req.end();
   } catch { /* ignore */ }
 }
+// ⚠ Electron 42 moved macOS notifications to UNNotification, which needs a signed
+// app. An unsigned one gets 'failed' and shows nothing. Then the dock bounces once
+// and native toasts stop being attempted; the bell and the feed still carry every
+// message, because pushNotification records it before it ever reaches here.
+let _nativeNotifyFailed = false;
 function notify(title, body) {
   try {
-    if (!Notification.isSupported()) return;
+    if (_nativeNotifyFailed || !Notification.isSupported()) return;
     const n = new Notification({ title, body, silent: false });
     n.on('click', () => showWindow());
+    n.on('failed', () => {
+      _nativeNotifyFailed = true;
+      if (process.platform === 'darwin') safe(() => app.dock && app.dock.bounce('informational'));
+    });
     n.show();
   } catch {}
+}
+// Electron 35 moved console-message to one details object with the level as a
+// word; the positional arguments still arrive through 44 and go in 47. Read the
+// new shape first and fall back to the old, so every harness stays honest.
+const CONSOLE_LEVEL = { verbose: 0, debug: 0, info: 1, warning: 2, error: 3 };
+function consoleMsg(e, level, message, line, source) {
+  const d = e && typeof e === 'object' && ('message' in e || 'level' in e) ? e : null;
+  const lv = d && d.level != null ? (typeof d.level === 'number' ? d.level : (CONSOLE_LEVEL[String(d.level)] != null ? CONSOLE_LEVEL[String(d.level)] : 1)) : (typeof level === 'number' ? level : 1);
+  return { level: lv, message: d && d.message != null ? String(d.message) : String(message == null ? '' : message),
+    line: d && d.lineNumber != null ? d.lineNumber : line, source: d && d.sourceId != null ? d.sourceId : source };
 }
 // Higher-level: dedupe within a window, log to the feed, raise tray + native toast.
 const _notifDedupe = {};
@@ -5099,7 +5118,7 @@ function parseMemoryEntries(agent, days = 4, maxEntries = 30) {
       const timeKnown = !!(isoHead || hm);
       const title = /^\d{4}-\d\d-\d\d/.test(head) ? '' : head.slice(0, 120);
       const inIdx = b.indexOf('**In:**');
-      const respM = b.match(/\*\*(DAVARA|DAVARIS|Cortex →):\*\*/);
+      const respM = b.match(/\*\*(DAVARA|DAVARIS|Cortex →|Out):\*\*/);
       const respIdx = respM ? b.indexOf(respM[0]) : -1;
       const inbound = inIdx !== -1 ? b.slice(inIdx + 7, respIdx !== -1 ? respIdx : undefined).trim() : '';
       let resp = respIdx !== -1 ? b.slice(respIdx + respM[0].length).trim() : '';
@@ -14577,8 +14596,9 @@ function recentReplies(agent, n = 3) {
     for (const b of blocks) {
       const h = /###\s+(\S+ \S+)\s+·\s+([^·]+?)\s+·\s+([^·]+?)\s+·\s+([\d.]+)s/.exec(b);
       if (!h || h[2].trim() !== agent) continue;
-      const inb = (/\*\*In:\*\*\s*([\s\S]*?)(?=\n\*\*Cortex|$)/.exec(b) || [])[1] || '';
-      const rep = (/\*\*Cortex →:\*\*\s*([\s\S]*)$/.exec(b) || [])[1] || '';
+      // the desktop relay writes "**Cortex →:**"; the bundled server relay writes "**Out:**"
+      const inb = (/\*\*In:\*\*\s*([\s\S]*?)(?=\n\*\*(?:Cortex →|Out):|$)/.exec(b) || [])[1] || '';
+      const rep = (/\*\*(?:Cortex →|Out):\*\*\s*([\s\S]*)$/.exec(b) || [])[1] || '';
       out.push({ ts: h[1], status: h[3], latency: +h[4] || 0, ask: inb.trim().slice(0, 300), reply: rep.trim().slice(0, 1600) });
       if (out.length >= n) return out;
     }
@@ -14763,8 +14783,9 @@ function createWindow() {
   mainWin.loadFile(path.join(__dirname, 'src', 'index.html'));
   mainWin.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
   // diagnostics — surface renderer errors/crashes to the terminal (bug-testing aid)
-  mainWin.webContents.on('console-message', (_e, level, msg, line, src) => {
-    if (level >= 2) console.log(`[renderer ${level === 3 ? 'ERR' : 'warn'}] ${msg} (${(src || '').split('/').pop()}:${line})`);
+  mainWin.webContents.on('console-message', (e, ...pos) => {
+    const m = consoleMsg(e, ...pos);
+    if (m.level >= 2) console.log(`[renderer ${m.level === 3 ? 'ERR' : 'warn'}] ${m.message} (${String(m.source || '').split('/').pop()}:${m.line})`);
   });
   mainWin.webContents.on('render-process-gone', (_e, d) => console.log('[render-process-gone]', d.reason));
   mainWin.webContents.on('preload-error', (_e, p, err) => console.log('[preload-error]', err && err.message));
@@ -16258,8 +16279,9 @@ async function runSmoke() {
   // Capture EVERY renderer console error/warning — a view that throws would
   // otherwise render blank and look "fine" in a screenshot.
   const problems = [];
-  wc.on('console-message', (_ev, level, message, line, source) => {
-    if (level >= 2) problems.push(`[${level === 3 ? 'ERROR' : 'WARN'}] ${message} (${String(source || '').split('/').pop()}:${line})`);
+  wc.on('console-message', (e, ...pos) => {
+    const m = consoleMsg(e, ...pos);
+    if (m.level >= 2) problems.push(`[${m.level === 3 ? 'ERROR' : 'WARN'}] ${m.message} (${String(m.source || '').split('/').pop()}:${m.line})`);
   });
   wc.on('render-process-gone', (_e, d) => problems.push(`[FATAL] renderer gone: ${d && d.reason}`));
   // Walk every view and prove each one renders real content, not an empty shell.
@@ -16996,8 +17018,9 @@ async function runFreshTest() {
   const framed = () => Promise.race([wc.executeJavaScript('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(1))))').catch(() => 0), wait(900)]);
   const shoot = async (name) => { await framed(); return safe(() => wc.capturePage().then((img) => fs.writeFileSync(path.join(outDir, name), img.toPNG()))); };
   const problems = [];
-  wc.on('console-message', (_ev, level, message, line, source) => {
-    if (level >= 2) problems.push(`[${level === 3 ? 'ERROR' : 'WARN'}] ${message} (${String(source || '').split('/').pop()}:${line})`);
+  wc.on('console-message', (e, ...pos) => {
+    const m = consoleMsg(e, ...pos);
+    if (m.level >= 2) problems.push(`[${m.level === 3 ? 'ERROR' : 'WARN'}] ${m.message} (${String(m.source || '').split('/').pop()}:${m.line})`);
   });
   wc.on('render-process-gone', (_e, d) => problems.push(`[FATAL] renderer gone: ${d && d.reason}`));
   const textOf = (nav) => wc.executeJavaScript(`(function(){const s=document.querySelector('section[data-view="${nav}"]');return s?(s.innerText||'').replace(/\\s+/g,' ').trim():''})()`).catch(() => '');
@@ -17069,8 +17092,9 @@ async function runFleetTest() {
   const shoot = async (name) => { await framed(); return safe(() => wc.capturePage().then((img) => fs.writeFileSync(path.join(outDir, name), img.toPNG()))); };
   const problems = [];
   const ok = (label, cond, detail) => { log(`[fleet] ${cond ? 'ok  ' : 'FAIL'} ${label}${detail ? ' · ' + detail : ''}`); if (!cond) problems.push('[' + label.split(' ')[0].toUpperCase() + '] ' + label + (detail ? ' · ' + detail : '')); };
-  wc.on('console-message', (_ev, level, message, line, source) => {
-    if (level >= 2) problems.push(`[${level === 3 ? 'ERROR' : 'WARN'}] ${message} (${String(source || '').split('/').pop()}:${line})`);
+  wc.on('console-message', (e, ...pos) => {
+    const m = consoleMsg(e, ...pos);
+    if (m.level >= 2) problems.push(`[${m.level === 3 ? 'ERROR' : 'WARN'}] ${m.message} (${String(m.source || '').split('/').pop()}:${m.line})`);
   });
   wc.on('render-process-gone', (_e, d) => problems.push(`[FATAL] renderer gone: ${d && d.reason}`));
   const textOf = (nav) => wc.executeJavaScript(`(function(){const s=document.querySelector('section[data-view="${nav}"]');return s?(s.innerText||'').replace(/\\s+/g,' ').trim():''})()`).catch(() => '');
@@ -17364,6 +17388,16 @@ async function runFleetTest() {
     relayAuthTick();
     ok('an old card read again after the clear does not bring the hold back', relayAuthState().state === 'ok', JSON.stringify(relayAuthState()).slice(0, 140));
     safe(() => fs.unlinkSync(mdF)); safe(() => fs.unlinkSync(tokF));
+    // the bundled server relay writes "**Out:**", not "**Cortex →:**": its 402 is read the same way
+    STATE.relayAuth = { state: 'ok' };
+    const mdV = P('logs', 'interactions', 'arden-' + localDay() + '.md');
+    fs.writeFileSync(mdV, '\n### ' + stampNow + ' · arden · OK · 18.7s · 293 chars\n**In:** Fleet test seek\n\n**Out:** ' + CARD_402 + '\n\n---\n');
+    fs.appendFileSync(P('logs', 'mouth-proxy.log'), stampNow + ' OK arden 293c in 18.7s (attempt 1)\n');
+    _raSeen.proxy = 0; _raSeen.files.clear();
+    relayAuthTick();
+    ok('a server relay\'s 402 is read from its own log', relayAuthState().state === 'fault' && relayAuthState().kind === 'no-credits', JSON.stringify(relayAuthState()).slice(0, 120));
+    safe(() => fs.unlinkSync(mdV));
+    STATE.relayAuth = { state: 'ok' };
     // a quoted card, a spent-retries card, a provider out of credits, and the half-open check
     ok('a reply that quotes the card is not a fault', relayFault('You pasted: "' + CARD_401 + '" It means the relay token was revoked; run the sign-in.') === null);
     const SPENT = 'One breath, August — the Cortex relay couldn\'t complete that turn (transient failure, all retries spent).';
@@ -17789,6 +17823,17 @@ if (!_ISOLATED && !_SMOKE && !_FRESH && !_FLEET && !app.requestSingleInstanceLoc
       createWindow();
       startPulse();
       buildTray();
+      // A locked screen or a sleeping machine shows nobody anything: the drive
+      // overlay (a transparent always-on-top window) hides and stops drawing,
+      // and comes back as it was. On an Intel Mac it is the costliest surface.
+      safe(() => {
+        const { powerMonitor } = require('electron');
+        let hushed = false;
+        const hush = () => safe(() => { if (overlayWin && !overlayWin.isDestroyed() && overlayWin.isVisible()) { overlayWin.hide(); hushed = true; } });
+        const wake = () => safe(() => { if (hushed && overlayWin && !overlayWin.isDestroyed()) overlayWin.showInactive(); hushed = false; });
+        powerMonitor.on('lock-screen', hush); powerMonitor.on('suspend', hush);
+        powerMonitor.on('unlock-screen', wake); powerMonitor.on('resume', wake);
+      });
       // ⚠ The smoke renders from a COPY of his vault that points at his LIVE
       // tree. Its watchdog could fire a Duo-Drive pass, a loop or a phone
       // message from the copy, and its boot wrote the live bridge (2026-09-23).

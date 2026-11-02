@@ -2301,7 +2301,8 @@ async function loadSystems() {
 function startField() {
   const cv = $('#field'); if (!cv) return;
   const ctx = cv.getContext('2d', { alpha: true });
-  const FPS = 20, FRAME_MS = 1000 / FPS, LINK_D2 = 148 * 148;
+  // half the frames on an Intel Mac (gpu-lite): the field is atmosphere, not information
+  const FPS = document.documentElement.classList.contains('gpu-lite') ? 10 : 20, FRAME_MS = 1000 / FPS, LINK_D2 = 148 * 148;
   let W = 0, H = 0, nodes = [], pulses = [], t = 0, last = 0, raf = 0, running = false;
 
   let stars = [], comet = null;
