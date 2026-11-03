@@ -28,8 +28,10 @@ if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ -r "$CORTEX_TOKEN_FILE" ]; then
   export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '[:space:]' < "$CORTEX_TOKEN_FILE")"
 fi
 
+# Lowercase, always: macOS uuidgen prints uppercase, Linux prints lowercase, and
+# a session id must read the same on both sides of the checkpoint.
 cortex_new_sid() {
-  uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null
+  { uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null; } | tr '[:upper:]' '[:lower:]'
 }
 
 cortex_ckpt_file() { echo "$ROOT/agents/$1/checkpoint.state"; }
@@ -99,7 +101,8 @@ cortex_rotate_logs() {
   local f sz
   for f in "$ROOT"/logs/*.log "$ROOT"/logs/*/*.log; do
     [ -f "$f" ] || continue
-    sz="$(stat -c %s "$f" 2>/dev/null || echo 0)"
+    # GNU stat first, BSD stat (macOS) second: a Mac has no `stat -c`
+    sz="$(stat -c %s "$f" 2>/dev/null || stat -f %z "$f" 2>/dev/null || echo 0)"
     if [ "$sz" -gt 5242880 ]; then
       mv -f "$f" "$f.1" 2>/dev/null || true
     fi

@@ -287,9 +287,12 @@ esac
 
 SYSTEM_PROMPT="$SOUL_HINT"
 if [ -n "${CORTEX_MODE_DEEP:-}" ]; then
+  # tr, not ${CORTEX_MODE^^}: that is bash 4, and a Mac's /bin/bash is 3.2, where
+  # it is a "bad substitution" that kills the turn the moment a mode is on.
+  MODE_UPPER="$(printf '%s' "${CORTEX_MODE:-}" | tr '[:lower:]' '[:upper:]')"
   SYSTEM_PROMPT="$SYSTEM_PROMPT
 
---- MODE: ${CORTEX_MODE^^} (deep build discipline is ON) ---
+--- MODE: ${MODE_UPPER} (deep build discipline is ON) ---
 Work as a craftsman on a build that matters. Plan before touching anything; state the plan in one breath. Build to the plan. Verify every claim by running it — a thing you did not run is a thing you do not know. Then review your own work as an adversary would: what breaks it, what is missing, what would embarrass you tomorrow — and fix that before you report. Spawn subagents (the Agent tool) for independent, parallel or exploratory work, and give each a precise brief and a definition of done. Report what was verified, what was not, and what you left out on purpose. Depth is the point of this mode; do not trade it for speed."
 fi
 if [ -n "$SOUL_FILE" ] && [ -f "$SOUL_FILE" ]; then
@@ -429,8 +432,9 @@ invoke() {
     cortex_ckpt_save "$CKPT_AGENT" "$sid" inflight 2>/dev/null || true
   fi
   if [ -n "${CORTEX_STREAM_FILE:-}" ] && [ -r "$STREAM_PARSER" ] && command -v python3 >/dev/null 2>&1; then
+    # ${idf[@]+...}: an empty array under set -u is "unbound" on bash 3.2 (macOS)
     printf '%s' "$MSG" | claude -p \
-      "${idf[@]}" \
+      ${idf[@]+"${idf[@]}"} \
       --model "$MODEL" \
       --max-turns "$MAX_TURNS" \
       --append-system-prompt "$SYSTEM_PROMPT" \
@@ -440,7 +444,7 @@ invoke() {
       | python3 "$STREAM_PARSER"
   else
     printf '%s' "$MSG" | claude -p \
-      "${idf[@]}" \
+      ${idf[@]+"${idf[@]}"} \
       --model "$MODEL" \
       --max-turns "$MAX_TURNS" \
       --append-system-prompt "$SYSTEM_PROMPT" \

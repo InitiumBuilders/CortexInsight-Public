@@ -94,6 +94,19 @@ It checks the toolchain, installs from the lockfile, packages for this Mac's arc
 
 **The fleet on a Mac.** Claude Code runs natively, so the fleet tree is a folder in your home and the relay listens on localhost. Set the fleet path on Config if discovery did not find it. The bridge installs into the runner the same way.
 
+**The relay on a Mac.** The relay in `linux/relay` runs on a Mac unchanged (the system Python 3.9, `/bin/bash` 3.2, BSD tools). There is no systemd, so `scripts/mac-relay.sh` does its job. From a clone:
+
+```bash
+bash scripts/mac-relay.sh setup      # the relay into ~/cortex/relay, the CLI to ~/cortex/bin/cortex
+claude setup-token                   # approve the link; it prints a one-year token
+umask 077; printf '%s' '<the-token>' > ~/.claude/cortex-oauth-token
+~/cortex/bin/cortex relay start
+~/cortex/bin/cortex relay install    # optional: launchd starts it at every login and after a crash
+~/cortex/bin/cortex doctor
+```
+
+Run `setup` again after a pull to move the relay to the new code; a running relay is restarted onto it. The console's Restart relay button speaks to systemd, so on a Mac use `cortex relay restart`.
+
 ## Where things live
 
 | What | Where |

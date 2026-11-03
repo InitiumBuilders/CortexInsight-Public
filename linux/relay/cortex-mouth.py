@@ -42,6 +42,7 @@ import os
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -895,16 +896,20 @@ NOT_REALLY_OK = (
     ("could not complete (transient failure", "runner"),
 )
 
+# How the operator restarts the relay on THIS machine: systemd on a Linux box,
+# the cortex CLI's launchd agent on a Mac. Advice for the wrong one is no advice.
+RESTART_HINT = "cortex relay restart" if sys.platform == "darwin" else "systemctl --user restart cortex-relay"
+
 WHAT_TO_DO = {
     "auth": ("This machine is signed out of Claude Code, so no turn can run. Sign it back in with:\n"
              "  claude setup-token\n"
              "then save the token it prints:\n"
              "  umask 077; printf '%s' '<the-token>' > ~/.claude/cortex-oauth-token\n"
-             "and restart the relay:  systemctl --user restart cortex-relay"),
+             f"and restart the relay:  {RESTART_HINT}"),
     "billing": "The account behind this subscription cannot run turns right now (billing). Nothing was spent here.",
     "limit": "This subscription has hit its usage limit for now. The turn was not run; try again when the window resets.",
     "runner": ("The seat tried this turn three times and could not finish it. Nothing was billed. "
-               "The reason is in /root/cortex/logs/runner-stderr/<seat>-<date>.log; send the message again in a moment."),
+               f"The reason is in {ROOT}/logs/runner-stderr/<seat>-<date>.log; send the message again in a moment."),
 }
 
 
@@ -1005,7 +1010,7 @@ def relay(agent, msg, on_delta=None, plan=None, extra=None, on_beat=None) -> str
         return held
     held = ("The relay could not complete this turn after every retry. Nothing was lost and no "
             "paid API was touched. Send it again in a moment; if it keeps happening, read "
-            "/root/cortex/logs/mouth-proxy.log and the seat's runner-stderr log.")
+            f"{LOG} and the seat's runner-stderr log.")
     log(f"FINAL-FAIL {agent} ({latency}s)")
     log_interaction(agent, msg, held, "FAIL", latency, RETRIES + 1, meta)
     return held

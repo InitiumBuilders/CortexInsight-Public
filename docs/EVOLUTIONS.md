@@ -153,6 +153,10 @@ AOSSI asks one question of every seat at six horizons, from this hour to ten yea
 
 *Lesson: a build that has never run on the operator's hardware is a hope. Run the harness on the machine class he owns before handing him the file.*
 
+**3.71.1.** The relay, on the Mac. 3.71 made the console fast there, but the newest Mac download was still 3.67, and a Mac had no relay at all: it ran only under systemd. `scripts/mac-relay.sh` installs the relay from a clone into `~/cortex`, starts it, and hands it to launchd if asked, so it comes back at every login and after a crash. The relay itself moved over almost unchanged, but a Mac's `/bin/bash` is 3.2, and three things broke there without a word. `${CORTEX_MODE^^}` is a bad substitution in bash 3.2, so every turn died the moment a gear was on. An empty array under `set -u` counts as unbound. And `stat -c` does not exist on a Mac, so the log rotation read every log as empty. All three now work on both machines. Session ids are lowercased, because macOS `uuidgen` prints them in capitals. The sign-in card and the failure message now name this machine's restart command and fleet path, not a Linux server's. The console's Restart relay button calls the Mac CLI there, where it used to call systemctl.
+
+*Lesson: "it runs on a Mac" means it runs on the Mac's own bash. Test on the shell the machine actually has.*
+
 ## What the arc says
 
 Three loops turned through these versions. The build loop: attention became shipped surface. The canon loop: every build became a lesson, and the lesson became a law in the code or in these pages. The mover loop: the console became something a second operator could run without the first one in the room. The third loop is the youngest and the one this release is for.

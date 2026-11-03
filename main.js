@@ -14712,7 +14712,12 @@ ipcMain.handle('heal:run', requireGate(async (_e, { action, arg }) => {
       return { ok: r.rc === 0, output: r.out.slice(-7000) || '(no output)' };
     }
     if (action === 'restart-relay') {
-      const r = await runWslFull(['systemctl', '--user', 'restart', 'cortex-mouth-proxy.service'], 25000);
+      // A Mac has no systemd. The CLI scripts/mac-relay.sh installs restarts the
+      // relay whether launchd or a hand start owns it; without the CLI, launchd's agent.
+      const macCli = path.join(root(), 'bin', 'cortex');
+      const r = !IS_MAC ? await runWslFull(['systemctl', '--user', 'restart', 'cortex-mouth-proxy.service'], 25000)
+        : statOf(macCli) ? await runWslFull(['bash', macCli, 'relay', 'restart'], 25000)
+        : await runWslFull(['launchctl', 'kickstart', '-k', 'gui/' + process.getuid() + '/com.outlier.cortex-mouth-proxy'], 25000);
       await new Promise((res) => setTimeout(res, 1800));
       const h = await relayHealth();
       pushNotification(h ? 'good' : 'warn', 'Relay restart', h ? 'mouth-proxy is back up.' : 'restart issued — relay not confirmed yet.', 'settings', null, { native: false });
