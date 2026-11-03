@@ -228,8 +228,24 @@ $key
 </dict>
 </plist>
 EOF
+  # bootout returns before launchd has finished removing the old job, and a
+  # bootstrap in that window fails with "5: Input/output error". Wait for the
+  # job to be gone, and give the load a few tries.
   launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null
-  launchctl bootstrap "$DOMAIN" "$PLIST" || { rose "launchd would not load $PLIST"; return 1; }
+  local i out="" loaded=""
+  for i in 1 2 3 4 5 6 7 8 9 10; do under_launchd || break; sleep 0.5; done
+  for i in 1 2 3 4 5; do
+    if out="$(launchctl bootstrap "$DOMAIN" "$PLIST" 2>&1)"; then loaded=1; break; fi
+    sleep 1
+  done
+  if [ -z "$loaded" ]; then
+    if under_launchd; then rose "launchd kept the job it had and would not load the new one: ${out:-no reason given}"; return 1; fi
+    rose "launchd would not load $PLIST: ${out:-no reason given}"
+    # the old job is gone; never leave the operator with no relay at all
+    info "starting the relay by hand until launchd takes it"
+    relay_start
+    return 1
+  fi
   if wait_health; then green "relay installed; launchd starts it at every login"; return 0; fi
   rose "launchd loaded the relay but it does not answer; see: $CLI relay logs"
   return 1
