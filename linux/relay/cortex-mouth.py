@@ -120,6 +120,17 @@ def _untrack(proc) -> None:
         LIVE.discard(proc)
 
 
+_last_refusal = [0.0]
+
+
+def _note_refusal(origin) -> None:
+    # Once a minute at most: a page that loops its requests must not fill the disk.
+    now = time.time()
+    if now - _last_refusal[0] >= 60:
+        _last_refusal[0] = now
+        log(f"REFUSED a browser request (origin {str(origin)[:80]}); a keyless relay answers no web page")
+
+
 def _stop(signum, _frame) -> None:
     # Taken without blocking: the main thread never holds this lock, but a signal
     # handler that can wait on a lock is a hang waiting to happen.
@@ -1081,10 +1092,24 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def _from_a_browser(self) -> bool:
+        """A browser marks every POST it sends with Origin, and a modern one adds
+        Sec-Fetch-Site to every request. Nothing that has a reason to talk to this
+        relay sends either: the console's main process, Hermes, curl, a tunnel's
+        forwarder. A web page does, and loopback does not keep out the pages open
+        in a browser on this same machine."""
+        return bool(self.headers.get("Origin") or self.headers.get("Sec-Fetch-Site"))
+
     def _authorised(self):
         """With a key set, it must be the first path segment. Without one, only
-        loopback callers get here at all, because that is all we bind to."""
+        loopback callers get here at all, because that is all we bind to, and a
+        loopback caller that is a web page is refused: it could otherwise run a
+        seat with Bash and Write on the operator's machine with one text/plain
+        POST, which needs no CORS preflight."""
         if not KEY:
+            if self._from_a_browser():
+                _note_refusal(self.headers.get("Origin") or self.headers.get("Sec-Fetch-Site"))
+                return False, self.path
             return True, self.path
         parts = self.path.lstrip("/").split("/", 1)
         if parts and parts[0] == KEY:

@@ -144,6 +144,8 @@ relay_start() {
   else
     [ -r "$RELAY_DIR/cortex-mouth.py" ] || { rose "no relay in $RELAY_DIR; from a clone run: bash scripts/mac-relay.sh setup"; return 1; }
     mkdir -p "$ROOT/logs"
+    # Owner-only files: the interaction logs hold every message and every reply.
+    umask 077
     # PATH is pinned so a turn finds claude the same way the launchd agent does.
     # The key goes through only when it is set: an empty value would switch off
     # the relay's ~/.cortex_mouth_key fallback.
@@ -195,7 +197,7 @@ relay_install() {
   local key=""
   [ -n "${CORTEX_MOUTH_KEY+set}" ] && key="    <key>CORTEX_MOUTH_KEY</key><string>$(xml_escape "$CORTEX_MOUTH_KEY")</string>"
   # ProcessType Interactive: without it launchd throttles the job's CPU and I/O,
-  # and every turn the relay runs inherits that.
+  # and every turn the relay runs inherits that. Umask 63 is 077: owner-only logs.
   cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -217,6 +219,7 @@ $key
   </dict>
   <key>WorkingDirectory</key><string>$(xml_escape "$ROOT")</string>
   <key>ProcessType</key><string>Interactive</string>
+  <key>Umask</key><integer>63</integer>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>5</integer>
@@ -277,7 +280,8 @@ doctor() {
     green "  ok  launchd starts the relay at login"
     # setup restarts the relay onto new code, but launchd keeps the job definition
     # it loaded; only install rewrites that
-    if grep -q "$LEGACY_DIR/" "$PLIST" 2>/dev/null || ! grep -q '<key>ProcessType</key>' "$PLIST" 2>/dev/null; then
+    # Umask is the newest key the job carries; a plist without it predates it
+    if grep -q "$LEGACY_DIR/" "$PLIST" 2>/dev/null || ! grep -q '<key>Umask</key>' "$PLIST" 2>/dev/null; then
       info "--  launchd runs an older job definition; '$CLI relay install' brings it up to date"
     fi
   else info "--  not started at login (optional): $CLI relay install"; fi

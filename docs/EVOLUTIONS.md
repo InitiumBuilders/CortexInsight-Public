@@ -159,6 +159,12 @@ The first cut was reviewed before it shipped, and the review found its release n
 
 *Lesson: "it runs on a Mac" means it runs on the Mac's own bash, and a test of a bug has to run the way the bug runs. `bash -c` aborted where a script file ran on.*
 
+**3.71.2.** Loopback is not a wall on a desk. Three reviewers checked 3.71.1 for Linux regressions, Mac runtime faults and the accuracy of its notes. A fourth pass asked what all three had left out, and found something none of them had checked. A relay without a capability key answered any caller on 127.0.0.1, and a web page open in a browser on the same machine is such a caller. A cross-site POST sent as `text/plain` needs no CORS preflight. So one visit to the wrong page could start a turn on a seat with Bash and Write, and the page never needed to read the answer. That was true of every desktop relay, the Windows one through WSL included, and on a server it never came up, because no browser runs there. A keyless relay now refuses any request a browser marks as its own, either `Origin` or `Sec-Fetch-Site`. Nothing that has a reason to talk to the relay sends those headers: the console's main process, Hermes, curl and a tunnel's forwarder all leave them off. A keyed relay is unchanged, because the key is already the capability. The refusal is logged at most once a minute, so a page that loops cannot fill the disk.
+
+Two smaller changes came with it. On a Mac the console now lets the relay's runner apply the gear, as it already did on Linux. Since 3.71.1 that runner adds the deep-build block itself, so the brief stopped carrying it as well, and a deep turn no longer reads its orders twice. The Mac relay also writes its files owner-only. Its interaction logs hold every message and every reply, and on a shared Mac anyone could read them.
+
+*Lesson: a service's safety comes from where it runs as much as from what it is. Moving the same relay from a server to a laptop put a browser beside it, and "only loopback can reach it" stopped being a guarantee.*
+
 ## What the arc says
 
 Three loops turned through these versions. The build loop: attention became shipped surface. The canon loop: every build became a lesson, and the lesson became a law in the code or in these pages. The mover loop: the console became something a second operator could run without the first one in the room. The third loop is the youngest and the one this release is for.

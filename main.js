@@ -1658,9 +1658,10 @@ Never certify your own build. Big work goes to Greta for critique: bash ~/.corte
 Report in three buckets: verified (with the command) · unverified · left out on purpose.`;
 }
 function modesScript() { return path.join(root(), 'SystemsCortex', 'motus-mode.sh'); }
-// Where the runner applies modes.json itself (the Linux relay), the brief must not
-// carry the gear block as well, or every deep turn reads its orders twice.
-function runnerAppliesModes() { return process.platform === 'linux' && !!statOf(modesScript()); }
+// Where the runner applies modes.json itself (the Linux relay, and the same relay
+// on a Mac since 3.71.1), the brief must not carry the gear block as well, or
+// every deep turn reads its orders twice.
+function runnerAppliesModes() { return (process.platform === 'linux' || process.platform === 'darwin') && !!statOf(modesScript()); }
 function gearSeats() { return AGENTS.filter((id) => FLEET_BY_ID[id] && !FLEET_BY_ID[id].external); }
 function fleetGear() {
   const g = (STATE && STATE.gear) || {};
