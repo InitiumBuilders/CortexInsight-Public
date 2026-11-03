@@ -120,7 +120,7 @@ Start the relay, and optionally hand it to launchd so it starts at every login a
 ~/cortex/bin/cortex relay install
 ```
 
-`~/cortex/bin/cortex doctor` says what is missing, in order. Run `setup` again after a pull to move the relay to the new code; a running relay is restarted onto it. The console's Restart relay button calls the same CLI on a Mac (or kickstarts the launchd agent when the CLI is not there), and stopping the relay ends the turns it had in flight.
+`~/cortex/bin/cortex doctor` says what is missing, in order. Run `setup` again after a pull to move the relay to the new code; a running relay is restarted onto it. launchd keeps the job definition it loaded, though, so when `doctor` says the definition is older, run `relay install` once more. The console's Restart relay button calls the same CLI on a Mac (or kickstarts the launchd agent when the CLI is not there), and stopping the relay ends the turns it had in flight.
 
 ## Where things live
 

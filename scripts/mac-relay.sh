@@ -275,7 +275,11 @@ doctor() {
   health && green "  ok  relay live on 127.0.0.1:$PORT" || { rose "  !!  no relay answers on 127.0.0.1:$PORT"; info "start it: $CLI relay start"; bad=1; }
   if under_launchd; then
     green "  ok  launchd starts the relay at login"
-    grep -q "$LEGACY_DIR/" "$PLIST" 2>/dev/null && info "--  launchd still starts it through $LEGACY_DIR; '$CLI relay install' points it at $RELAY_DIR"
+    # setup restarts the relay onto new code, but launchd keeps the job definition
+    # it loaded; only install rewrites that
+    if grep -q "$LEGACY_DIR/" "$PLIST" 2>/dev/null || ! grep -q '<key>ProcessType</key>' "$PLIST" 2>/dev/null; then
+      info "--  launchd runs an older job definition; '$CLI relay install' brings it up to date"
+    fi
   else info "--  not started at login (optional): $CLI relay install"; fi
   return $bad
 }
