@@ -297,7 +297,7 @@ move is the first path in Motus Max, one press from being driven.
 
 | You see | What it means | What to do |
 |---|---|---|
-| "relay offline" in the titlebar | the loopback proxy is not listening | `wsl -e systemctl --user start cortex-mouth-proxy.service`, or run the sync helper |
+| "relay offline" in the titlebar | the loopback proxy is not listening | `wsl -e systemctl --user start cortex-mouth-proxy.service`, or run the sync helper; on a Mac, `~/cortex/bin/cortex relay start` (and `~/cortex/bin/cortex doctor` to see why) |
 | "relay signed out · sign in" in the titlebar | the relay is up but its Claude sign-in was revoked or expired, so every turn fails | press it and sign in (section 21) |
 | "relay out of credits" in the titlebar | the relay's turns go to a paid provider whose credits ran out | top up that provider, or sign the relay into the subscription (section 21) |
 | "could not reach the fleet on this network" at the gate | the vault is not paired to this machine | this is the foreign-device state; on your own machine, delete the vault to re-pair |

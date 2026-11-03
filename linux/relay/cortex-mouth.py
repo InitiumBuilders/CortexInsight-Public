@@ -102,6 +102,39 @@ def _kill_tree(proc) -> None:
             pass
 
 
+# Every runner in flight. Each one runs in its own session so a timeout can kill
+# its whole tree, which also puts it outside the relay's process group: systemd
+# still reaches it (a stop kills the whole cgroup), launchd and a plain kill do
+# not. So the relay ends its own turns when it is told to stop.
+LIVE = set()
+LIVE_LOCK = threading.Lock()
+
+
+def _track(proc) -> None:
+    with LIVE_LOCK:
+        LIVE.add(proc)
+
+
+def _untrack(proc) -> None:
+    with LIVE_LOCK:
+        LIVE.discard(proc)
+
+
+def _stop(signum, _frame) -> None:
+    # Taken without blocking: the main thread never holds this lock, but a signal
+    # handler that can wait on a lock is a hang waiting to happen.
+    got = LIVE_LOCK.acquire(timeout=1)
+    try:
+        live = list(LIVE)
+    finally:
+        if got:
+            LIVE_LOCK.release()
+    for proc in live:
+        _kill_tree(proc)
+    log(f"STOP signal {signum}: ended {len(live)} turn(s) in flight")
+    raise SystemExit(0)
+
+
 def _ckpt_mark(agent, status) -> None:
     """The runner's EXIT trap cannot run after a SIGKILL, so the console would
     keep drawing a seat as in-flight forever. Say honestly that it was cut short."""
@@ -795,12 +828,15 @@ def attempt(agent, msg, env, on_delta, timeout=None, on_beat=None):
     if on_delta is None or os.path.exists(STREAM_OFF):
         p = subprocess.Popen(["bash", RUNNER, agent], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, text=True, env=env, start_new_session=True)
+        _track(p)
         try:
             out, _ = p.communicate(msg, timeout=timeout)
         except subprocess.TimeoutExpired:
             _kill_tree(p)
             _ckpt_mark(agent, "incomplete")
             raise
+        finally:
+            _untrack(p)
         return p.returncode, (out or "").strip(), ""
 
     fd, spath = tempfile.mkstemp(prefix=f"cortex-stream-{agent}-", suffix=".txt")
@@ -816,6 +852,7 @@ def attempt(agent, msg, env, on_delta, timeout=None, on_beat=None):
     proc = subprocess.Popen(["bash", RUNNER, agent], stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env,
                             start_new_session=True)      # its own process group, so a kill reaches claude too
+    _track(proc)
     box = {}
 
     def feed():
@@ -861,6 +898,7 @@ def attempt(agent, msg, env, on_delta, timeout=None, on_beat=None):
             time.sleep(0.05)
         return proc.returncode, (box.get("out") or "").strip(), "".join(streamed)
     finally:
+        _untrack(proc)
         try:
             os.unlink(spath)
         except OSError:
@@ -897,8 +935,10 @@ NOT_REALLY_OK = (
 )
 
 # How the operator restarts the relay on THIS machine: systemd on a Linux box,
-# the cortex CLI's launchd agent on a Mac. Advice for the wrong one is no advice.
-RESTART_HINT = "cortex relay restart" if sys.platform == "darwin" else "systemctl --user restart cortex-relay"
+# the CLI scripts/mac-relay.sh installs on a Mac, by its full path because
+# nothing puts it on the PATH. Advice for the wrong machine is no advice.
+RESTART_HINT = (os.path.join(ROOT, "bin", "cortex") + " relay restart" if sys.platform == "darwin"
+                else "systemctl --user restart cortex-relay")
 
 WHAT_TO_DO = {
     "auth": ("This machine is signed out of Claude Code, so no turn can run. Sign it back in with:\n"
@@ -1175,6 +1215,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     os.makedirs(os.path.join(ROOT, "logs"), exist_ok=True)
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGINT, _stop)
     log(f"START cortex-mouth on 127.0.0.1:{PORT} root={ROOT} key={'yes' if KEY else 'no'}")
     print(f"relay listening on 127.0.0.1:{PORT}  (fleet tree: {ROOT})", flush=True)
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

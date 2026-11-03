@@ -287,8 +287,9 @@ esac
 
 SYSTEM_PROMPT="$SOUL_HINT"
 if [ -n "${CORTEX_MODE_DEEP:-}" ]; then
-  # tr, not ${CORTEX_MODE^^}: that is bash 4, and a Mac's /bin/bash is 3.2, where
-  # it is a "bad substitution" that kills the turn the moment a mode is on.
+  # tr, not ${CORTEX_MODE^^}: that is bash 4. A Mac's /bin/bash is 3.2, where it
+  # is a "bad substitution": bash drops this whole if-block and runs on, so every
+  # deep turn ran without the paragraph below and nothing said so.
   MODE_UPPER="$(printf '%s' "${CORTEX_MODE:-}" | tr '[:lower:]' '[:upper:]')"
   SYSTEM_PROMPT="$SYSTEM_PROMPT
 
@@ -432,7 +433,8 @@ invoke() {
     cortex_ckpt_save "$CKPT_AGENT" "$sid" inflight 2>/dev/null || true
   fi
   if [ -n "${CORTEX_STREAM_FILE:-}" ] && [ -r "$STREAM_PARSER" ] && command -v python3 >/dev/null 2>&1; then
-    # ${idf[@]+...}: an empty array under set -u is "unbound" on bash 3.2 (macOS)
+    # ${idf[@]+...}: an empty array under set -u is "unbound" on bash 3.2 (macOS),
+    # which would end the runner if a session id ever failed to mint
     printf '%s' "$MSG" | claude -p \
       ${idf[@]+"${idf[@]}"} \
       --model "$MODEL" \

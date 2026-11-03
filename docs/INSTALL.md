@@ -17,11 +17,11 @@ On a Linux server there is a fourth way, and it is one command. See [the Linux p
 | The console, every view, the harnesses | yes | yes | yes, in a terminal |
 | Fleet tree discovery and the bridge | yes, in WSL | yes, in your home | yes, in your home |
 | The relay, Command, loops, workflows, the board, the reading | yes | yes | yes |
-| The relay itself, bundled and installed for you | no, you point at yours | no, you point at yours | yes, since 3.67 |
+| The relay itself, bundled and installed for you | no, you point at yours | from a clone, `scripts/mac-relay.sh setup`, since 3.71.1 | yes, since 3.67 |
 | Motus Max in work mode (files, commands, APIs) | yes | yes | yes |
 | Motus Max on the screen (pointer, keyboard, window probe) | yes | not yet; the console says so when asked | no, and there is no screen to drive |
 | Self-update from a staged build beside the project tree | yes | yes, since 3.66 | yes for a windowed build; a server updates with `cortex update` |
-| Relay restart from the heal panel | yes, through WSL services | no; start the relay by hand | yes, `cortex relay restart` |
+| Relay restart from the heal panel | yes, through WSL services | yes, through `~/cortex/bin/cortex` or its launchd agent, since 3.71.1 | yes, `cortex relay restart` |
 | Sealed keys | DPAPI | Keychain | a 0600 key file bound to the machine id |
 | Voice, the studio, the second stack, the broadcast | yes | yes | the studio and the second stack yes; voice needs a microphone |
 | Driving another machine's console over SSH | yes, since 3.67 | yes, since 3.67 | it is the machine being driven |
@@ -94,18 +94,33 @@ It checks the toolchain, installs from the lockfile, packages for this Mac's arc
 
 **The fleet on a Mac.** Claude Code runs natively, so the fleet tree is a folder in your home and the relay listens on localhost. Set the fleet path on Config if discovery did not find it. The bridge installs into the runner the same way.
 
-**The relay on a Mac.** The relay in `linux/relay` runs on a Mac unchanged (the system Python 3.9, `/bin/bash` 3.2, BSD tools). There is no systemd, so `scripts/mac-relay.sh` does its job. From a clone:
+**The relay on a Mac.** The relay in `linux/relay` runs on a Mac unchanged (the system Python 3.9, `/bin/bash` 3.2, BSD tools). There is no systemd, so `scripts/mac-relay.sh` does its job. From a clone, first put the relay into `~/cortex/SystemsCortex` (where the console reads it) and the CLI into `~/cortex/bin/cortex`:
 
 ```bash
-bash scripts/mac-relay.sh setup      # the relay into ~/cortex/relay, the CLI to ~/cortex/bin/cortex
-claude setup-token                   # approve the link; it prints a one-year token
-umask 077; printf '%s' '<the-token>' > ~/.claude/cortex-oauth-token
-~/cortex/bin/cortex relay start
-~/cortex/bin/cortex relay install    # optional: launchd starts it at every login and after a crash
-~/cortex/bin/cortex doctor
+bash scripts/mac-relay.sh setup
 ```
 
-Run `setup` again after a pull to move the relay to the new code; a running relay is restarted onto it. The console's Restart relay button speaks to systemd, so on a Mac use `cortex relay restart`.
+Sign the relay in. `claude setup-token` opens a link to approve and prints a token that lasts a year; save it where the relay reads it, pasting your token in place of `<the-token>`:
+
+```bash
+claude setup-token
+```
+
+```bash
+umask 077; printf '%s' '<the-token>' > ~/.claude/cortex-oauth-token
+```
+
+Start the relay, and optionally hand it to launchd so it starts at every login and comes back after a crash:
+
+```bash
+~/cortex/bin/cortex relay start
+```
+
+```bash
+~/cortex/bin/cortex relay install
+```
+
+`~/cortex/bin/cortex doctor` says what is missing, in order. Run `setup` again after a pull to move the relay to the new code; a running relay is restarted onto it. The console's Restart relay button calls the same CLI on a Mac (or kickstarts the launchd agent when the CLI is not there), and stopping the relay ends the turns it had in flight.
 
 ## Where things live
 

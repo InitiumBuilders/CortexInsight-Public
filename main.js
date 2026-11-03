@@ -2473,7 +2473,9 @@ function healthVerdict(interactions, proxy) {
   const heal = [];
   if (faults >= 3) heal.push('Multiple recent faults — run `SystemsCortex/cortex-health.sh` and inspect `logs/runner-stderr/`.');
   if (proxy.events.filter((e) => e.kind === 'TIMEOUT').length) heal.push('Timeouts recorded — a true 1800s hang isn\'t retried; lower MAX_TURNS or split the task.');
-  if (!proxy.lastStart) heal.push('No proxy START line found — confirm `cortex-mouth-proxy.service` is active (systemctl --user status).');
+  if (!proxy.lastStart) heal.push(process.platform === 'darwin'
+    ? 'No proxy START line found — check the relay with `' + path.join(root(), 'bin', 'cortex') + ' relay status`.'
+    : 'No proxy START line found — confirm `cortex-mouth-proxy.service` is active (systemctl --user status).');
   const ra = relayAuthHeld();
   if (ra) { level = 'degraded'; score = Math.min(score, 20); heal.unshift(cap((RELAY_FAULTS.find((f) => f.kind === ra.kind) || {}).say || 'the relay is failing') + ' since ' + hhmm(ra.since) + '. ' + (ra.kind === 'signed-out' ? 'Sign it back in from the title bar.' : ra.kind === 'no-credits' ? 'Top up the provider or sign the relay into the subscription.' : 'It resets by itself.')); }
   return { level, score: clamp(score, 0, 100), faults, stale, heal };
@@ -14713,10 +14715,11 @@ ipcMain.handle('heal:run', requireGate(async (_e, { action, arg }) => {
     }
     if (action === 'restart-relay') {
       // A Mac has no systemd. The CLI scripts/mac-relay.sh installs restarts the
-      // relay whether launchd or a hand start owns it; without the CLI, launchd's agent.
+      // relay whether launchd or a hand start owns it, told which fleet tree it
+      // serves; without the CLI, launchd's agent.
       const macCli = path.join(root(), 'bin', 'cortex');
       const r = !IS_MAC ? await runWslFull(['systemctl', '--user', 'restart', 'cortex-mouth-proxy.service'], 25000)
-        : statOf(macCli) ? await runWslFull(['bash', macCli, 'relay', 'restart'], 25000)
+        : statOf(macCli) ? await runWslFull(['env', 'CORTEX_ROOT=' + root(), 'bash', macCli, 'relay', 'restart'], 25000)
         : await runWslFull(['launchctl', 'kickstart', '-k', 'gui/' + process.getuid() + '/com.outlier.cortex-mouth-proxy'], 25000);
       await new Promise((res) => setTimeout(res, 1800));
       const h = await relayHealth();
@@ -17021,7 +17024,12 @@ async function runFreshTest() {
   // composited, and wait for two real frames before every capture.
   safe(() => { wc.setBackgroundThrottling(false); mainWin.show(); mainWin.focus(); });
   const framed = () => Promise.race([wc.executeJavaScript('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(1))))').catch(() => 0), wait(900)]);
-  const shoot = async (name) => { await framed(); return safe(() => wc.capturePage().then((img) => fs.writeFileSync(path.join(outDir, name), img.toPNG()))); };
+  // A machine with no working GPU cannot capture a frame (UnknownVizError, seen on
+  // a hosted Intel Mac). The picture is evidence, not the verdict: say so once and
+  // keep walking, so every room is still checked instead of none.
+  let noShots = false;
+  const shoot = async (name) => { await framed(); return safe(() => wc.capturePage().then((img) => fs.writeFileSync(path.join(outDir, name), img.toPNG()))
+    .catch((e) => { if (!noShots) { noShots = true; log(`[fresh] note: no screenshots on this machine (${(e && e.message) || e}); every room is still checked`); } })); };
   const problems = [];
   wc.on('console-message', (e, ...pos) => {
     const m = consoleMsg(e, ...pos);
@@ -17094,7 +17102,10 @@ async function runFleetTest() {
   const flush = () => safe(() => fs.writeFileSync(report, lines.join('\n') + '\n', 'utf8'));
   safe(() => { wc.setBackgroundThrottling(false); mainWin.show(); mainWin.focus(); });
   const framed = () => Promise.race([wc.executeJavaScript('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(1))))').catch(() => 0), wait(900)]);
-  const shoot = async (name) => { await framed(); return safe(() => wc.capturePage().then((img) => fs.writeFileSync(path.join(outDir, name), img.toPNG()))); };
+  // as in the fresh walk: no GPU, no pictures, but every check still runs
+  let noShots = false;
+  const shoot = async (name) => { await framed(); return safe(() => wc.capturePage().then((img) => fs.writeFileSync(path.join(outDir, name), img.toPNG()))
+    .catch((e) => { if (!noShots) { noShots = true; log(`[fleet] note: no screenshots on this machine (${(e && e.message) || e}); every check still runs`); } })); };
   const problems = [];
   const ok = (label, cond, detail) => { log(`[fleet] ${cond ? 'ok  ' : 'FAIL'} ${label}${detail ? ' · ' + detail : ''}`); if (!cond) problems.push('[' + label.split(' ')[0].toUpperCase() + '] ' + label + (detail ? ' · ' + detail : '')); };
   wc.on('console-message', (e, ...pos) => {
