@@ -15,7 +15,7 @@
 // ============================================================================
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Notification, shell, Tray, Menu, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, shell, Tray, Menu, safeStorage, systemPreferences } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -220,9 +220,12 @@ const now = () => Date.now();
 //  one subtraction and a bounded array push.
 // ───────────────────────────────────────────────────────────────────────────
 const IPC_PERF = Object.create(null);
+// Channels that wait on a person, not on the machine: timing them would report a
+// finger on a sensor as a slow handler.
+const HUMAN_PACED = new Set(['auth:touchid']);
 {
   const _h = ipcMain.handle.bind(ipcMain);
-  ipcMain.handle = (channel, fn) => _h(channel, async (...args) => {
+  ipcMain.handle = (channel, fn) => HUMAN_PACED.has(channel) ? _h(channel, fn) : _h(channel, async (...args) => {
     const t0 = Date.now();
     try { return await fn(...args); }
     finally {
@@ -412,6 +415,7 @@ function defaultState() {
       autoEvolve: false,         // periodic Cortex self-reflection
       beaconUrl: '',             // optional remote endpoint for foreign-device alerts
       reduceMotion: false,
+      touchIdUnlock: false,      // Mac, opt-in: the Touch ID sheet opens the gate once a passphrase exists (see touchIdOffered)
       // --- Sentinel ---
       minimizeToTray: true,
       watchdogMs: 45000,         // background guardian cadence
@@ -3020,9 +3024,45 @@ ipcMain.handle('auth:unlock', (_e, password) => {
   return { ok, reason: ok ? 'ok' : (gate() ? 'bad-password' : 'link-unavailable') };
 });
 ipcMain.handle('auth:setup', (_e, password) => authSetup(password));
+// TOUCH ID. A second way through the same gate, never a way around it: offered
+// only when the operator turns it on, only once a passphrase exists (so there is
+// always a road that needs nothing from macOS), and only on a machine the vault
+// trusts. macOS runs the check, here in the main process, and the renderer only
+// learns whether it passed.
+//
+// What it accepts is macOS's to decide, and it is more than a finger. Electron's
+// promptTouchID asks for "user presence": the sheet takes a fingerprint, and its
+// "Use Password…" button takes this Mac's login password, and the answer does not
+// say which. canPromptTouchID() reports the sensor, not an enrolled finger, so a
+// paired Apple Watch can stand in too. Everything it accepts already opens this
+// macOS account, and so this vault, but that is not "a fingerprint only", which
+// is why it is opt-in and says so where it is switched on.
+// A harness run (--smoke, --freshtest, --clicktest...) never raises the sheet: a
+// test on a developer's Mac must not stop and wait for a finger.
+const HARNESS_RUN = process.argv.some((a) => a === '--smoke' || /^--[a-z]+test$/.test(a));
+function touchIdOffered() {
+  return IS_MAC && !HARNESS_RUN && gate() && !!(STATE && STATE.settings && STATE.settings.passSha) && STATE.settings.touchIdUnlock === true
+    && safe(() => !!systemPreferences && systemPreferences.canPromptTouchID(), false);
+}
+let _touchIdBusy = false;
+ipcMain.handle('auth:touchid', async () => {
+  if (!gate()) return { ok: false, reason: 'link-unavailable' };     // discreet, as the passphrase is
+  if (!touchIdOffered()) return { ok: false, reason: 'unavailable' };
+  if (_touchIdBusy) return { ok: false, reason: 'busy' };            // one sheet at a time
+  _touchIdBusy = true;
+  try {
+    await systemPreferences.promptTouchID('unlock CortexInsight');
+    return { ok: true, reason: 'ok' };
+  } catch {
+    return { ok: false, reason: 'not-confirmed' };                   // cancelled, or the finger was not recognised
+  } finally {
+    _touchIdBusy = false;
+  }
+});
 ipcMain.handle('guard:status', () => ({
   trusted: gate(), hostname: GUARD.hostname, username: GUARD.username,
   needsSetup: !(STATE && STATE.settings && STATE.settings.passSha),
+  touchId: touchIdOffered(),
   localIps: ['masked'], publicIp: decoyIp(), fingerprint: GUARD.fingerprint.slice(0, 12),
   signals: { hashMatch: GUARD.hashMatch, wslReadable: GUARD.wslReadable, relayReachable: GUARD.relayReachable },
 }));

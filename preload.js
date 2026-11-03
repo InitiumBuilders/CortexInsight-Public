@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('cortex', {
   unlock: (password) => ipcRenderer.invoke('auth:unlock', password),
   guardStatus: () => ipcRenderer.invoke('guard:status'),
   setup: (password) => ipcRenderer.invoke('auth:setup', password),
+  touchId: () => ipcRenderer.invoke('auth:touchid'),
 
   // --- read-only state of the living Cortex ---
   overview: () => ipcRenderer.invoke('cortex:overview'),

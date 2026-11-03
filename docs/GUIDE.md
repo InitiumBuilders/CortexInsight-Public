@@ -28,6 +28,8 @@ Either way `docs/INSTALL.md` has the details, the switches and the uninstall.
 
 The gate opens in setup mode. Type a passphrase of twelve characters or more, twice. The vault stores its hash and pairs itself to this machine. The console then looks under every WSL home it can see for a folder holding `logs/interactions` and `agents`, and uses the one whose interactions moved most recently.
 
+On a Mac with Touch ID, Config → Access → Unlock with Touch ID lets the macOS sheet open the gate from then on. The sheet takes your fingerprint, and its Use Password… button takes the Mac's login password. Both already open everything on that macOS account. The passphrase keeps working beside it.
+
 You should see: Pulse, with the reading at the top. If the relay is down, the titlebar says so and Command waits. If no tree was found, Config → Preferences has the path field.
 
 Sync helper: `Sync-And-Launch.ps1` at the root checks the relay, starts it through WSL if it is down, checks the tree, and launches the packaged exe if one exists or `npm start` if not.
@@ -301,6 +303,7 @@ move is the first path in Motus Max, one press from being driven.
 | "relay signed out · sign in" in the titlebar | the relay is up but its Claude sign-in was revoked or expired, so every turn fails | press it and sign in (section 21) |
 | "relay out of credits" in the titlebar | the relay's turns go to a paid provider whose credits ran out | top up that provider, or sign the relay into the subscription (section 21) |
 | "could not reach the fleet on this network" at the gate | the vault is not paired to this machine | this is the foreign-device state; on your own machine, delete the vault to re-pair |
+| you forgot the passphrase | the vault holds only its hash, so nothing can tell it to you | if Touch ID is on, unlock with it and set a new one in Config → Access. Otherwise quit the console, empty `settings.passSha` in `cortex-insight-state.json` in the vault folder, and open it: the gate is in setup mode again. Every other setting, key and log in the vault stays as it was |
 | The Davara view is empty | no baseline clone in the WSL home | clone one, or accept loops without organs |
 | Voice says the key was refused | the key did not answer `/v1/voices` | it may be a key id rather than a key; keys start with `sk_` |
 | Motus Max will not start | it is not armed, or the time to live expired | hold the arm switch again |

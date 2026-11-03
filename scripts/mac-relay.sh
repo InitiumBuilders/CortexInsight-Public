@@ -174,6 +174,10 @@ relay_stop() {
 
 relay_restart() {
   if under_launchd; then
+    # A hand-started relay holding the port would answer for launchd's copy,
+    # which could never bind; hand the port over before restarting the job.
+    local h; h="$(running_pid)"
+    if [ -n "$h" ]; then kill "$h" 2>/dev/null; rm -f "$PIDFILE"; wait_gone "$h"; fi
     launchctl kickstart -k "$DOMAIN/$LABEL" || { rose "launchd would not restart $LABEL"; return 1; }
     sleep 1
     if wait_health; then green "relay restarted on 127.0.0.1:$PORT"; return 0; fi
@@ -241,8 +245,12 @@ EOF
   if [ -z "$loaded" ]; then
     if under_launchd; then rose "launchd kept the job it had and would not load the new one: ${out:-no reason given}"; return 1; fi
     rose "launchd would not load $PLIST: ${out:-no reason given}"
-    # the old job is gone; never leave the operator with no relay at all
-    info "starting the relay by hand until launchd takes it"
+    # The old job is gone, and the operator must never be left with no relay. The
+    # job file goes too: left in place, the next login would start launchd's copy
+    # beside this one, where it could never bind the port and would respawn
+    # every few seconds. relay install puts it back.
+    rm -f "$PLIST"
+    info "starting the relay by hand for now; '$CLI relay install' hands it to launchd again"
     relay_start
     return 1
   fi
@@ -260,7 +268,9 @@ relay_uninstall() {
 relay_status() {
   local h; h="$(health_body)"
   if health; then green "  health:  $h"; else rose "  health:  no relay answers on 127.0.0.1:$PORT"; fi
-  if under_launchd; then info "managed by: launchd ($LABEL)"
+  if under_launchd; then
+    info "managed by: launchd ($LABEL)"
+    [ -n "$(running_pid)" ] && rose "  but a hand-started relay (pid $(running_pid)) holds the port, so launchd's copy cannot bind; '$CLI relay restart' hands it over"
   elif [ -n "$(running_pid)" ]; then info "managed by: this CLI (pid $(running_pid)); not started at login"
   else info "managed by: nothing"; fi
   if [ -r "$TOKEN_FILE" ]; then info "token:   $TOKEN_FILE (present)"; else rose "  token:   missing ($TOKEN_FILE)"; fi

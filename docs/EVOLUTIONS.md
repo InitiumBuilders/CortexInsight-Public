@@ -165,6 +165,12 @@ Two smaller changes came with it. On a Mac the console now lets the relay's runn
 
 *Lesson: a service's safety comes from where it runs as much as from what it is. Moving the same relay from a server to a laptop put a browser beside it, and "only loopback can reach it" stopped being a guarantee.*
 
+**3.71.3.** Touch ID at the gate, because the operator forgot the passphrase on the Mac's first day. The gate offers the macOS sheet, opt-in from Config → Access, once a passphrase exists, and only on a machine the vault trusts. macOS runs the check in the main process; the renderer learns only whether it passed. The first cut promised "a fingerprint", and the review that read Electron's machine code found it was not true. promptTouchID asks for user presence, so its Use Password… button takes the Mac's login password, and the answer does not say which was used. canPromptTouchID() reports the sensor, not an enrolled finger. A fingerprint-only check would need a signed native helper in every build. The sheet's fallbacks already open the whole macOS account, so the gate takes what the sheet takes and says so where it is switched on. The default is off, so no existing vault starts accepting its operator's Mac password without being asked. The guide now says how to recover a forgotten passphrase, and the security notes say plainly that the passphrase keeps out a casual hand, not someone signed in as the operator.
+
+The relay CLI's install fallback also hands over properly now. When launchd will not load the job, the CLI starts the relay by hand and removes the job file, so the next login does not start a second copy that can never bind the port. And `relay restart` moves a hand-started relay over to launchd's job, where before it reported "restarted" about the wrong one.
+
+*Lesson: a security control is what it accepts, not what its button says. Read what the platform call checks before you put a word like "fingerprint" next to it.*
+
 ## What the arc says
 
 Three loops turned through these versions. The build loop: attention became shipped surface. The canon loop: every build became a lesson, and the lesson became a law in the code or in these pages. The mover loop: the console became something a second operator could run without the first one in the room. The third loop is the youngest and the one this release is for.

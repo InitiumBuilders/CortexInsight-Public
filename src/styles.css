@@ -124,6 +124,10 @@ body:not(.locked) .gate{opacity:0;visibility:hidden;pointer-events:none}
   background:linear-gradient(120deg,var(--violet-2),var(--violet));box-shadow:0 8px 26px rgba(124,77,255,.4);transition:transform .2s var(--ease),box-shadow .2s}
 #gateBtn:hover{transform:translateY(-1px);box-shadow:0 12px 34px rgba(124,77,255,.55)}
 #gateBtn:active{transform:translateY(0)}
+#gateTouch{padding:12px;border:1px solid var(--brd-2);border-radius:13px;cursor:pointer;font-family:'Sora';font-weight:600;font-size:13px;
+  color:var(--ink);background:rgba(255,255,255,.03);transition:border-color .25s,box-shadow .25s;-webkit-app-region:no-drag}
+#gateTouch:hover{border-color:var(--violet);box-shadow:0 0 0 4px rgba(124,77,255,.14)}
+#gateTouch[hidden]{display:none}
 .gate-err{min-height:18px;color:var(--bad);font-size:12px;margin-top:14px;opacity:0;transition:opacity .3s}
 .gate-err.show{opacity:1}
 .gate.shake .gate-card{animation:shake .42s}

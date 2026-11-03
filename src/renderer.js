@@ -202,9 +202,34 @@ function gateSetupMode() {
   const p2 = $('#gatePass2'); if (p2) p2.hidden = false;
   $('#gateBtn').textContent = 'Create and enter';
 }
-if (C.guardStatus) C.guardStatus().then((g) => { if (g && g.needsSetup) gateSetupMode(); }).catch(() => {});
+/* TOUCH ID — the same gate by a second road. Offered once a passphrase exists,
+   asked for once on its own when the gate appears; a cancel leaves the
+   passphrase field ready, and the button asks again. */
+let GATE_OPEN = false;
+async function touchUnlock() {
+  if (GATE_OPEN || !C.touchId) return;
+  const tb = $('#gateTouch'); tb.disabled = true; tb.textContent = 'Touch the sensor…';
+  const r = await C.touchId().catch(() => null);
+  if (GATE_OPEN) return;
+  if (r && r.ok) { GATE_OPEN = true; $('#gateBtn').textContent = 'Welcome, August'; setTimeout(boot, 240); return; }
+  tb.disabled = false; tb.textContent = 'Unlock with Touch ID';
+  if (r && r.reason === 'link-unavailable') {
+    $('#gateTag').textContent = 'Establishing secure link to the Cortex…';
+    $('#gateForm').style.display = 'none';
+    setTimeout(() => { $('#gateErr').textContent = 'Could not reach the Cortex on this network. Retry shortly.'; $('#gateErr').classList.add('show'); }, 2600);
+  } else if (r && r.reason !== 'busy') {
+    const err = $('#gateErr'); err.textContent = 'Touch ID did not confirm. Use your passphrase, or try again.'; err.classList.add('show');
+    $('#gatePass').focus();
+  }
+}
+$('#gateTouch').onclick = touchUnlock;
+if (C.guardStatus) C.guardStatus().then((g) => {
+  if (g && g.needsSetup) { gateSetupMode(); return; }
+  if (g && g.touchId) { $('#gateTouch').hidden = false; setTimeout(touchUnlock, 500); }
+}).catch(() => {});
 $('#gateForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (GATE_OPEN) return;
   const pass = $('#gatePass').value;
   const btn = $('#gateBtn'); btn.disabled = true; btn.textContent = 'Verifying…';
   if (GATE_SETUP) {
@@ -215,12 +240,15 @@ $('#gateForm').addEventListener('submit', async (e) => {
     if (pass !== p2) return fail('The two entries do not match.');
     const s = await C.setup(pass).catch(() => null);
     if (!s || !s.ok) return fail(s && s.reason === 'link-unavailable' ? 'Could not reach the Cortex on this network. Retry shortly.' : 'Could not create the passphrase.');
+    GATE_OPEN = true;
     btn.textContent = 'Welcome';
     setTimeout(boot, 240);
     return;
   }
   const r = await C.unlock(pass);
+  if (GATE_OPEN) return;
   if (r.ok) {
+    GATE_OPEN = true;
     btn.textContent = 'Welcome, August';
     setTimeout(boot, 240);
   } else if (r.reason === 'link-unavailable') {
@@ -1704,7 +1732,8 @@ function integrationsPanel(oa) {
     <div class="integ-card">
       <div class="integ-p">Set your own password for the gate. It is stored as a hash in the vault, never the text. Nothing in the code can open the gate.</div>
       <div class="integ-row"><input type="password" id="pwNew" placeholder="new password (12+ characters)" autocomplete="new-password" /><button class="mini go" id="pwSave">Set password</button></div>
-    </div>`;
+    </div>
+    ${setToggle('touchIdUnlock', 'Unlock with Touch ID', 'On a Mac with Touch ID, the macOS sheet opens the gate. It takes your fingerprint, and its “Use Password…” button takes this Mac’s login password, which already opens everything on this account. The password above still works.', SETTINGS.touchIdUnlock === true)}`;
 }
 document.addEventListener('click', async (e) => {
   const t = e.target.closest('#settingsPanel [data-go], #oaSave, #oaClear, #oaModels, #pwSave');
