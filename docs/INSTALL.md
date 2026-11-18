@@ -28,7 +28,7 @@ On a Linux server there is a fourth way, and it is one command. See [the Linux p
 
 ## 1. Download a release
 
-Every version tag builds on a Windows runner that none of the authors have touched. The zip on the Releases page is that build. The public history restarted at 3.74, and the page stays empty until the next version is tagged; until then, use the next method.
+Every version tag builds on a Windows runner that none of the authors have touched. The zip on the Releases page is that build.
 
 1. Open https://github.com/InitiumBuilders/CortexInsight-Public/releases and download `CortexInsight-<version>-win-x64.zip`.
 2. Unzip it anywhere you like, for example `C:\Apps\CortexInsight`.
@@ -72,7 +72,7 @@ Or skip the install step and run `release-next\CortexInsight-win32-x64\CortexIns
 
 macOS 13 or later (Electron 44). Both architectures are tested on real Macs in CI before each release. On an Intel Mac (for example a 2019 MacBook Pro with Intel UHD 630 or Radeon Pro graphics) the console lightens itself: no backdrop blur, no ambient animation, the background field at half rate, and the drive overlay hidden while the screen is locked. Versions before 3.71 ran on Electron 33, which makes every window lag on macOS 26 Tahoe; use 3.71 or later there.
 
-**Download.** Take `CortexInsight-<version>-mac-arm64.zip` on Apple silicon or `-mac-x64.zip` on Intel from the Releases page (while it is empty, build it with the one-command method instead), unzip, and move `CortexInsight.app` where you like. The build is signed ad hoc but not notarised, so the first open needs one of two things. On macOS 15 and later, right-click → Open no longer works for it: try to open it once, then go to System Settings → Privacy & Security and press Open Anyway. Or, in a terminal:
+**Download.** Take `CortexInsight-<version>-mac-arm64.zip` on Apple silicon or `-mac-x64.zip` on Intel from the Releases page, unzip, and move `CortexInsight.app` where you like. The build is signed ad hoc but not notarised, so the first open needs one of two things. On macOS 15 and later, right-click → Open no longer works for it: try to open it once, then go to System Settings → Privacy & Security and press Open Anyway. Or, in a terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /path/to/CortexInsight.app

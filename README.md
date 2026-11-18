@@ -28,7 +28,7 @@ CortexInsight turns the box into a room with instruments. The fleet's own files 
 
 ## Get the app
 
-**Download.** Every version tag is built on runners none of the authors have touched (one Windows, one Apple silicon Mac and one Intel Mac), and the zips land on the [Releases page](https://github.com/InitiumBuilders/CortexInsight-Public/releases). The public history restarted at 3.74, so the page stays empty until the next version is tagged; until then, one command builds the same thing from a clone ([docs/INSTALL.md](docs/INSTALL.md)). Windows: unzip, run `CortexInsight.exe`. Mac: unzip the arm64 zip on Apple silicon or the x64 zip on Intel. The Mac builds are signed ad hoc but not notarised, so on macOS 15 and later open the app once, then press Open Anyway under System Settings → Privacy & Security. On an Intel Mac the app turns off backdrop blur and ambient motion by itself, so it stays smooth on integrated graphics.
+**Download.** Every version tag is built on runners none of the authors have touched (one Windows, one Apple silicon Mac and one Intel Mac), and the zips land on the [Releases page](https://github.com/InitiumBuilders/CortexInsight-Public/releases). Windows: unzip, run `CortexInsight.exe`. Mac: unzip the arm64 zip on Apple silicon or the x64 zip on Intel. The Mac builds are signed ad hoc but not notarised, so on macOS 15 and later open the app once, then press Open Anyway under System Settings → Privacy & Security. On an Intel Mac the app turns off backdrop blur and ambient motion by itself, so it stays smooth on integrated graphics.
 
 **Or build it yourself, one command.** Windows 10 or 11, Node 20 or newer, Git.
 
