@@ -1,0 +1,41 @@
+{
+  "name": "cortexinsight",
+  "version": "3.74.0",
+  "private": true,
+  "description": "CortexInsight: a desktop operator console over a local agent fleet. Reads the fleet's own logs, drives agents through a loopback relay, and keeps every key sealed on the machine.",
+  "author": "Outlier.Systems",
+  "homepage": "https://semble.cc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/InitiumBuilders/Semble-CC.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "smoke": "electron . --smoke",
+    "clicktest": "electron . --clicktest",
+    "fresh": "electron . --freshtest",
+    "fleet": "electron . --fleettest",
+    "gate": "node scripts/oss-check.js",
+    "package": "npm run package:win",
+    "package:win": "electron-packager . CortexInsight --platform=win32 --arch=x64 --out=release-next --overwrite --asar --icon=assets/icon.ico --ignore=\"^/release\" --ignore=\"^/release-next\" --ignore=\"\\.bak\" --ignore=\"^/\\.git\" --ignore=\"^/\\.github\" --ignore=\"^/\\.oss-private\"",
+    "package:mac": "electron-packager . CortexInsight --platform=darwin --arch=arm64 --out=release-next --overwrite --asar --icon=assets/icon.icns --app-bundle-id=com.outlier.cortexinsight --ignore=\"^/release\" --ignore=\"^/release-next\" --ignore=\"\\.bak\" --ignore=\"^/\\.git\" --ignore=\"^/\\.github\" --ignore=\"^/\\.oss-private\"",
+    "package:mac-x64": "electron-packager . CortexInsight --platform=darwin --arch=x64 --out=release-next --overwrite --asar --icon=assets/icon.icns --app-bundle-id=com.outlier.cortexinsight --ignore=\"^/release\" --ignore=\"^/release-next\" --ignore=\"\\.bak\" --ignore=\"^/\\.git\" --ignore=\"^/\\.github\" --ignore=\"^/\\.oss-private\"",
+    "deploy": "powershell -ExecutionPolicy Bypass -File Build-And-Install.ps1",
+    "deploy:mac": "bash build-and-install.sh",
+    "icons": "node make-icon.js && node make-tray-icons.js && node make-icns.js",
+    "remotetest": "node scripts/remote-test.js"
+  },
+  "dependencies": {
+    "nodemailer": "^6.10.1",
+    "ssh2": "^1.17.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.0.1",
+    "electron": "^44.10.1"
+  }
+}

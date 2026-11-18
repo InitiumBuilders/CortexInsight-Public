@@ -1,0 +1,321 @@
+# The foreign machine, every push. A Windows runner nobody here has touched
+# runs the gate, the stranger's first hour, and the packager. On a version tag
+# the zip becomes a Release anyone can download and run.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    name: open-source gate
+    if: github.repository == 'InitiumBuilders/CortexInsight-Public'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: parse
+        run: |
+          node --check main.js
+          node --check preload.js
+          node --check remote.js
+          node --check src/renderer.js
+          node --check src/renderer-v2.js
+          node --check src/renderer-v3.js
+          node --check linux/host.js
+          node --check linux/cli.js
+          node --check linux/client.js
+          node --check linux/rpc.js
+          node --check linux/seal.js
+          node --check linux/electron-shim.js
+          node --check scripts/remote-test.js
+      - name: the shell and python the server runs
+        run: |
+          bash -n linux/install.sh
+          bash -n linux/uninstall.sh
+          bash -n linux/relay/cortex-run.sh
+          bash -n linux/relay/cortex-lib.sh
+          python3 -m py_compile linux/relay/cortex-mouth.py linux/relay/cortex-stream-parse.py
+      - name: gate
+        run: node scripts/oss-check.js
+
+  # The server, on a machine nobody here has touched. This is the only job that
+  # proves the headless host actually boots: no Electron is installed at all, so
+  # if the shim ever stops standing in for it, this fails and nothing else would.
+  linux:
+    name: headless host and terminal (linux)
+    needs: gate
+    if: github.repository == 'InitiumBuilders/CortexInsight-Public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: dependencies, without Electron
+        run: npm ci --omit=dev
+      - name: the console boots with no screen
+        run: |
+          set -e
+          export XDG_RUNTIME_DIR=/tmp/xdg
+          mkdir -p "$XDG_RUNTIME_DIR"
+          node linux/host.js > /tmp/host.log 2>&1 &
+          for i in $(seq 1 90); do
+            [ -S "$XDG_RUNTIME_DIR/cortexinsight/control.sock" ] && break
+            sleep 1
+          done
+          if [ ! -S "$XDG_RUNTIME_DIR/cortexinsight/control.sock" ]; then
+            echo "the console never opened its socket"; cat /tmp/host.log; exit 1
+          fi
+          echo "--- the host said ---"; cat /tmp/host.log
+      - name: the socket is the operator's alone
+        run: |
+          MODE=$(stat -c %a /tmp/xdg/cortexinsight/control.sock)
+          echo "socket mode $MODE"
+          [ "$MODE" = "600" ] || { echo "the socket is not owner-only"; exit 1; }
+      - name: the terminal answers
+        run: |
+          set -e
+          export XDG_RUNTIME_DIR=/tmp/xdg
+          node linux/cli.js status
+          node linux/cli.js doctor
+          node linux/cli.js channels | wc -l
+      - name: the vault is owner-only
+        run: |
+          set -e
+          cd ~/.config/cortexinsight
+          ls -la
+          for f in *; do
+            [ -f "$f" ] || continue
+            MODE=$(stat -c %a "$f")
+            [ "$MODE" = "600" ] || { echo "$f is $MODE, not 600"; exit 1; }
+          done
+          echo "every file in the vault is owner-only"
+      - name: the two locks hold
+        run: |
+          set -e
+          export XDG_RUNTIME_DIR=/tmp/xdg
+          node -e '
+            const { spawn } = require("child_process");
+            const p = spawn("node", ["linux/cli.js", "rpc"], { stdio: ["pipe", "pipe", "inherit"] });
+            const seen = [];
+            let buf = "";
+            p.stdout.on("data", (d) => {
+              buf += d;
+              let i;
+              while ((i = buf.indexOf("\n")) >= 0) {
+                const l = buf.slice(0, i); buf = buf.slice(i + 1);
+                if (l.trim()) seen.push(JSON.parse(l));
+              }
+            });
+            const send = (o) => p.stdin.write(JSON.stringify(o) + "\n");
+            setTimeout(() => send({ id: 1, op: "hello" }), 800);
+            setTimeout(() => send({ id: 2, op: "invoke", channel: "cortex:overview" }), 1800);
+            setTimeout(() => {
+              const hello = seen.find((m) => m.id === 1);
+              const locked = seen.find((m) => m.id === 2);
+              if (!hello || !hello.ok) { console.error("hello did not answer"); process.exit(1); }
+              if (!locked || locked.ok) { console.error("an invoke got through without the passphrase"); process.exit(1); }
+              console.log("hello answers freely; invoke is refused:", locked.error);
+              p.kill(); process.exit(0);
+            }, 3200);
+          '
+      # Remote is the one surface that crosses a network, so "the library is
+      # mature" is not a test of it. This stands up a throwaway SSH server on
+      # loopback, has it run the real bridge, and drives the real remote.js.
+      - name: the remote console, over a real ssh connection
+        run: |
+          set -e
+          export XDG_RUNTIME_DIR=/tmp/xdg
+          npm install --omit=dev --no-audit --no-fund
+          node scripts/remote-test.js
+      # ⚠ There is deliberately no packaging step here. This job asserts that the
+      # console runs with NO Electron installed, and @electron/packager needs
+      # Electron, so adding one would quietly install the very thing the job
+      # exists to prove is unnecessary. A server is installed from the clone, not
+      # from a packaged build. If a Linux DESKTOP build is ever wanted it belongs
+      # in its own job, with its own dependencies and its own reason.
+
+  windows:
+    name: fresh run and package (windows)
+    needs: gate
+    if: github.repository == 'InitiumBuilders/CortexInsight-Public'
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: dependencies
+        run: npm ci --no-audit --no-fund
+      - name: the electron binary
+        # since Electron 42, npm ci no longer downloads it; the harnesses run it directly
+        run: node node_modules/electron/install.js
+      - name: the stranger's first hour
+        shell: pwsh
+        run: |
+          Remove-Item "$env:TEMP\ci-fresh-report.txt" -ErrorAction SilentlyContinue
+          $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList ". --freshtest" -PassThru -Wait
+          "electron exit code: $($p.ExitCode)"
+          if (-not (Test-Path "$env:TEMP\ci-fresh-report.txt")) { throw "the fresh harness wrote no report" }
+          Get-Content "$env:TEMP\ci-fresh-report.txt"
+          New-Item -ItemType Directory -Force fresh-artifacts | Out-Null
+          Copy-Item "$env:TEMP\ci-fresh-report.txt" fresh-artifacts\
+          Copy-Item "$env:TEMP\fresh-*.png" fresh-artifacts\ -ErrorAction SilentlyContinue
+          if (Select-String -Path "$env:TEMP\ci-fresh-report.txt" -Pattern 'PROBLEM' -Quiet) { throw "the fresh harness found problems" }
+          if (-not (Select-String -Path "$env:TEMP\ci-fresh-report.txt" -Pattern 'CLEAN' -Quiet)) { throw "the fresh harness did not reach its verdict" }
+      - name: the stranger's fleet
+        shell: pwsh
+        run: |
+          Remove-Item "$env:TEMP\ci-fleet-report.txt" -ErrorAction SilentlyContinue
+          $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList ". --fleettest" -PassThru -Wait
+          "electron exit code: $($p.ExitCode)"
+          if (-not (Test-Path "$env:TEMP\ci-fleet-report.txt")) { throw "the fleet harness wrote no report" }
+          Get-Content "$env:TEMP\ci-fleet-report.txt"
+          New-Item -ItemType Directory -Force fresh-artifacts | Out-Null
+          Copy-Item "$env:TEMP\ci-fleet-report.txt" fresh-artifacts\
+          Copy-Item "$env:TEMP\fleet-*.png" fresh-artifacts\ -ErrorAction SilentlyContinue
+          if (Select-String -Path "$env:TEMP\ci-fleet-report.txt" -Pattern 'PROBLEM' -Quiet) { throw "the fleet harness found problems" }
+          if (-not (Select-String -Path "$env:TEMP\ci-fleet-report.txt" -Pattern 'CLEAN' -Quiet)) { throw "the fleet harness did not reach its verdict" }
+      - name: keep the first hour's evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-run
+          path: fresh-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: package
+        run: npm run package
+      - name: zip
+        shell: pwsh
+        run: |
+          $ver = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $zip = "CortexInsight-$ver-win-x64.zip"
+          Compress-Archive -Path "release-next\CortexInsight-win32-x64\*" -DestinationPath $zip -CompressionLevel Optimal
+          "zip: $zip  $([math]::Round((Get-Item $zip).Length / 1MB)) MB"
+          "ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: keep the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: CortexInsight-win-x64
+          path: ${{ env.ZIP }}
+          retention-days: 14
+      - name: release on a version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP }}
+          generate_release_notes: true
+          body: |
+            **Windows:** unzip anywhere, run `CortexInsight.exe`. SmartScreen may warn once (the build is not code-signed): More info → Run anyway.
+            **macOS:** unzip, move `CortexInsight.app` where you like, then right-click → Open the first time (unsigned), or `xattr -dr com.apple.quarantine CortexInsight.app`. Apple silicon takes the arm64 zip, Intel the x64 zip.
+            The gate asks you to set a passphrase on first run. Your vault lives in your user data folder, never inside the app.
+            `docs/INSTALL.md` covers the fleet tree, the relay, and what works on each platform.
+
+  # Two real Macs, one per architecture. The Intel build used to be cross-built
+  # on Apple silicon and never executed anywhere; now each architecture runs the
+  # stranger's first hour and the fleet on its own hardware before it is packaged.
+  macos:
+    name: fresh run and package (macos ${{ matrix.label }})
+    needs: gate
+    if: github.repository == 'InitiumBuilders/CortexInsight-Public'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            label: apple silicon
+            arch: arm64
+            pkg: package:mac
+          - runner: macos-15-intel
+            label: intel
+            arch: x64
+            pkg: package:mac-x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: dependencies
+        run: npm ci --no-audit --no-fund
+      - name: the electron binary
+        # since Electron 42, npm ci no longer downloads it; the harnesses run it directly
+        run: node node_modules/electron/install.js
+      - name: the stranger's first hour
+        run: |
+          set -uo pipefail
+          uname -m
+          T="${TMPDIR:-/tmp}"
+          echo "TMPDIR=$T"
+          rm -f "$T/ci-fresh-report.txt"
+          npx electron . --freshtest || echo "electron exit: $?"
+          R=$(find "$T" /tmp "$HOME/Library/Application Support" -maxdepth 2 -name ci-fresh-report.txt 2>/dev/null | head -1)
+          if [ -z "$R" ]; then echo "the fresh harness wrote no report"; ls -la "$T" | head -30; exit 1; fi
+          cat "$R"
+          mkdir -p fresh-artifacts
+          cp "$R" fresh-artifacts/
+          cp "$(dirname "$R")"/fresh-*.png fresh-artifacts/ 2>/dev/null || true
+          if grep -q PROBLEM "$R"; then echo "the fresh harness found problems"; exit 1; fi
+          if ! grep -q CLEAN "$R"; then echo "the fresh harness did not reach its verdict"; exit 1; fi
+      - name: the stranger's fleet
+        run: |
+          set -uo pipefail
+          T="${TMPDIR:-/tmp}"
+          rm -f "$T/ci-fleet-report.txt"
+          npx electron . --fleettest || echo "electron exit: $?"
+          R=$(find "$T" /tmp "$HOME/Library/Application Support" -maxdepth 2 -name ci-fleet-report.txt 2>/dev/null | head -1)
+          if [ -z "$R" ]; then echo "the fleet harness wrote no report"; exit 1; fi
+          cat "$R"
+          mkdir -p fresh-artifacts
+          cp "$R" fresh-artifacts/
+          cp "$(dirname "$R")"/fleet-*.png fresh-artifacts/ 2>/dev/null || true
+          if grep -q PROBLEM "$R"; then echo "the fleet harness found problems"; exit 1; fi
+          if ! grep -q CLEAN "$R"; then echo "the fleet harness did not reach its verdict"; exit 1; fi
+      - name: keep the first hour's evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-run-macos-${{ matrix.arch }}
+          path: fresh-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: package
+        run: npm run ${{ matrix.pkg }}
+      - name: sign ad hoc
+        # no Apple account involved; since Electron 42 a Mac notification needs a signed app
+        run: |
+          codesign --force --deep --sign - "release-next/CortexInsight-darwin-${{ matrix.arch }}/CortexInsight.app"
+          codesign --verify --deep --verbose=1 "release-next/CortexInsight-darwin-${{ matrix.arch }}/CortexInsight.app"
+      - name: zip
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          ditto -c -k --sequesterRsrc --keepParent "release-next/CortexInsight-darwin-${{ matrix.arch }}/CortexInsight.app" "CortexInsight-$VER-mac-${{ matrix.arch }}.zip"
+          ls -la CortexInsight-*.zip
+      - name: keep the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: CortexInsight-mac-${{ matrix.arch }}
+          path: CortexInsight-*-mac-${{ matrix.arch }}.zip
+          retention-days: 14
+      - name: release on a version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: CortexInsight-*-mac-${{ matrix.arch }}.zip

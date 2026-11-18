@@ -1,0 +1,68 @@
+# gates.seekdepth — the falsifiers for SEEKDEPTH mode.
+#
+#   bash /root/cortex/SystemsCortex/gate.sh run gates.seekdepth --record
+#
+# The three questions, in order:
+#   what would prove this wrong · what would embarrass me tomorrow ·
+#   what must never happen even once.
+#
+# What must never happen, in this order of seriousness:
+#   1. an Anthropic turn silently leaves for a third party because a variable
+#      from a previous SEEKDEPTH turn was still set;
+#   2. ANTHROPIC_API_KEY gets set and opens a billed path on his account;
+#   3. the OpenRouter key appears in a process command line, which on this box
+#      is world-readable;
+#   4. "SeekDepth Off" is heard as "SeekDepth".
+
+S=/root/cortex/SystemsCortex
+K=/root/.openclaw/credentials/openrouter-api-key.txt
+
+# ---- 0. THE KEY ------------------------------------------------------------
+gate "the OpenRouter key is on disk, owner-only" \
+  "test -f $K && test \"\$(stat -c%a $K)\" = 600 && test \$(wc -c < $K) -gt 40"
+# The obvious form of this check — grep -F "$(cat KEY)" /proc/*/cmdline — puts
+# the key into grep's own argv and then finds itself. It fails 100% of the time
+# and tells you nothing. The pattern comes from the file, and grep's own pid is
+# excluded.
+gate "the key is nowhere in any process command line right now" \
+  "bash $S/audit/seekdepth-probe.sh key-not-in-argv"
+gate "the key is not in any world-readable config in the repo" \
+  "! grep -rIl -F \"\$(cat $K)\" /root/cortex 2>/dev/null | grep -q ."
+
+# ---- I. THE MODEL AND THE ENDPOINT ARE REAL --------------------------------
+gate "the model id he named exists in OpenRouter's live catalogue" \
+  "bash $S/audit/seekdepth-probe.sh catalogue"
+gate "OpenRouter really serves the Anthropic Messages API, and the model answers" \
+  "bash $S/audit/seekdepth-probe.sh pong"
+
+# ---- II. THE GEAR ----------------------------------------------------------
+gate "the gear lever knows the seekdepth gear and pins his model" \
+  "bash $S/motus-mode.sh __gatetest seekdepth --by gate --note t | python3 -c \"
+import json,sys;d=json.load(sys.stdin);sys.exit(0 if d['model']=='deepseek/deepseek-v4-pro' and d['mode']=='seekdepth' else 1)\""
+gate "SEEKDEPTH does not cool down on a timer — it holds until he says otherwise" \
+  "bash $S/motus-mode.sh __gatetest status | python3 -c \"
+import json,sys;d=json.load(sys.stdin);sys.exit(0 if d.get('until') in (None,'') else 1)\""
+gate "SEEKDEPTH carries no effort flag — --effort is Anthropic's and breaks the call" \
+  "bash $S/motus-mode.sh __gatetest status | python3 -c \"
+import json,sys;d=json.load(sys.stdin);sys.exit(0 if not d.get('effort') else 1)\""
+gate "clearing puts the seat back on Opus 5, not on a third party" \
+  "bash $S/motus-mode.sh __gatetest clear >/dev/null && bash $S/motus-mode.sh __gatetest status | python3 -c \"
+import json,sys;d=json.load(sys.stdin);sys.exit(0 if d['model']=='claude-opus-5' and d['mode']=='cruise' else 1)\""
+
+# ---- III. HIS WORDS MOVE THE LEVER ----------------------------------------
+gate "every phrase he named maps to the gear he meant, and prose does not" \
+  "python3 $S/audit/seekdepth-triggers.py"
+
+# ---- IV. THE RUNNER ROUTES, AND ONLY WHEN IT SHOULD ------------------------
+gate "a vendor-prefixed model routes to OpenRouter with the key out of argv" \
+  "bash $S/audit/seekdepth-probe.sh route-on"
+gate "a bare Anthropic model does NOT route anywhere — no base url, no token" \
+  "bash $S/audit/seekdepth-probe.sh route-off"
+gate "ANTHROPIC_API_KEY is still unset on every path through the runner" \
+  "bash $S/audit/seekdepth-probe.sh no-anthropic-key"
+gate "with the key file unreadable the turn degrades to Opus 5, it does not die" \
+  "bash $S/audit/seekdepth-probe.sh no-key-degrades"
+
+# ---- V. END TO END ---------------------------------------------------------
+gate "a real turn through the runner in SEEKDEPTH is answered by DeepSeek" \
+  "bash $S/audit/seekdepth-probe.sh end-to-end"

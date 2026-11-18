@@ -1,0 +1,995 @@
+/* ============================================================================
+   OMNIDRIVE · MOTUS MAX   +   MOTUSMODELS · THE STUDIO
+   Loaded last, so it evolves the galaxy-neumorphic system rather than fork it.
+
+   Two screens, one discipline: the state that matters most is the loudest
+   thing on the page. On Motus Max that is THE ARM — whether she can move your
+   machine at all. On MotusModels it is the GENERATION. Neither should ever
+   have to be hunted for.
+
+   Held throughout (same laws as v2):
+     · glow, never a hard highlight
+     · no grey type — bright ink, or a brand hue
+     · squircles: 14–24px, never a plain box or a plain pill
+     · symmetry: grids divide evenly (2 / 4 / 5), no orphan 2+1 or 3+2 rows
+     · no backdrop-filter, no animated blur — the canvas pays for those every frame
+   ============================================================================ */
+
+/* ---- the card primitive both new screens share ---- */
+.card { padding: 18px 20px 20px; }
+.card.glass {
+  background: var(--surf);
+  border: 1px solid rgba(150,168,255,.09);
+  border-radius: 20px;
+  box-shadow: var(--neu-out), inset 0 1px 0 rgba(255,255,255,.045);
+}
+.card.glass-deep { padding: 20px 22px 22px; }
+.card-h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.card-h h3 { font-family: 'Sora', sans-serif; font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: .01em; }
+.card-tag { font-size: 11px; color: var(--violet); letter-spacing: .04em; margin-left: auto; text-align: right; }
+.card-tag code { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--cyan); }
+
+.danger-btn {
+  padding: 10px 18px; border-radius: 16px; cursor: pointer;
+  font-family: 'Sora', sans-serif; font-weight: 700; font-size: 12.5px;
+  color: var(--bad); background: var(--surf);
+  border: 1px solid rgba(255,93,120,.32); box-shadow: var(--neu-out-sm);
+  transition: box-shadow .28s var(--ease), transform .28s var(--ease);
+}
+.danger-btn:hover { box-shadow: var(--neu-out-sm), 0 0 26px rgba(255,93,120,.3); transform: translateY(-1px); }
+
+/* ---- form atoms ---- */
+.om-lab {
+  display: block; margin: 14px 0 6px; font-weight: 600; font-size: 10.5px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--cyan);
+}
+.om-in {
+  width: 100%; padding: 11px 14px; border-radius: 14px;
+  font-family: 'Inter', sans-serif; font-size: 13px; color: var(--ink);
+  background: var(--surf-2); border: 1px solid rgba(150,168,255,.12); box-shadow: var(--neu-in-sm);
+}
+.om-in:focus { outline: none; border-color: rgba(169,120,255,.45); box-shadow: var(--neu-in-sm), 0 0 22px rgba(169,120,255,.22); }
+.om-in.narrow { max-width: 150px; }
+select.om-in { cursor: pointer; }
+.om-ta {
+  width: 100%; padding: 12px 14px; border-radius: 16px; resize: vertical;
+  font-family: 'Inter', sans-serif; font-size: 13px; line-height: 1.55; color: var(--ink);
+  background: var(--surf-2); border: 1px solid rgba(150,168,255,.12); box-shadow: var(--neu-in-sm);
+}
+.om-ta:focus { outline: none; border-color: rgba(169,120,255,.45); box-shadow: var(--neu-in-sm), 0 0 22px rgba(169,120,255,.22); }
+.om-ta.tall { font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.7; }
+.om-p { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+.om-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.om-check { display: flex; align-items: center; gap: 9px; margin-top: 14px; font-size: 12.5px; color: var(--ink); cursor: pointer; }
+.om-check input { width: 16px; height: 16px; accent-color: var(--violet); cursor: pointer; }
+.om-empty { padding: 22px; text-align: center; font-size: 12.5px; color: var(--muted); }
+.om-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+.om-last { font-size: 12px; color: var(--muted); }
+.om-last b { color: var(--gold); }
+
+/* ---- segmented pickers ---- */
+.om-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.om-seg.three { grid-template-columns: repeat(3, 1fr); }
+.om-seg button {
+  padding: 11px 10px; border-radius: 16px; cursor: pointer;
+  font-family: 'Sora', sans-serif; font-weight: 600; font-size: 12.5px; color: var(--muted);
+  background: var(--surf); border: 1px solid rgba(150,168,255,.12); box-shadow: var(--neu-out-sm);
+  transition: box-shadow .28s var(--ease), color .28s;
+}
+.om-seg button.on {
+  color: var(--violet); border-color: rgba(169,120,255,.36);
+  box-shadow: var(--neu-in-sm), 0 0 22px rgba(169,120,255,.2);
+}
+
+/* ---- THE ARM — the single loudest state in the build --------------------- */
+.om-arm { margin: 0 0 20px; padding: 1px; border-radius: 24px; }
+.om-arm.on {
+  background: linear-gradient(140deg, rgba(255,93,120,.6), rgba(255,206,107,.35) 45%, rgba(169,120,255,.5));
+  box-shadow: 0 18px 54px rgba(0,0,0,.5), 0 0 60px rgba(255,93,120,.22);
+}
+.om-arm-core { position: relative; display: flex; align-items: center; gap: 22px; flex-wrap: wrap; padding: 22px 24px; }
+.om-hold {
+  position: relative; overflow: hidden; flex: 0 0 auto; min-width: 190px;
+  padding: 20px 26px; border-radius: 22px; cursor: pointer;
+  font-family: 'Sora', sans-serif; font-weight: 800; font-size: 13px; letter-spacing: .14em; color: var(--muted);
+  background: var(--surf); border: 1px solid rgba(150,168,255,.16); box-shadow: var(--neu-out);
+  transition: color .3s, box-shadow .4s var(--ease);
+  -webkit-user-select: none; user-select: none; touch-action: none;
+}
+.om-hold:hover { color: var(--ink); }
+.om-hold-lab { position: relative; z-index: 2; }
+.om-hold-fill {
+  position: absolute; inset: 0; width: 0; z-index: 1;
+  background: linear-gradient(90deg, rgba(255,93,120,.45), rgba(255,206,107,.35));
+}
+.om-hold.holding .om-hold-fill { width: 100%; transition: width 1.15s linear; }
+.om-hold.on {
+  color: #fff; border-color: rgba(255,93,120,.5);
+  background: linear-gradient(140deg, var(--rose-d), #7a2352);
+  box-shadow: var(--neu-out), 0 0 42px rgba(255,93,120,.4);
+  animation: armBreathe 3.4s var(--ease-2) infinite;
+}
+@keyframes armBreathe {
+  0%, 100% { box-shadow: var(--neu-out), 0 0 34px rgba(255,93,120,.32); }
+  50%      { box-shadow: var(--neu-out), 0 0 56px rgba(255,93,120,.5); }
+}
+.om-arm-meta { flex: 1 1 300px; min-width: 0; }
+.om-arm-state { margin-bottom: 6px; font-family: 'Sora', sans-serif; font-size: 17px; font-weight: 700; color: var(--ink); }
+.om-arm.on .om-arm-state { color: var(--rose); text-shadow: 0 0 22px rgba(255,111,174,.4); }
+.om-arm-sub { font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+.om-arm-sub b { color: var(--gold); font-family: 'JetBrains Mono', monospace; }
+.om-disarm {
+  flex: 0 0 auto; padding: 12px 20px; border-radius: 18px; cursor: pointer;
+  font-family: 'Sora', sans-serif; font-weight: 700; font-size: 12.5px; color: var(--good);
+  background: var(--surf); border: 1px solid rgba(84,230,168,.32); box-shadow: var(--neu-out-sm);
+  transition: box-shadow .28s var(--ease);
+}
+.om-disarm:hover { box-shadow: var(--neu-out-sm), 0 0 28px rgba(84,230,168,.3); }
+
+/* DRIVE NOW — the button that was missing from where he actually was. Armed and
+   not driving is a dead end unless the next action is right here, and loud. */
+.om-drivenow {
+  flex: 0 0 auto; padding: 14px 26px; border-radius: 20px; cursor: pointer;
+  font-family: 'Sora', sans-serif; font-weight: 800; font-size: 13.5px; letter-spacing: .04em; color: #fff;
+  background: linear-gradient(140deg, var(--violet-2), var(--violet-d));
+  border: 1px solid rgba(169,120,255,.5);
+  box-shadow: var(--neu-out), 0 0 34px rgba(124,77,255,.42);
+  animation: driveCall 2.8s var(--ease-2) infinite;
+  transition: transform .25s var(--ease);
+}
+.om-drivenow:hover { transform: translateY(-2px); }
+
+/* THE FLOW — the one door. Arm, continuous, go. It reads as the primary act
+   because it is the one he actually wants; a single move is the exception. */
+.om-flow {
+  flex: 0 0 auto; padding: 15px 28px; border-radius: 22px; cursor: pointer;
+  font-family: 'Sora', sans-serif; font-weight: 800; font-size: 14px; letter-spacing: .05em; color: #fff;
+  background: linear-gradient(140deg, var(--rose-d), var(--violet-2) 60%, var(--cyan-d));
+  border: 1px solid rgba(255,111,174,.5);
+  box-shadow: var(--neu-out), 0 0 40px rgba(255,111,174,.4);
+  animation: flowCall 3.2s var(--ease-2) infinite;
+  transition: transform .25s var(--ease);
+}
+.om-flow:hover { transform: translateY(-2px); }
+.om-flow:disabled { animation: none; opacity: .8; cursor: default; }
+@keyframes flowCall {
+  0%, 100% { box-shadow: var(--neu-out), 0 0 30px rgba(255,111,174,.34); }
+  50%      { box-shadow: var(--neu-out), 0 0 62px rgba(169,120,255,.6); }
+}
+@keyframes driveCall {
+  0%, 100% { box-shadow: var(--neu-out), 0 0 28px rgba(124,77,255,.36); }
+  50%      { box-shadow: var(--neu-out), 0 0 52px rgba(169,120,255,.62); }
+}
+/* the armed-but-idle headline reads gold, not rose — potential, not motion */
+.om-arm.on .om-arm-state { color: var(--rose); }
+.om-arm.on.idle .om-arm-state { color: var(--gold); text-shadow: 0 0 22px rgba(255,213,107,.42); }
+/* MOVES THAT LANDED — the headline surface. What CHANGED, with the files one
+   click away. This exists because a real fix to his live platform scrolled past
+   him as a log line and he stopped the session that was making it. */
+/* THE UPDATE BAR. Unmissable on purpose — being two versions behind has been
+   the quiet cause of half the bugs he reported, every one of them already
+   fixed in a build sitting on his own disk. */
+.update-bar {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  z-index: 9000; display: flex; align-items: center; gap: 14px;
+  padding: 13px 16px 13px 20px; border-radius: 20px; max-width: min(92vw, 760px);
+  background: linear-gradient(150deg, rgba(20,26,52,.97), rgba(10,13,28,.98));
+  border: 1px solid rgba(169,120,255,.4);
+  box-shadow: 0 20px 64px rgba(0,0,0,.6), 0 0 46px rgba(169,120,255,.28);
+  animation: ubIn .45s cubic-bezier(.16,1,.3,1);
+}
+@keyframes ubIn { from { opacity: 0; transform: translateX(-50%) translateY(16px); } }
+.ub-dot { width: 10px; height: 10px; flex: 0 0 10px; border-radius: 50%; background: var(--violet); box-shadow: 0 0 14px var(--violet); animation: pulseDot 2s var(--ease-2) infinite; }
+@keyframes pulseDot { 50% { opacity: .45; } }
+.ub-t { font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+.ub-t b { color: var(--violet-2, #c9a8ff); }
+.ub-go {
+  flex: 0 0 auto; padding: 9px 18px; border-radius: 14px; cursor: pointer;
+  font-family: 'Sora', sans-serif; font-weight: 700; font-size: 12.5px; color: #fff;
+  background: linear-gradient(140deg, var(--violet-2), var(--violet-d));
+  border: 1px solid rgba(169,120,255,.5); box-shadow: 0 0 24px rgba(124,77,255,.4);
+}
+.ub-go:disabled { opacity: .7; cursor: default; }
+.ub-x { flex: 0 0 auto; padding: 6px 9px; border-radius: 10px; cursor: pointer; color: var(--muted); background: none; border: 0; font-size: 13px; }
+.ub-x:hover { color: var(--ink); }
+
+.om-moves { margin-top: 20px; border: 1px solid rgba(84,230,168,.24); }
+.om-move {
+  padding: 14px 16px; margin-bottom: 10px; border-radius: 16px;
+  background: linear-gradient(150deg, rgba(84,230,168,.10), rgba(20,25,49,.5));
+  border-left: 3px solid var(--good, #54e6a8);
+}
+.om-move-l { font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 600; line-height: 1.5; color: var(--ink); }
+.om-move-v { margin-top: 7px; font-size: 11.5px; line-height: 1.55; color: var(--ink); }
+.om-move-v span { font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--good, #54e6a8); margin-right: 6px; }
+.om-move-f { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.om-move-open {
+  padding: 5px 12px; border-radius: 11px; cursor: pointer;
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--cyan);
+  background: rgba(84,230,255,.10); border: 1px solid rgba(84,230,255,.26);
+}
+.om-move-open:hover { background: rgba(84,230,255,.2); }
+
+.om-p.handsrow {
+  margin-top: 8px; padding: 11px 13px; border-radius: 14px;
+  background: linear-gradient(150deg, rgba(255,206,107,.10), rgba(20,25,49,.5));
+  border: 1px solid rgba(255,206,107,.26);
+}
+.om-p.handsrow b { color: var(--gold); }
+.om-check.dry span b { color: var(--gold); }
+.om-check.depth span b { color: var(--cyan); }
+.om-check.cont span b { color: var(--rose); }
+.om-check.reflex span b { color: var(--cyan); }
+.om-check.depth, .om-check.cont, .om-check.reflex { align-items: flex-start; }
+.om-check.depth input, .om-check.cont input, .om-check.reflex input { margin-top: 3px; }
+.om-check.dry { align-items: flex-start; }
+.om-check.dry input { margin-top: 3px; }
+.om-step[data-dry] , .om-step.dry { border-left-color: var(--gold); }
+.mm-out-x.bad { border-left: 2px solid var(--bad); }
+.mm-out-x .dim { color: var(--muted); }
+
+/* ---- the four setting cards: an even 2x2, never a 3+1 ---- */
+.om-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.om-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
+.om-guards { border-color: rgba(84,230,168,.16); }
+.om-guard {
+  display: grid; grid-template-columns: 22px 1fr; gap: 4px 10px; align-items: start;
+  margin-bottom: 12px; font-size: 12px; line-height: 1.55;
+}
+.om-guard b { color: var(--good); font-size: 12.5px; }
+.om-guard span:last-child { grid-column: 2; color: var(--muted); }
+
+/* ---- the session ---- */
+.om-session.live { box-shadow: 0 18px 54px rgba(0,0,0,.5), 0 0 50px rgba(84,230,255,.16); }
+.om-goal {
+  padding: 14px 16px; margin-bottom: 14px; border-radius: 16px;
+  background: var(--surf-2); box-shadow: var(--neu-in-sm);
+  font-size: 13.5px; line-height: 1.6; color: var(--ink);
+}
+.om-ask {
+  padding: 16px 18px; margin-bottom: 14px; border-radius: 18px;
+  background: linear-gradient(150deg, rgba(255,206,107,.1), rgba(20,25,49,.6));
+  border: 1px solid rgba(255,206,107,.28); box-shadow: 0 0 34px rgba(255,206,107,.12);
+}
+.om-ask-q { margin-bottom: 12px; font-size: 13.5px; line-height: 1.6; font-weight: 600; color: var(--gold); }
+.om-pend { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+.om-pend span {
+  padding: 4px 9px; border-radius: 9px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+  color: var(--cyan); background: rgba(84,230,255,.1); border: 1px solid rgba(84,230,255,.2);
+}
+.om-ask-row, .om-steer-row { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.om-ask-row .om-in, .om-steer-row .om-in { flex: 1 1 240px; }
+.om-live { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 4px; }
+.om-col { min-width: 0; }
+.om-col-h { margin-bottom: 9px; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; color: var(--cyan); }
+/* Roomy enough that a full finding is readable without scrolling for it. 340px
+   made a 900-character observation look truncated even though every word was
+   there — the panel was the thing cutting her off, not the text. */
+.om-think, .om-steps, .om-log { max-height: 62vh; min-height: 200px; overflow: auto; padding-right: 6px; }
+.om-think::-webkit-scrollbar, .om-steps::-webkit-scrollbar, .om-log::-webkit-scrollbar { width: 8px; }
+.om-think::-webkit-scrollbar-thumb, .om-steps::-webkit-scrollbar-thumb, .om-log::-webkit-scrollbar-thumb {
+  background: rgba(150,168,255,.22); border-radius: 8px;
+}
+
+/* Her words are never clamped or sliced — the whole thought, always. */
+.om-t { padding: 12px 14px; margin-bottom: 9px; border-radius: 14px; background: var(--surf-2); box-shadow: var(--neu-in-sm); }
+.om-cy { display: block; margin-bottom: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--violet); }
+.om-t-x { font-size: 12.5px; line-height: 1.62; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+
+.om-step {
+  display: grid; grid-template-columns: 74px 1fr; gap: 3px 10px;
+  padding: 9px 12px; margin-bottom: 7px; border-radius: 12px;
+  background: var(--surf-2); box-shadow: var(--neu-in-sm); border-left: 2px solid rgba(84,230,168,.5);
+}
+.om-step.bad { border-left-color: var(--bad); }
+/* She reached for the real thing instead of a picture of it — the move he asked
+   for by name. Soft aura, never a hard highlight. */
+.om-step.instr { border-left-color: var(--cyan); box-shadow: var(--neu-in-sm), 0 0 20px rgba(84,230,255,.14); }
+.om-step.instr .om-op { color: var(--gold); }
+.om-op { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; color: var(--cyan); }
+.om-note { font-size: 12px; color: var(--ink); word-break: break-word; }
+.om-said { grid-column: 2; font-size: 11px; color: var(--muted); word-break: break-word; }
+
+/* HER LAST FRAME — fill the panel whatever the frame's own size is.
+   A window crop is often small (700×394) while the panel is wide, and with no
+   sizing rule it rendered as a postage stamp floating in a dark box, which read
+   as "the preview is broken / showing a tiny portion of my screen". Contain +
+   a fixed aspect keeps it legible at any crop, and never distorts. */
+.om-shot {
+  display: block; width: 100%; aspect-ratio: 16 / 9; min-height: 200px;
+  object-fit: contain; object-position: center;
+  border-radius: 14px; background: #05070f;
+  border: 1px solid rgba(150,168,255,.14); box-shadow: var(--neu-in-sm);
+}
+.om-l {
+  display: grid; grid-template-columns: 76px 1fr; gap: 2px 10px;
+  padding: 8px 11px; margin-bottom: 6px; border-radius: 12px;
+  background: var(--surf-2); box-shadow: var(--neu-in-sm);
+}
+.om-l-k { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--violet); }
+.om-l.blocked .om-l-k, .om-l.refused .om-l-k { color: var(--bad); }
+.om-l.arm .om-l-k { color: var(--gold); }
+.om-l.act .om-l-k { color: var(--cyan); }
+.om-l-t { font-size: 10px; color: var(--faint); text-align: right; }
+/* HER WORDS ARE NOT CUT. Clamped in CSS to keep the trail scannable, never
+   sliced in JS — so "read the whole thing" always has the whole thing to show.
+   A finding truncated mid-sentence reads as complete and is worse than none. */
+.om-l-s {
+  grid-column: 1 / -1; font-size: 11.5px; line-height: 1.55; color: var(--ink); word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.om-l.open .om-l-s { -webkit-line-clamp: unset; display: block; }
+.om-l-more {
+  grid-column: 1 / -1; justify-self: start; margin-top: 5px; padding: 3px 10px;
+  border-radius: 9px; cursor: pointer; font-size: 10px; letter-spacing: .04em;
+  color: var(--cyan); background: rgba(84,230,255,.09); border: 1px solid rgba(84,230,255,.24);
+}
+.om-l-more:hover { background: rgba(84,230,255,.16); }
+
+/* ======================= MOTUSMODELS · THE STUDIO ======================== */
+.mm-organs {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+  margin-bottom: 20px; padding: 0; overflow: hidden; border-radius: 20px;
+  background: var(--surf); box-shadow: var(--neu-out);
+}
+.mm-organ {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 18px 18px 20px; border-right: 1px solid rgba(150,168,255,.08);
+}
+.mm-organ:last-child { border-right: none; }
+.mm-gl { font-size: 19px; color: var(--violet); text-shadow: 0 0 20px rgba(169,120,255,.5); }
+.mm-organ b { font-family: 'Sora', sans-serif; font-size: 13.5px; color: var(--ink); }
+.mm-organ span:last-child { font-size: 11.5px; line-height: 1.55; color: var(--muted); }
+
+.mm-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* SYMMETRY LAW: an odd count must never leave an orphan card beside dead space.
+   The last one widens into a full row instead — a wide row, not a stuck card. */
+.mm-list .mm-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.mm-card {
+  text-align: left; padding: 15px 16px; border-radius: 18px; cursor: pointer;
+  background: var(--surf); border: 1px solid rgba(150,168,255,.1); box-shadow: var(--neu-out-sm);
+  transition: box-shadow .3s var(--ease), transform .3s var(--ease);
+}
+.mm-card:hover { transform: translateY(-2px); box-shadow: var(--neu-out-sm), 0 0 30px rgba(169,120,255,.16); }
+.mm-card.on { border-color: rgba(169,120,255,.4); box-shadow: var(--neu-in-sm), 0 0 32px rgba(169,120,255,.24); }
+.mm-card-h { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.mm-gen {
+  padding: 2px 8px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: var(--cyan); background: rgba(84,230,255,.1);
+}
+.mm-st { margin-left: auto; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; }
+.mm-st.draft { color: var(--muted); }
+.mm-st.ratified { color: var(--good); }
+.mm-st.minted { color: var(--gold); }
+.mm-st.broadcast { color: var(--rose); }
+.mm-name { margin-bottom: 5px; font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 700; line-height: 1.35; color: var(--ink); }
+.mm-ess { margin-bottom: 9px; font-size: 11.5px; line-height: 1.55; color: var(--muted); }
+.mm-card-f { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+.mm-score { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--good); }
+.mm-score.dim { color: var(--faint); }
+.mm-hash { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--gold); }
+.mm-runs { font-size: 10.5px; color: var(--cyan); }
+
+.mm-newrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+.mm-newrow .prime-btn { margin-left: auto; }
+.mm-notes {
+  padding: 12px 14px; margin-bottom: 8px; border-radius: 14px; white-space: pre-wrap;
+  background: rgba(169,120,255,.08); border: 1px solid rgba(169,120,255,.2);
+  font-size: 12px; line-height: 1.6; color: var(--ink);
+}
+.mm-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.mm-editor { margin-bottom: 20px; }
+.mm-stages { display: flex; flex-direction: column; gap: 10px; }
+.mm-stage {
+  display: grid; grid-template-columns: 26px 1fr 150px 34px; gap: 9px; align-items: start;
+  padding: 12px; border-radius: 16px; background: var(--surf-2); box-shadow: var(--neu-in-sm);
+}
+.mm-stage .om-ta { grid-column: 1 / -1; }
+.mm-si { padding-top: 12px; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--violet); }
+
+.mm-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.mm-axes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; }
+.mm-axes button {
+  padding: 10px 6px; border-radius: 14px; cursor: pointer;
+  font-family: 'Sora', sans-serif; font-weight: 600; font-size: 11px; color: var(--muted);
+  background: var(--surf); border: 1px solid rgba(150,168,255,.12); box-shadow: var(--neu-out-sm);
+  transition: box-shadow .28s var(--ease), color .28s;
+}
+.mm-axes button.on { color: var(--cyan); border-color: rgba(84,230,255,.34); box-shadow: var(--neu-in-sm), 0 0 20px rgba(84,230,255,.22); }
+.mm-axnote { margin: 12px 0; font-size: 12px; line-height: 1.55; color: var(--ink); }
+
+.mm-fit { margin-top: 16px; }
+.mm-fa { display: grid; grid-template-columns: 96px 1fr 46px; gap: 10px; align-items: center; margin-bottom: 8px; }
+.mm-fa-l { font-size: 11.5px; color: var(--ink); }
+.mm-fa-bar { height: 7px; overflow: hidden; border-radius: 99px; background: var(--surf-2); box-shadow: var(--neu-in-sm); }
+.mm-fa-bar i {
+  display: block; height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, var(--violet-2), var(--cyan)); box-shadow: 0 0 14px rgba(84,230,255,.4);
+}
+.mm-fa-n { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cyan); text-align: right; }
+.mm-fa.total .mm-fa-l { font-weight: 700; color: var(--gold); }
+.mm-fa.total .mm-fa-bar i { background: linear-gradient(90deg, var(--gold-d), var(--gold)); }
+.mm-fa.total .mm-fa-n { color: var(--gold); }
+.mm-verdict {
+  margin-top: 12px; padding: 12px 14px; border-radius: 14px;
+  background: var(--surf-2); box-shadow: var(--neu-in-sm);
+  font-size: 12px; line-height: 1.6; color: var(--ink);
+}
+.mm-nofit { margin-top: 16px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+
+.mm-rails { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.mm-rail {
+  text-align: left; padding: 14px 15px; border-radius: 18px; cursor: pointer;
+  background: var(--surf); border: 1px solid rgba(150,168,255,.1); box-shadow: var(--neu-out-sm);
+  transition: box-shadow .3s var(--ease), transform .3s var(--ease);
+}
+.mm-rail:hover { transform: translateY(-2px); box-shadow: var(--neu-out-sm), 0 0 28px rgba(169,120,255,.18); }
+.mm-rail b { display: block; margin-bottom: 5px; font-family: 'Sora', sans-serif; font-size: 12.5px; color: var(--ink); }
+.mm-rail span { display: block; font-size: 11px; line-height: 1.5; color: var(--muted); }
+.mm-rail code { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--gold); }
+.mm-rail.done { border-color: rgba(84,230,168,.34); }
+.mm-rail.done b { color: var(--good); }
+.mm-rail.run { border-color: rgba(84,230,255,.3); }
+.mm-rail.run b { color: var(--cyan); }
+
+.mm-out { margin-top: 14px; }
+.mm-out-x {
+  padding: 14px 16px; border-radius: 16px; background: var(--surf-2); box-shadow: var(--neu-in-sm);
+  font-size: 12.5px; line-height: 1.65; color: var(--ink);
+}
+.mm-out-x.good { border-left: 2px solid var(--good); }
+.mm-out-x code { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--gold); word-break: break-all; }
+.mm-pay { margin-top: 11px; }
+.mm-pay span { display: block; margin-bottom: 5px; font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--cyan); }
+.mm-pay pre {
+  margin: 0; padding: 11px 13px; border-radius: 12px; background: var(--bg2);
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.6; color: var(--ink);
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* ---- mobile-first correctness. Verified at 375px. ---- */
+@media (max-width: 1080px) {
+  .om-grid, .om-grid2, .om-live, .mm-grid2, .mm-list { grid-template-columns: 1fr; }
+  .mm-organs { grid-template-columns: 1fr 1fr; }
+  .mm-organ:nth-child(2n) { border-right: none; }
+  .mm-organ:nth-child(-n+2) { border-bottom: 1px solid rgba(150,168,255,.08); }
+}
+@media (max-width: 700px) {
+  .om-two, .mm-two, .mm-rails { grid-template-columns: 1fr; }
+  .mm-axes { grid-template-columns: repeat(2, 1fr); }
+  .mm-axes button:last-child { grid-column: 1 / -1; }
+  .mm-stage { grid-template-columns: 26px 1fr 34px; }
+  .mm-stage .om-in.narrow { grid-column: 2; max-width: none; }
+  .om-hold, .om-disarm { width: 100%; }
+  .om-arm-core { gap: 16px; padding: 18px; }
+  .card, .card.glass-deep { padding: 16px 16px 18px; }
+}
+
+/* ============================================================================
+   MOTUS MOTIVUS — the strategic layer.
+   The read, the divergent frames, the open thread, and the map she works from.
+   The rule that shapes all of it: the DECISION is the hero, not the data. The
+   lever gets the largest type on the card; the frame he could not get from
+   himself gets its own bordered field so it is never skimmed past.
+   ========================================================================== */
+.om-thread {
+  padding: 15px 17px; margin-bottom: 16px; border-radius: 18px;
+  background: linear-gradient(150deg, rgba(84,230,255,.09), rgba(20,25,49,.55));
+  border: 1px solid rgba(84,230,255,.26); box-shadow: 0 0 30px rgba(84,230,255,.1);
+}
+.om-thread-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 9px; font-size: 12.5px; font-weight: 700; color: var(--cyan); }
+.om-thread-h span { font-size: 11px; font-weight: 400; color: var(--muted); }
+.om-thread-g { font-size: 13.5px; line-height: 1.55; color: var(--ink); margin-bottom: 7px; }
+.om-thread-n { font-size: 12px; line-height: 1.55; color: var(--ink); margin-bottom: 8px; }
+.om-thread-n b { color: var(--gold); }
+.om-thread-f { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+.om-thread-f b { color: var(--ink); }
+.om-thread-f .mini { margin-left: auto; }
+
+/* ═══ ON AIR · SEMBLE LIVE — the broadcast composer ═══
+   The privacy law rendered as interface: the untouched default is silence,
+   the ON state glows ember like a studio lamp, and the payload preview shows
+   the exact bytes that leave. Squircles, glow-not-highlight, no grey. */
+.st-golive { margin-bottom: 16px; }
+.st-golive.on { border-color: rgba(255,93,140,.45); box-shadow: 0 0 44px rgba(255,93,140,.16); }
+.st-golive-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+/* ✦ STREAM THE MOST IMPORTANT THING — the one control that turns a blank
+   composer into a broadcast. It gets the gold, because it is the leverage. */
+.st-primary { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-top: 14px; }
+.st-auto {
+  flex: 0 0 auto; font-size: 14px; padding: 13px 22px; border-radius: 18px;
+  background: linear-gradient(140deg, rgba(232,196,107,.2), rgba(84,230,255,.12)), var(--surf);
+  border: 1px solid rgba(232,196,107,.5); color: var(--ink);
+}
+.st-auto:hover:not(:disabled) { box-shadow: 0 0 30px rgba(232,196,107,.3); }
+.st-auto:disabled { opacity: .7; cursor: default; }
+.st-follow { flex: 1 1 340px; align-items: flex-start; }
+.st-follow input { margin-top: 3px; }
+.st-follow span b { color: var(--cyan); }
+.st-say { margin-bottom: 12px; }
+
+/* ── MOTUSCOMPUTE — pledged capability, never delivered work ── */
+.st-compute { margin-top: 16px; }
+.cmp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+.cmp-stat { padding: 15px 12px; border-radius: 16px; background: var(--surf-2); border: 1px solid rgba(150,168,255,.14); text-align: center; }
+.cmp-stat .k { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: .14em; color: var(--cyan); }
+.cmp-stat b { display: block; font-family: 'Sora'; font-weight: 800; font-size: 1.7rem; color: var(--gold); margin: 5px 0 3px; }
+.cmp-stat i { font-style: normal; font-size: 11.5px; color: var(--ink); opacity: .85; }
+.cmp-own { padding: 12px 14px; border-radius: 14px; background: var(--surf-2); border-left: 3px solid var(--cyan); font-size: 12.5px; color: var(--ink); margin-bottom: 12px; }
+.cmp-own .k { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: .14em; color: var(--cyan); display: block; margin-bottom: 4px; }
+.cmp-own b { color: var(--gold); }
+.cmp-list { max-height: 30vh; overflow-y: auto; }
+.cmp-node { display: flex; gap: 10px; align-items: baseline; padding: 8px 4px; border-bottom: 1px solid rgba(150,168,255,.09); font-size: 12px; }
+.cmp-node .nid { font-family: 'JetBrains Mono', monospace; color: var(--cyan); }
+.cmp-node .ntier { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); opacity: .7; }
+.cmp-node .nven { color: var(--ink); flex: 1; }
+.cmp-node .ncap { font-family: 'Sora'; font-weight: 700; color: var(--gold); }
+.cmp-node .nadr { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink); opacity: .8; }
+@media (max-width: 1100px) { .cmp-grid { grid-template-columns: repeat(2, 1fr); } }
+.st-big { font-size: 16px; padding: 15px 30px; border-radius: 20px; }
+.st-status { font-size: 13.5px; color: var(--ink); }
+.st-onair { color: #FF7DA0; text-shadow: 0 0 14px rgba(255,93,140,.5); letter-spacing: .06em; }
+.st-drop { color: var(--gold); }
+.st-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.st-djs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.st-dj {
+  padding: 10px 12px; border-radius: 16px; cursor: pointer; text-align: left;
+  background: var(--surf-2); border: 1px solid rgba(150,168,255,.14); color: var(--ink);
+  transition: box-shadow .3s var(--ease), border-color .3s var(--ease);
+}
+.st-dj b { display: block; font-family: 'Sora'; font-size: 13.5px; }
+.st-dj span { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--cyan); letter-spacing: .05em; }
+.st-dj:hover, .st-dj.on { border-color: rgba(84,230,255,.45); box-shadow: 0 0 22px rgba(84,230,255,.16); }
+.st-dj.on b { color: var(--gold); }
+.st-powrow { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.st-pow {
+  padding: 8px 14px; border-radius: 14px; cursor: pointer; font-size: 12.5px; font-weight: 600;
+  background: var(--surf-2); border: 1px solid rgba(232,196,107,.22); color: var(--ink);
+  transition: box-shadow .3s var(--ease), border-color .3s var(--ease);
+}
+.st-pow:hover, .st-pow.on { border-color: rgba(232,196,107,.55); box-shadow: 0 0 20px rgba(232,196,107,.18); }
+.st-pow.on { color: var(--gold); }
+.st-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 16px; margin-top: 16px; }
+@media (max-width: 1100px) { .st-grid { grid-template-columns: 1fr; } }
+.st-cands { max-height: 46vh; overflow-y: auto; margin-bottom: 12px; }
+.st-cand {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; margin-bottom: 8px;
+  border-radius: 14px; background: var(--surf-2); border-left: 3px solid rgba(150,168,255,.2);
+  cursor: pointer; transition: box-shadow .25s var(--ease);
+}
+.st-cand.on { border-left-color: var(--cyan); box-shadow: 0 0 18px rgba(84,230,255,.12); }
+.st-cand input { margin-top: 4px; }
+.st-kind { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; color: var(--cyan); padding-top: 3px; white-space: nowrap; }
+.st-t { font-size: 13.5px; line-height: 1.5; color: var(--ink); flex: 1; }
+.st-rm { margin-left: auto; }
+.st-pv { display: flex; gap: 10px; padding: 9px 11px; margin-bottom: 7px; border-radius: 12px; background: var(--surf-2); border-left: 2px solid var(--good, #54E6A8); font-size: 13px; color: var(--ink); }
+.st-pv span { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .1em; color: var(--gold); padding-top: 2px; white-space: nowrap; }
+.st-msg { display: flex; gap: 10px; align-items: baseline; padding: 9px 2px; border-bottom: 1px solid rgba(150,168,255,.1); }
+.st-who { font-family: 'Sora'; font-weight: 700; font-size: 13px; color: var(--cyan); white-space: nowrap; }
+.st-tx { font-size: 13px; color: var(--ink); flex: 1; }
+/* the crowd's own ranking, shown where he moderates — so what he sees is what they see */
+.st-votes {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+  color: var(--ink); background: var(--surf-2); border: 1px solid rgba(150,168,255,.16);
+  padding: 3px 8px; border-radius: 10px; white-space: nowrap;
+}
+.st-votes.has { color: var(--gold); border-color: rgba(232,196,107,.45); box-shadow: 0 0 14px rgba(232,196,107,.16); }
+.st-lnk { color: var(--cyan); text-decoration: none; font-weight: 600; }
+.st-lnk:hover { text-shadow: 0 0 12px rgba(84,230,255,.5); }
+
+/* THE LANE SPLIT — two seats take turns driving, and he can see which one has
+   the wheel right now. The live lane glows; the other one simply sits. Never a
+   hard highlight, and both counts stay at full contrast so the pair reads as a
+   pair rather than one active item and one dimmed-out ghost. */
+.om-lanes { display: flex; gap: 10px; flex-wrap: wrap; margin: 2px 0 14px; }
+.om-lane {
+  flex: 1 1 0; min-width: 148px; text-align: center;
+  padding: 8px 14px; border-radius: 16px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--ink);
+  background: var(--surf-2); border: 1px solid rgba(150,168,255,.14);
+  transition: box-shadow .34s var(--ease), border-color .34s var(--ease);
+}
+.om-lane b { font-family: 'Sora', sans-serif; font-weight: 700; color: var(--cyan); }
+.om-lane.on { border-color: rgba(84,230,255,.4); box-shadow: 0 0 26px rgba(84,230,255,.22); }
+.om-lane.on b { color: var(--gold); }
+
+.om-read {
+  margin-top: 18px; padding: 18px 20px 20px; border-radius: 20px;
+  background: var(--surf-2); box-shadow: var(--neu-in-sm);
+  border: 1px solid rgba(169,120,255,.22);
+}
+.om-read.frames { border-color: rgba(255,206,107,.24); }
+.or-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  font-family: 'Sora', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--violet); }
+.om-read.frames .or-h { color: var(--gold); }
+.or-h span { margin-left: auto; font-size: 10.5px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
+/* the decision itself — the biggest thing on the card */
+.or-lever {
+  padding: 14px 16px; margin-bottom: 14px; border-radius: 16px;
+  background: linear-gradient(150deg, rgba(169,120,255,.14), rgba(12,15,30,.5));
+  border-left: 3px solid var(--violet);
+  font-family: 'Sora', sans-serif; font-size: 15.5px; font-weight: 600; line-height: 1.5; color: var(--ink);
+}
+.or-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+.or-grid > div { min-width: 0; }
+.or-grid span, .or-row span {
+  display: block; margin-bottom: 4px; font-size: 9.5px; letter-spacing: .1em;
+  text-transform: uppercase; font-weight: 600; color: var(--cyan);
+}
+.or-grid p { font-size: 12px; line-height: 1.5; color: var(--ink); word-break: break-word; }
+.or-row { margin-bottom: 11px; }
+.or-row p { font-size: 12.5px; line-height: 1.6; color: var(--ink); }
+/* the frame he could not have got from himself — never let this be skimmed */
+.or-frame {
+  margin-top: 14px; padding: 13px 15px; border-radius: 16px;
+  background: linear-gradient(150deg, rgba(255,206,107,.11), rgba(20,25,49,.5));
+  border: 1px solid rgba(255,206,107,.3);
+}
+.or-frame span { display: block; margin-bottom: 5px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--gold); }
+.or-frame p { font-size: 12.5px; line-height: 1.62; color: var(--ink); }
+.or-act { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+.or-fr { padding: 13px 15px; margin-bottom: 10px; border-radius: 16px; background: rgba(12,15,30,.5); border: 1px solid rgba(150,168,255,.12); }
+.or-fr-h { display: flex; gap: 10px; align-items: baseline; margin-bottom: 6px; font-size: 13px; line-height: 1.5; color: var(--ink); font-weight: 600; }
+.or-fr-h b { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 7px; display: inline-flex;
+  align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: var(--gold); background: rgba(255,206,107,.14); }
+.or-fr-m { margin-bottom: 8px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--cyan); }
+
+/* the map — a terminal-flavoured reading pane, monospaced and never clamped */
+.om-mapcard { margin-top: 20px; }
+.om-zoom { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0 12px; }
+.om-zoom button {
+  padding: 11px 8px; border-radius: 15px; cursor: pointer;
+  font-family: 'Sora', sans-serif; font-weight: 600; font-size: 11.5px; color: var(--muted);
+  background: var(--surf); border: 1px solid rgba(150,168,255,.12); box-shadow: var(--neu-out-sm);
+  transition: box-shadow .28s var(--ease), color .28s;
+}
+.om-zoom button.on { color: var(--cyan); border-color: rgba(84,230,255,.34); box-shadow: var(--neu-in-sm), 0 0 22px rgba(84,230,255,.22); }
+.om-map {
+  margin-top: 12px; padding: 16px 18px; max-height: 460px; overflow: auto; border-radius: 16px;
+  background: var(--bg2); box-shadow: var(--neu-in-sm);
+  font-family: 'JetBrains Mono', monospace; font-size: 11.5px; line-height: 1.68; color: var(--ink);
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* Motus Motivus, in the Duo-Drive stance picker — the one that may be big */
+.dmode.motivus { border-color: rgba(255,111,174,.34); }
+.dmode.motivus .dm-t { color: var(--rose); text-shadow: 0 0 16px rgba(255,111,174,.42); }
+.dmode.motivus.on { box-shadow: var(--neu-in-sm), 0 0 30px rgba(255,111,174,.3); }
+
+@media (max-width: 1080px) {
+  .or-grid { grid-template-columns: 1fr 1fr; }
+  .om-zoom { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 700px) {
+  .or-grid { grid-template-columns: 1fr; }
+  .om-thread-f .mini { margin-left: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOTUSCOMPUTE OPERATOR DASHBOARD — history, per-DJ record, payout console,
+   Golem gauge. Squircles only, no grey body text, glow instead of highlight.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cmp-sec { margin-top: 14px; }
+.cmp-sec .k, .cmp-col .k, .cmp-accrual .k {
+  font-family: var(--mono, 'IBM Plex Mono', monospace); font-size: 10.5px;
+  letter-spacing: .15em; color: var(--label, #9FD6DD); display: block; margin-bottom: 8px;
+}
+.cmp-hist { width: 100%; height: 58px; display: block; }
+.cmp-hist .cb { fill: var(--cyan, #22D3EE); opacity: .6; }
+.cmp-hist .cb:hover { opacity: 1; }
+.cmp-ax {
+  display: flex; justify-content: space-between; margin-top: 6px;
+  font-family: var(--mono, monospace); font-size: 10.5px; color: var(--label, #9FD6DD);
+}
+
+.cmp-cols { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; margin-top: 14px; }
+.cmp-djs { display: flex; flex-direction: column; gap: 6px; }
+.cmp-dj {
+  display: grid; grid-template-columns: 1fr auto auto 70px 44px; gap: 8px;
+  align-items: center; font-size: 12.5px; color: var(--ink, #F4F6F9);
+  padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.05);
+}
+.cmp-dj .dn { font-weight: 700; }
+.cmp-dj .dt, .cmp-dj .dn2, .cmp-dj .dp {
+  font-family: var(--mono, monospace); font-size: 11.5px; color: var(--ink2, #DCE3EC);
+}
+.cmp-dj .dbar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.07); overflow: hidden; }
+.cmp-dj .dbar i {
+  display: block; height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--cyan, #22D3EE), var(--violet, #A78BFF));
+  box-shadow: 0 0 8px -1px var(--cyan, #22D3EE);
+}
+.cmp-kv > div {
+  display: flex; justify-content: space-between; gap: 10px; padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,.05); font-size: 12.5px;
+}
+.cmp-kv b { color: var(--ink, #F4F6F9); font-weight: 600; }
+.cmp-kv span { font-family: var(--mono, monospace); font-size: 11.5px; color: var(--ink2, #DCE3EC); }
+
+.cmp-accrual {
+  margin-top: 14px; padding: 12px 14px; border-radius: 18px;
+  background: rgba(232,196,107,.05); border: 1px solid rgba(232,196,107,.18);
+}
+.cmp-acc { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.cmp-acc > div b { display: block; font-size: 1.15rem; font-weight: 800; color: var(--ink, #F4F6F9); }
+.cmp-acc > div span { font-size: 11.5px; color: var(--ink2, #DCE3EC); }
+.cmp-acc .go b { color: var(--gold-t, #F0D48C); text-shadow: 0 0 12px rgba(232,196,107,.4); }
+
+/* ── payout console ── */
+.pay-key {
+  margin-top: 12px; padding: 10px 13px; border-radius: 14px;
+  background: rgba(34,211,238,.07); border: 1px solid rgba(34,211,238,.2);
+  font-size: 12.5px; line-height: 1.5; color: var(--ink, #F4F6F9);
+}
+.pay-plan, .pay-armed {
+  margin-top: 12px; padding: 12px 14px; border-radius: 18px;
+  background: rgba(255,255,255,.03); border: 1px solid rgba(123,227,234,.16);
+}
+.pay-armed { border-color: rgba(232,196,107,.35); background: rgba(232,196,107,.06); }
+.pay-armed b { color: var(--gold-t, #F0D48C); }
+.pay-held { margin-top: 8px; font-size: 12px; color: var(--ink2, #DCE3EC); }
+.pay-held b { color: var(--signal-t, #CBBCFF); }
+.pay-cmd {
+  margin: 6px 0 0; padding: 10px 12px; border-radius: 12px; overflow-x: auto;
+  background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.08);
+  font-family: var(--mono, monospace); font-size: 11.5px; color: var(--accent-t, #7BE3EA);
+  white-space: pre-wrap; word-break: break-all;
+}
+.pay-settle { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.pay-settle .in {
+  flex: 1 1 220px; min-width: 0; padding: 8px 12px; border-radius: 14px;
+  background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.12);
+  color: var(--ink, #F4F6F9); font-family: var(--mono, monospace); font-size: 12px;
+}
+.pay-log { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.pl-row {
+  display: grid; grid-template-columns: 60px 52px 1fr 44px 84px 62px; gap: 8px;
+  align-items: center; font-size: 11.5px; padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,.05); font-family: var(--mono, monospace);
+  color: var(--ink2, #DCE3EC);
+}
+.pl-row .pr {
+  text-align: center; border-radius: 999px; border: 1px solid currentColor;
+  font-size: 10px; padding: 2px 0; color: var(--accent-t, #7BE3EA);
+}
+.pl-row .pr.trust { color: var(--signal-t, #CBBCFF); }
+.pl-row .pa, .pl-row .pn { text-align: right; }
+.pl-row.st-sent .ps { color: var(--gold-t, #F0D48C); }
+.pl-row.st-failed .ps { color: #E879C9; }
+.om-p.dim { opacity: .92; }
+.cmp-stat.zero b { color: #E879C9; text-shadow: 0 0 12px rgba(232,121,201,.3); }
+.cmp-stat.go b { color: var(--gold-t, #F0D48C); }
+.mini.go { border-color: rgba(232,196,107,.5); color: var(--gold-t, #F0D48C); }
+.mini.off { opacity: .45; cursor: not-allowed; }
+
+@media (max-width: 1000px) {
+  .cmp-cols { grid-template-columns: 1fr; }
+  .cmp-acc { grid-template-columns: repeat(2, 1fr); }
+  .pl-row { grid-template-columns: 54px 46px 1fr 60px; }
+  .pl-row .pd, .pl-row .ps { display: none; }
+}
+
+/* ── RUNG 5 · the dispatch console ── */
+.disp-send { margin-top: 14px; }
+.disp-send .k, .disp-tasks .k, .disp-recent .k {
+  font-family: var(--mono, 'IBM Plex Mono', monospace); font-size: 10.5px;
+  letter-spacing: .15em; color: var(--label, #9FD6DD); display: block; margin-bottom: 8px;
+}
+.disp-send .in {
+  width: 100%; margin-bottom: 8px; padding: 9px 12px; border-radius: 14px;
+  background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.12);
+  color: var(--ink, #F4F6F9); font-size: 13px; font-family: inherit; resize: vertical;
+}
+.disp-send textarea.in { font-family: var(--mono, monospace); font-size: 12px; line-height: 1.5; }
+.disp-send .in:focus { outline: none; border-color: rgba(123,227,234,.5); box-shadow: 0 0 18px -6px rgba(34,211,238,.6); }
+.disp-tasks, .disp-recent { margin-top: 14px; }
+.dr-row {
+  display: grid; grid-template-columns: 64px 1fr 80px auto; gap: 9px; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.05);
+  font-size: 12px; color: var(--ink2, #DCE3EC);
+}
+.dr-row .drk {
+  font-family: var(--mono, monospace); font-size: 10px; text-align: center; padding: 2px 0;
+  border-radius: 999px; color: var(--accent-t, #7BE3EA); border: 1px solid rgba(123,227,234,.35);
+}
+.dr-row .drt { color: var(--ink, #F4F6F9); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr-row .drd {
+  font-family: var(--mono, monospace); font-size: 11px; text-align: center;
+  color: var(--signal-t, #CBBCFF); background: rgba(167,139,255,.10);
+  border: 1px solid rgba(167,139,255,.22); border-radius: 999px; padding: 2px 6px;
+}
+.dr-row .drb { font-family: var(--mono, monospace); font-size: 11px; }
+@media (max-width: 1000px) {
+  .dr-row { grid-template-columns: 58px 1fr; row-gap: 2px; }
+  .dr-row .drd, .dr-row .drb { grid-column: 2; justify-self: start; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE BOARD, REBUILT
+
+   The old card carried eight controls across four columns simultaneously. Same
+   failure as the live page before its rebuild: everything at one volume, so
+   nothing reads as important. Now the card carries what you SCAN; actions live
+   behind one press, and only one card's actions open at a time.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* the four numbers worth knowing before you look at anything else */
+.bd-strip {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;
+  padding: 15px 18px; border-radius: 22px;
+  background: radial-gradient(120% 160% at 0% 0%, rgba(34,211,238,.08), transparent 60%),
+              linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012));
+  border: 1px solid rgba(123,227,234,.15);
+}
+.bd-item b {
+  display: block; font-size: 1.5rem; font-weight: 800; line-height: 1.1;
+  color: var(--ink, #F4F6F9); font-variant-numeric: tabular-nums;
+}
+.bd-item span { display: block; margin-top: 3px; font-size: 12.5px; color: var(--ink2, #DCE3EC); }
+.bd-item.hot b { color: #E879C9; text-shadow: 0 0 16px rgba(232,121,201,.4); }
+.bd-item.go b { color: var(--gold-t, #F0D48C); text-shadow: 0 0 18px rgba(232,196,107,.5); }
+
+/* capture: one press, not a form permanently occupying the top of the screen */
+.bd-capture, .bd-fleet { margin-bottom: 16px; }
+.bd-capture > summary, .bd-fleet > summary {
+  cursor: pointer; list-style: none; padding: 13px 18px; border-radius: 18px;
+  background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.09);
+  color: var(--ink, #F4F6F9); font-weight: 600; font-size: 14px;
+  transition: border-color .22s ease;
+}
+.bd-capture > summary::-webkit-details-marker, .bd-fleet > summary::-webkit-details-marker { display: none; }
+.bd-capture > summary::after, .bd-fleet > summary::after { content: ' ▾'; color: var(--label, #9FD6DD); float: right; }
+.bd-capture[open] > summary::after, .bd-fleet[open] > summary::after { content: ' ▴'; }
+.bd-capture > summary:hover, .bd-fleet > summary:hover { border-color: rgba(123,227,234,.4); }
+.bd-capture > summary:focus-visible, .bd-fleet > summary:focus-visible { outline: 2px solid var(--accent-t,#7BE3EA); outline-offset: 3px; }
+.bd-capture[open] > summary, .bd-fleet[open] > summary { margin-bottom: 12px; }
+.bd-fleet { margin-top: 18px; }
+
+/* ── the card ── */
+.tcard .tc-top { display: grid; grid-template-columns: 10px 1fr 28px; gap: 10px; align-items: start; }
+.tcard .tc-pri {
+  width: 8px; height: 8px; border-radius: 50%; margin-top: 6px;
+  background: var(--ink2, #DCE3EC); box-shadow: 0 0 8px currentColor;
+}
+.tcard.p1 .tc-pri { background: #E879C9; box-shadow: 0 0 10px rgba(232,121,201,.8); }
+.tcard.p3 .tc-pri { background: rgba(255,255,255,.25); box-shadow: none; }
+.tcard .tc-title { font-weight: 600; line-height: 1.4; color: var(--ink, #F4F6F9); }
+.tc-more {
+  width: 26px; height: 26px; border-radius: 9px; cursor: pointer; line-height: 1;
+  background: transparent; border: 1px solid rgba(255,255,255,.12);
+  color: var(--ink2, #DCE3EC); font-size: 15px;
+  transition: border-color .2s ease, color .2s ease;
+}
+.tc-more:hover { border-color: rgba(123,227,234,.5); color: var(--accent-t, #7BE3EA); }
+.tc-more.on { border-color: rgba(123,227,234,.6); color: var(--accent-t, #7BE3EA); box-shadow: 0 0 16px -5px rgba(34,211,238,.7); }
+.tc-more:focus-visible { outline: 2px solid var(--accent-t,#7BE3EA); outline-offset: 2px; }
+
+.tc-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0 0 20px; }
+.tc-meta > span {
+  font-family: var(--mono, monospace); font-size: 10.5px; letter-spacing: .04em;
+  padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.12);
+  color: var(--ink2, #DCE3EC);
+}
+.tc-meta .tc-agent { color: var(--accent-t, #7BE3EA); border-color: rgba(123,227,234,.3); }
+.tc-meta .tc-agent.none { color: var(--ink2, #DCE3EC); border-color: rgba(255,255,255,.1); }
+/* the pool chip — the board's new job is showing that the commons is on it */
+.tc-meta .tc-pool {
+  color: var(--gold-t, #F0D48C); border-color: rgba(232,196,107,.4);
+  background: rgba(232,196,107,.08);
+}
+
+.tc-acts {
+  display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0 0 20px;
+  padding-top: 12px; border-top: 1px solid rgba(255,255,255,.07);
+}
+.tc-acts[hidden] { display: none; }
+.mini.pool { border-color: rgba(232,196,107,.4); color: var(--gold-t, #F0D48C); }
+.bcol.quiet { opacity: .72; }
+.bcol.quiet:hover, .bcol.quiet:focus-within { opacity: 1; }
+
+@media (max-width: 1100px) { .bd-strip { grid-template-columns: repeat(2, 1fr); } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NEONEURO GLASS — the same material as the live surfaces.
+   One definition, one light source, so the desktop app and the public pages
+   read as the same object rather than two projects that happen to share a name.
+
+   ⚠ The tension, resolved the same way: classic neumorphism is built on LOW
+   CONTRAST, which is exactly what the no-grey-text law forbids. The surface
+   takes the depth; the ink does not move.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --nn-lite: rgba(190, 225, 240, .085);
+  --nn-dark: rgba(0, 2, 6, .62);
+  --nn-raise:
+    inset 0 1px 0 var(--nn-lite),
+    inset 1px 0 0 rgba(190, 225, 240, .05),
+    inset 0 -1px 0 var(--nn-dark),
+    0 1px 1px rgba(0, 0, 0, .45),
+    0 14px 34px -18px rgba(0, 0, 0, .9);
+  --nn-inset:
+    inset 0 1px 2px rgba(0, 0, 0, .55),
+    inset 0 -1px 0 var(--nn-lite);
+  --nn-sheen: linear-gradient(147deg, rgba(255,255,255,.055) 0%, rgba(255,255,255,0) 42%);
+}
+
+.card.glass, .cmp-stat, .pay-stat, .ps-card, .bd-strip, .tcard,
+.cmp-accrual, .pay-key, .pay-plan, .pay-armed, .disp-send .in {
+  position: relative;
+  box-shadow: var(--nn-raise);
+}
+.card.glass::before, .cmp-stat::before, .pay-stat::before,
+.bd-strip::before, .tcard::before, .cmp-accrual::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: var(--nn-sheen); pointer-events: none; z-index: 0;
+}
+.card.glass > *, .cmp-stat > *, .pay-stat > *, .bd-strip > *, .tcard > *,
+.cmp-accrual > * { position: relative; z-index: 1; }
+
+/* one frost layer, on the outer card only — never nested */
+.card.glass {
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+.card.glass .cmp-stat, .card.glass .pay-stat, .card.glass .ps-card,
+.card.glass .tcard { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+/* the futurist hairline: one line at the top of each major surface */
+.card.glass::after {
+  content: ''; position: absolute; left: 12%; right: 12%; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(123,227,234,.5), transparent);
+  pointer-events: none;
+}
+
+/* raised invites · inset means held */
+.mini, .prime-btn, .tc-more, .cmn-tab {
+  transition: box-shadow .28s ease, transform .2s ease, border-color .28s ease;
+}
+.mini:active, .prime-btn:active, .tc-more:active { box-shadow: var(--nn-inset); transform: translateY(1px); }
+.tc-more.on { box-shadow: var(--nn-inset), 0 0 22px -8px var(--accent-t, #7BE3EA); }
+
+/* the board card lifts on hover — invitation, not decoration */
+.tcard { transition: box-shadow .3s ease, transform .22s ease; }
+.tcard:hover { transform: translateY(-2px); box-shadow: var(--nn-raise), 0 0 30px -14px rgba(34,211,238,.7); }
+
+@media (prefers-reduced-motion: reduce) {
+  .mini, .prime-btn, .tc-more, .tcard { transition: none; }
+  .tcard:hover { transform: none; }
+}
+
+/* ═══ THE MOVE TICKER — her hands narrated live, one line per real tool call.
+   Appended by the omni event stream, never repainted, so it can update every
+   couple of seconds without disturbing anything else on the page. ═══ */
+.om-ticker {
+  max-height: 180px; overflow: auto; padding: 10px 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.008));
+  border: 1px solid rgba(123,227,234,.14);
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  font-size: 12.5px; line-height: 1.75; color: var(--ink, #F4F6F9);
+}
+.om-tick { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.om-tick.fresh { animation: omTickIn .5s cubic-bezier(.22,1,.36,1) both; }
+@keyframes omTickIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .om-tick.fresh { animation: none; } }
+
+/* ═══ SESSION REPLAY — the scrubber is the clock ═══ */
+.om-rp-picker{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.om-rp-picker .mini{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.om-rp-picker .mini.on{border-color:rgba(84,230,255,.55);color:var(--cyan)}
+.om-rp-stage{position:relative;border-radius:14px;overflow:hidden;
+  border:1px solid rgba(123,227,234,.16);background:rgba(0,0,0,.35)}
+.om-rp-shot{width:100%;display:block}
+.om-rp-move{position:absolute;left:0;right:0;bottom:0;padding:9px 12px;
+  font-family:'JetBrains Mono','IBM Plex Mono',monospace;font-size:11.5px;color:#EAFDFF;
+  background:linear-gradient(180deg,transparent,rgba(4,8,14,.92));
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.om-rp-range{width:100%;margin:12px 0 6px;accent-color:#54E6FF;cursor:pointer}
+.om-rp-meta{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--faint)}
+.om-rp-meta .mono{color:var(--cyan)}
+.om-rp-sp{flex:1}
+.om-rp-verdict{text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;
+  border:1px solid rgba(150,168,255,.25);border-radius:7px;padding:2px 8px}
+.om-rp-verdict.good{color:#4FE6B0;border-color:rgba(79,230,176,.4)}

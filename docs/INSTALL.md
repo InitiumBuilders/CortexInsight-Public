@@ -1,0 +1,147 @@
+# Install
+
+Three ways to put the console on your machine, from the quickest to the most hands-on, on Windows or on a Mac. All of them end in the same place: an app you can open, a vault in your user data, and the gate asking you to set a passphrase.
+
+On a Linux server there is a fourth way, and it is one command. See [the Linux page](../linux/README.md), which is written for someone who has not run a server before.
+
+## What you need
+
+- Windows 10 or 11 (64-bit), macOS 12 or newer on Apple silicon or Intel, or a Linux machine with systemd.
+- For building from source: Node 20 or newer with npm, and Git.
+- For the fleet features: a fleet tree in a home folder (`logs/interactions` and `agents` inside it) and the loopback relay on `127.0.0.1:8788`. On Windows the tree lives in WSL2; on a Mac it is a folder in your home. The console opens and runs without these; Pulse tells you what is missing and where to set the path.
+
+## What works where
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| The console, every view, the harnesses | yes | yes | yes, in a terminal |
+| Fleet tree discovery and the bridge | yes, in WSL | yes, in your home | yes, in your home |
+| The relay, Command, loops, workflows, the board, the reading | yes | yes | yes |
+| The relay itself, bundled and installed for you | no, you point at yours | from a clone, `scripts/mac-relay.sh setup`, since 3.71.1 | yes, since 3.67 |
+| Motus Max in work mode (files, commands, APIs) | yes | yes | yes |
+| Motus Max on the screen (pointer, keyboard, window probe) | yes | not yet; the console says so when asked | no, and there is no screen to drive |
+| Self-update from a staged build beside the project tree | yes | yes, since 3.66 | yes for a windowed build; a server updates with `cortex update` |
+| Relay restart from the heal panel | yes, through WSL services | yes, through `~/cortex/bin/cortex` or its launchd agent, since 3.71.1 | yes, `cortex relay restart` |
+| Sealed keys | DPAPI | Keychain | a 0600 key file bound to the machine id |
+| Voice, the studio, the second stack, the broadcast | yes | yes | the studio and the second stack yes; voice needs a microphone |
+| Driving another machine's console over SSH | yes, since 3.67 | yes, since 3.67 | it is the machine being driven |
+
+## 1. Download a release
+
+Every version tag builds on a Windows runner that none of the authors have touched. The zip on the Releases page is that build.
+
+1. Open https://github.com/InitiumBuilders/Semble-CC/releases and download `CortexInsight-<version>-win-x64.zip`.
+2. Unzip it anywhere you like, for example `C:\Apps\CortexInsight`.
+3. Run `CortexInsight.exe`.
+
+Windows SmartScreen may warn that the publisher is unknown, because the build is not code-signed. More info → Run anyway. If you would rather not trust a download, build it yourself with the next method; the result is byte-for-byte the same packager output.
+
+Self-update looks for a newer build staged beside the project tree, so a downloaded zip updates by downloading the next zip.
+
+## 2. One command from a clone
+
+```powershell
+git clone https://github.com/InitiumBuilders/Semble-CC.git
+cd Semble-CC
+powershell -ExecutionPolicy Bypass -File .\Build-And-Install.ps1
+```
+
+The script says what it does at every step: it checks the toolchain, installs dependencies from the lockfile, packages the app into `release-next\`, then hands the staged build to `scripts\install.ps1`, which closes a running console, swaps the folders with retries, re-reads the installed binary to prove the version, rolls back if the proof fails, deletes staging only after proof, puts a shortcut on the desktop, and launches.
+
+Switches: `-NoLaunch`, `-NoShortcut`, `-SkipInstallDeps`.
+
+The same thing through npm:
+
+```bash
+npm run deploy
+```
+
+To update later: pull, then run the script again. The previous build stays beside the live one as `release\CortexInsight-win32-x64.prev` until the next install.
+
+## 3. By hand
+
+```bash
+npm ci
+npm run package                                   # release-next\CortexInsight-win32-x64\
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1   # swap, prove, launch
+```
+
+Or skip the install step and run `release-next\CortexInsight-win32-x64\CortexInsight.exe` where it is. To run from source without packaging: `npm start`.
+
+## On a Mac
+
+macOS 13 or later (Electron 44). Both architectures are tested on real Macs in CI before each release. On an Intel Mac (for example a 2019 MacBook Pro with Intel UHD 630 or Radeon Pro graphics) the console lightens itself: no backdrop blur, no ambient animation, the background field at half rate, and the drive overlay hidden while the screen is locked. Versions before 3.71 ran on Electron 33, which makes every window lag on macOS 26 Tahoe; use 3.71 or later there.
+
+**Download.** Take `CortexInsight-<version>-mac-arm64.zip` on Apple silicon or `-mac-x64.zip` on Intel from the Releases page, unzip, and move `CortexInsight.app` where you like. The build is signed ad hoc but not notarised, so the first open needs one of two things. On macOS 15 and later, right-click → Open no longer works for it: try to open it once, then go to System Settings → Privacy & Security and press Open Anyway. Or, in a terminal:
+
+```bash
+xattr -dr com.apple.quarantine /path/to/CortexInsight.app
+```
+
+**One command from a clone.**
+
+```bash
+git clone https://github.com/InitiumBuilders/Semble-CC.git
+cd Semble-CC
+bash build-and-install.sh
+```
+
+It checks the toolchain, installs from the lockfile, packages for this Mac's architecture, quits a running console, keeps the previous app as `CortexInsight.app.prev`, copies the new one into `~/Applications`, clears the quarantine flag, proves the version by reading the installed bundle, rolls back on a mismatch, and launches. Options: `--no-launch`, `--skip-deps`, `--dest <folder>`. `npm run deploy:mac` does the same.
+
+**By hand.** `npm ci`, then `npm run package:mac` (Apple silicon) or `npm run package:mac-x64` (Intel); the app is in `release-next/`. `npm start` runs from source.
+
+**Where things live on a Mac.** The app wherever you put it. The vault in `~/Library/Application Support/cortexinsight/`. The agent tool, the brief and the queue in `~/.cortexinsight/`. Uninstall by quitting, deleting the app, and deleting the vault folder if you want it gone.
+
+**The fleet on a Mac.** Claude Code runs natively, so the fleet tree is a folder in your home and the relay listens on localhost. Set the fleet path on Config if discovery did not find it. The bridge installs into the runner the same way.
+
+**The relay on a Mac.** The relay in `linux/relay` runs on a Mac unchanged (the system Python 3.9, `/bin/bash` 3.2, BSD tools). There is no systemd, so `scripts/mac-relay.sh` does its job. From a clone, first put the relay into `~/cortex/SystemsCortex` (where the console reads it) and the CLI into `~/cortex/bin/cortex`:
+
+```bash
+bash scripts/mac-relay.sh setup
+```
+
+Sign the relay in. `claude setup-token` opens a link to approve and prints a token that lasts a year; save it where the relay reads it, pasting your token in place of `<the-token>`:
+
+```bash
+claude setup-token
+```
+
+```bash
+umask 077; printf '%s' '<the-token>' > ~/.claude/cortex-oauth-token
+```
+
+Start the relay, and optionally hand it to launchd so it starts at every login and comes back after a crash:
+
+```bash
+~/cortex/bin/cortex relay start
+```
+
+```bash
+~/cortex/bin/cortex relay install
+```
+
+`~/cortex/bin/cortex doctor` says what is missing, in order. Run `setup` again after a pull to move the relay to the new code; a running relay is restarted onto it. launchd keeps the job definition it loaded, though, so when `doctor` says the definition is older, run `relay install` once more. The console's Restart relay button calls the same CLI on a Mac (or kickstarts the launchd agent when the CLI is not there), and stopping the relay ends the turns it had in flight.
+
+## Where things live
+
+| What | Where |
+|---|---|
+| The app | `release\CortexInsight-win32-x64\` |
+| The previous build | `release\CortexInsight-win32-x64.prev\` |
+| Your vault, sealed keys, the frozen index, studio images | `%APPDATA%\cortexinsight\` |
+| The agent tool, the brief, the queue | `~/.cortexinsight/` in the WSL home the fleet path points at |
+
+## Uninstall
+
+Close the console (tray → Quit), delete the app folder, and delete `%APPDATA%\cortexinsight\` if you want the vault gone too. Nothing is written to the registry. If you installed the bridge, uninstall it from Model first; it removes its one block from the runner and leaves the backup.
+
+## Prove it before you trust it
+
+```bash
+npm run gate      # secret shapes, private names, personal defaults
+npm run fresh     # a stranger's first hour on this machine; read %TEMP%\ci-fresh-report.txt
+npm run fleet     # a stranger's fleet: a synthetic tree is built, read, briefed, tooled and shown; read %TEMP%\ci-fleet-report.txt
+npm run smoke     # every view with your own vault copied into a sandbox
+```
+
+The continuous build runs the gate, the fresh harness and the fleet harness on every push, on a Windows runner and a macOS runner, and uploads each run's reports and screenshots as artifacts, so the foreign-machine proof is a link away on the Actions page. The fleet harness is the one that proves the readers, the brief, the agent tool and the inbox against a fleet tree on a machine that has none.

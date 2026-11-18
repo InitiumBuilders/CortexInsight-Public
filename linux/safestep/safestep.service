@@ -1,0 +1,19 @@
+[Unit]
+Description=SafeStep — the seat's steps, spoken only when something moved
+# It reads what the relay and runner leave on disk; it never touches them. It
+# starts after them only so its first look is at a settled fleet tree.
+After=cortex-relay.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Environment=HOME=/root
+Environment=CORTEX_ROOT=/root/cortex
+Environment=HERMES_HOME=/root/.hermes/profiles/augusttt
+Environment=PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/python3 /root/cortex/safestep/safestep.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
