@@ -30,11 +30,11 @@ It scans every text file that ships (source, docs, helper scripts, the lockfile,
 
 6. **The private relay's name is gone and the gate blocks it.** The fleet tree is discovered by shape, never by name. The gate blocks the one-token name and any tunnel hostname, and was proven on a planted decoy. The public history was rewritten to a fresh commit after the scrub.
 7. **The stranger's first hour is a harness.** `npm run fresh` starts from an empty vault with no fleet tree, sets a passphrase, pairs, walks every room, and fails on a blank room or a missing next step. Its report is `%TEMP%\ci-fresh-report.txt`.
+8. **The tree is MIT licensed.** The full text is in `LICENSE`.
 
 ## Still to prove
 
 - **A first run on a foreign machine.** The fresh harness simulates it on the authors' machine. The real thing is a fresh clone on hardware the authors never touched, with the smoke and the fresh run read there.
-- **A license.** The founder's call. Until a `LICENSE` file exists the tree is source-available.
 - **The operator's name in prompts.** Agent prompts address the operator by the founder's name. A settings field and a mechanical pass over the prompt strings would let a fork name its own operator.
 
 ## What the app reads and writes

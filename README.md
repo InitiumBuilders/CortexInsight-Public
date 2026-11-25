@@ -116,7 +116,7 @@ Vanilla renderer, no framework. One capped canvas that stops on blur. No blur fi
 
 ## License and status
 
-The license is the founder's call and is not chosen yet. Until a `LICENSE` file exists, treat the tree as source-available: read it, run it, open issues, send proposals. The tree was built paired to one machine and one operator, then de-personalised for this release. `OPEN-SOURCE.md` lists what is done and what a first run on a foreign machine still has to prove.
+MIT. See [`LICENSE`](LICENSE). Copyright (c) 2026 August James Domanchuk. Forks, issues and proposals are welcome. The tree was built paired to one machine and one operator, then de-personalised for this release. `OPEN-SOURCE.md` lists what is done and what a first run on a foreign machine still has to prove.
 
 ---
 
